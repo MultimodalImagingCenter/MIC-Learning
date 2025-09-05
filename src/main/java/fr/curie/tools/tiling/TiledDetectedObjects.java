@@ -1,4 +1,4 @@
-package fr.curie.tiling;
+package fr.curie.tools.tiling;
 
 import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.DetectedObjects;

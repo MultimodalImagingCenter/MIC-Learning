@@ -2,7 +2,7 @@ package fr.curie.modelloading;
 
 import ai.djl.nn.BlockFactory;
 import ai.djl.translate.TranslatorFactory;
-import fr.curie.tiling.TilingOptions;
+import fr.curie.tools.tiling.TilingOptions;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;

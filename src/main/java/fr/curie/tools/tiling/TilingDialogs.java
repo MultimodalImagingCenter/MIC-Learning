@@ -1,4 +1,4 @@
-package fr.curie.tiling;
+package fr.curie.tools.tiling;
 
 import ij.IJ;
 import ij.gui.GenericDialog;

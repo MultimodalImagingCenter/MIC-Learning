@@ -29,15 +29,24 @@ import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
 import static fr.curie.tools.SegmentationUtils.*;
 
+/**
+ * Plugin to execute Yolo models
+ * Input must be ImagePlus, output must be DetectedObject (with or without segmentation mask)
+ *
+ */
+
 public class Yolo_Plugin implements PlugInFilter {
     protected static ImagePlus imp;
+
+    // List of configurators available
     private static final Map<String, TranslatorConfigurator> KNOWN_CONFIGURATORS;
     static {
         Map<String, TranslatorConfigurator> tempMap = new LinkedHashMap<>();
-        tempMap.put("Yolo Object Detection", new YoloConfigurator());
-        tempMap.put("Yolo Object Detection + Segmentation", new YoloSegmentationConfigurator());
+        tempMap.put("Yolo Object Detection", new YoloConfigurator()); // for classical object detection
+        tempMap.put("Yolo Object Detection + Segmentation", new YoloSegmentationConfigurator()); //for detection + segmentation
         KNOWN_CONFIGURATORS = Collections.unmodifiableMap(tempMap);
     }
+    // List of engine available (only pytorch for yolo)
     private final String[] ENGINE_CHOICES = {"", "PyTorch"};
 
     @Override
@@ -51,29 +60,31 @@ public class Yolo_Plugin implements PlugInFilter {
     @Override
     public void run(ImageProcessor ip) {
 
-        // --- 1. Prompt user for model repository + Preferences for output ---
+        // --- 1. initial dialog box ---
         GenericDialog gd = new GenericDialog("Model Loading + Segmentation Outputs");
+        // Prompt user for model repository + config info
         addInitialDialogFields(gd);
         gd.addMessage("__________");
+        // ask for yolo outputs
         YoloUtils.addYoloOutputDialog(gd);
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
         }
 
+        // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+        OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
+
+        // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
             IJ.error("Invalid Path", "The selected path is not a valid directory.");
             return;
         }
-
         Path modelPath = initialChoice.modelPath;
 
-        IJ.log("\n --- Starting YOLO prediction");
-
-        OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
-
         // --- 2. Try to Load Model ---
+        IJ.log("\n --- Starting YOLO detection");
         DjlModelLoader<ImagePlus, DetectedObjects> modelLoader =
                 new DjlModelLoader<>(ImagePlus.class, DetectedObjects.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<ImagePlus, DetectedObjects> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
@@ -92,7 +103,7 @@ public class Yolo_Plugin implements PlugInFilter {
         try (ZooModel<ImagePlus, DetectedObjects> model = loadedResult.getModel()) {
             ModelConfig modelConfig = loadedResult.getConfig();
 
-            // --- 5. Make prediction ---
+            // --- 4. Make prediction ---
             DetectedObjects detectionResult;
             try (Predictor<ImagePlus, DetectedObjects> predictor = model.newPredictor()) {
                 detectionResult = predictor.predict(imp);
@@ -104,7 +115,7 @@ public class Yolo_Plugin implements PlugInFilter {
 
             IJ.log(" --- Prediction done");
 
-            // Save configuration to config.properties if needed
+            // Save configuration to serving.properties if needed
             if (loadedResult.needToRewriteServing()) {
                 try {
                     Path newPropertiesFilePath = loadedResult.getNewPropertiesFilePath();
@@ -124,20 +135,21 @@ public class Yolo_Plugin implements PlugInFilter {
             }
             IJ.log(" --- Number of objects detected: " + detectionResult.getNumberOfObjects());
 
-            // 5. Process Detections
+            // --- 5. Process Detections
             // Load ClassIdMap
             Map<String, Integer> classIdMap = null;
+            // Try with provided info
             if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
                 classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
                 if (classIdMap == null) {
-                    IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() + ". Using default numeration.");
+                    IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() );
                 } else {
                     IJ.log("Successfully loaded class IDs from: "+ modelConfig.getSynsetFilePath().getFileName().toString());
                 }
             } else if (modelConfig.getSynsetFileName() != null) {
                 classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFileName());
                 if (classIdMap == null) {
-                    IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName() + " from serving.properties. Using default numeration.");
+                    IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName());
                 } else {
                     IJ.log("Successfully loaded class IDs using name: " + modelConfig.getSynsetFileName());
                 }
@@ -145,19 +157,34 @@ public class Yolo_Plugin implements PlugInFilter {
                 IJ.log("No synset/labels file specified in serving.properties.");
             }
 
-            // Process Detections
+            // if no info or loading failed -> try with default name = synset.txt
+            if (classIdMap == null){
+                classIdMap = loadClassIDsFromModel(model, "synset.txt");
+                if (classIdMap == null) {
+                    IJ.log("Failed to load class IDs from : synset.txt. Using default numeration.");
+                } else {
+                    IJ.log("Successfully loaded class IDs using default file name : synset.txt");
+                }
+            }
+
+            // Process Detections = create ROI from DetectedObject
             List<ProcessedDetection> processedDetections = SegmentationUtils.processDetections(imp, detectionResult, classIdMap);
             if (processedDetections.isEmpty()) {
                 IJ.log(" --- No valid detections were processed.");
                 return;
             }
 
-            // 7. Generate Outputs
-            IJ.log(" --- Generating output");
+            // --- 6. Generate Outputs, based on user choices
+            IJ.log(" --- Generating output... ");
             generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
 
             IJ.log(" --- YOLO detection complete.");
+
+        } catch (Exception e) { // Catch other unexpected errors during prediction/processing
+            IJ.log(" --- Processing Error");
+            IJ.error("Processing Error", "An unexpected error occurred:\n" + e.getMessage());
+            IJ.handleException(e);
         }
 
     }

@@ -1,4 +1,4 @@
-package fr.curie.tiling;
+package fr.curie.tools.tiling;
 
 // --- User Tiling Selection ---
 public class TilingOptions {

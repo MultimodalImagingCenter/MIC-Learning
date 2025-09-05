@@ -54,24 +54,24 @@ public class BioImage_Plugin implements PlugInFilter {
     @Override
     public void run(ImageProcessor ip) {
         // --- 1. Initial dialog box ---
-        // ask for model + config info
+        // ask for model repository + config info
         GenericDialog gd = new GenericDialog("Model Directory");
         addInitialDialogFields(gd);
         gd.showDialog();
         if (gd.wasCanceled()) return; // User canceled
 
-        // check that model path is valid
+        // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+
+        // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
             IJ.error("Invalid Path", "The selected path is not a valid directory.");
             return;
         }
-
         Path modelPath = initialChoice.modelPath;
-        IJ.log("\n --- Starting prediction");
 
         // --- 2. Try to Load Model ---
-        IJ.log("\n --- Starting BioImage Zoo models plugin");
+        IJ.log("\n --- Starting BioImage Zoo models prediction");
         DjlModelLoader<ImagePlus, ImagePlus> modelLoader =
                 new DjlModelLoader<>(ImagePlus.class, ImagePlus.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<ImagePlus, ImagePlus> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
@@ -91,12 +91,12 @@ public class BioImage_Plugin implements PlugInFilter {
             ModelConfig modelConfig = loadedResult.getConfig();
 
 
-            // --- 5. Make prediction ---
+            // --- 4. Make prediction ---
             try(Predictor<ImagePlus, ImagePlus> predictor = model.newPredictor()) {
                 ImagePlus output = predictor.predict(imp);
                 IJ.log(" --- Prediction done");
 
-                // Save configuration to config.properties if needed
+                // Save configuration to serving.properties if needed
                 if (loadedResult.needToRewriteServing()) {
                     try {
                         Path newPropertiesFilePath = loadedResult.getNewPropertiesFilePath();
@@ -106,10 +106,14 @@ public class BioImage_Plugin implements PlugInFilter {
                         IJ.log("Warning: Failed to save configuration. Error: " + e.getMessage());
                     }
                 }
+
+                // --- 5. Show output
                 output.show();
 
 
             } catch (TranslateException e) {
+                IJ.log(" --- Prediction Failed : Error during prediction or translation\n Provided arguments are incompatible with model");
+                IJ.error("Prediction Failed", "Error during prediction or translation:\n" + e.getMessage());
                 throw new RuntimeException(e);
             }
         }

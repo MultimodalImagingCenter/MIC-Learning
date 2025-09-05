@@ -1,4 +1,4 @@
-package fr.curie.tiling;
+package fr.curie.tools.tiling;
 
 public class TileParameter {
     public int x_offset;

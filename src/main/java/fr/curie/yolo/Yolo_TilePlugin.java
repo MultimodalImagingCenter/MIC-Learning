@@ -13,10 +13,10 @@ import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.configurators.YoloConfigurator;
 import fr.curie.modelloading.configurators.YoloSegmentationConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
-import fr.curie.tiling.TileParameter;
-import fr.curie.tiling.TiledDetectedObjects;
-import fr.curie.tiling.TilingOptions;
-import fr.curie.tiling.TilingDialogs;
+import fr.curie.tools.tiling.TileParameter;
+import fr.curie.tools.tiling.TiledDetectedObjects;
+import fr.curie.tools.tiling.TilingOptions;
+import fr.curie.tools.tiling.TilingDialogs;
 import fr.curie.tools.SegmentationUtils;
 import ij.IJ;
 import ij.ImagePlus;
@@ -35,14 +35,21 @@ import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
 import static fr.curie.tools.SegmentationUtils.*;
 
+/**
+ * Plugin to execute Yolo models with tiling option
+ * Input must be ImagePlus, output must be DetectedObject (with or without segmentation mask)
+ *
+ */
+
 public class Yolo_TilePlugin implements PlugInFilter {
     protected static ImagePlus imp;
 
+    // List of configurators available
     private static final Map<String, TranslatorConfigurator> KNOWN_CONFIGURATORS;
     static {
         Map<String, TranslatorConfigurator> tempMap = new LinkedHashMap<>();
-        tempMap.put("Yolo Object Detection", new YoloConfigurator());
-        tempMap.put("Yolo Object Detection + Segmentation", new YoloSegmentationConfigurator());
+        tempMap.put("Yolo Object Detection", new YoloConfigurator()); // for classical object detection
+        tempMap.put("Yolo Object Detection + Segmentation", new YoloSegmentationConfigurator()); //for detection + segmentation
         KNOWN_CONFIGURATORS = Collections.unmodifiableMap(tempMap);
     }
     private final String[] ENGINE_CHOICES = {"", "PyTorch"};
@@ -58,33 +65,36 @@ public class Yolo_TilePlugin implements PlugInFilter {
     @Override
     public void run(ImageProcessor ip) {
 
-        // --- 1. Prompt user for model repository + Preferences for output + Preferences for tiling---
+        // --- 1. initial dialog box ---
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
+        // Prompt user for model repository + config info
         addInitialDialogFields(gd);
         gd.addMessage("__________");
+        // ask for yolo outputs
         YoloUtils.addYoloOutputDialog(gd);
         gd.addMessage("__________");
+        // ask for Tiling preferences
         TilingDialogs.addTilingDialog(gd);
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
         }
 
+        // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+        SegmentationUtils.OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
+        TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
+
+        // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
             IJ.error("Invalid Path", "The selected path is not a valid directory.");
             return;
         }
-
         Path modelPath = initialChoice.modelPath;
 
 
-        IJ.log("\n --- Starting YOLO prediction");
-
-        SegmentationUtils.OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
-        TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
-
         // --- 2. Try to Load Model ---
+        IJ.log("\n --- Starting YOLO prediction");
         DjlModelLoader<ImagePlus, DetectedObjects> modelLoader =
                 new DjlModelLoader<>(ImagePlus.class, DetectedObjects.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<ImagePlus, DetectedObjects> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
@@ -106,15 +116,17 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
             // --- 4. Make prediction ---
             DetectedObjects detectionResult;
+            // using tiles
             if (tileOptions.useTiling){
                 // configure tile size as default model size if no size was given by the user
                 if (tileOptions.defaultTileSize){
                     tileOptions.setWidthAndHeight(modelConfig.getDefaultWidth(), modelConfig.getDefaultHeight());
                 }
-                detectionResult = runTiledSegmentation(model, tileOptions, modelConfig);
+                detectionResult = runTiledDetection(model, tileOptions, modelConfig);
 
+            // not using tiles
             } else {
-                IJ.log("Using non tiled segmentation");
+                IJ.log("Using non tiled detection");
                 try (Predictor<ImagePlus, DetectedObjects> predictor = model.newPredictor()) {
                     detectionResult = predictor.predict(imp);
                 } catch (TranslateException e) {
@@ -146,9 +158,10 @@ public class Yolo_TilePlugin implements PlugInFilter {
             }
             IJ.log(" --- Number of objects detected: " + detectionResult.getNumberOfObjects());
 
-            // 5. Process Detections
+            // --- 5. Process Detections
             // Load ClassIdMap
             Map<String, Integer> classIdMap = null;
+            // Try with provided info
             if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
                 classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
                 if (classIdMap == null) {
@@ -167,6 +180,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
                 IJ.log("No synset/labels file specified in serving.properties.");
             }
 
+            // if no info or loading failed -> try with default name = synset.txt
             if (classIdMap == null){
                 //try with default name = synset.txt
                 classIdMap = loadClassIDsFromModel(model, "synset.txt");
@@ -175,18 +189,17 @@ public class Yolo_TilePlugin implements PlugInFilter {
                 } else {
                     IJ.log("Successfully loaded class IDs using default file name : synset.txt");
                 }
-
             }
 
-            // Process Detections
+            // Process Detections = create ROI from DetectedObject
             List<ProcessedDetection> processedDetections = SegmentationUtils.processDetections(imp, detectionResult, classIdMap);
             if (processedDetections.isEmpty()) {
                 IJ.log(" --- No valid detections were processed.");
                 return;
             }
 
-            // 7. Generate Outputs
-            IJ.log(" --- Generating output");
+            // --- 6. Generate Outputs, based on user choices
+            IJ.log(" --- Generating output... ");
             generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
 
@@ -200,9 +213,9 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
     }
 
-    private TiledDetectedObjects runTiledSegmentation(ZooModel<ImagePlus, DetectedObjects> model, TilingOptions tileOptions, ModelConfig config){
+    private TiledDetectedObjects runTiledDetection(ZooModel<ImagePlus, DetectedObjects> model, TilingOptions tileOptions, ModelConfig config){
 
-        IJ.log("Using tiled segmentation");
+        IJ.log("Using tiled detection");
         List<Rectangle> total_boxes = new ArrayList<>();
         List<Rectangle> total_adjusted_boxes = new ArrayList<>();
         List<Double> total_scores = new ArrayList<>();
