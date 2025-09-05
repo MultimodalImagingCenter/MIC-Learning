@@ -282,7 +282,7 @@ public class MainApplication_Frame extends PlugInFrame {
             return null;
         }
 
-        String modelsPath = ijDir + "models" + File.separator + MODELS_SUBFOLDER;
+        String modelsPath = ijDir + "models" + "/" + MODELS_SUBFOLDER;
 
         File modelsDir = new File(modelsPath);
         if (!modelsDir.exists()) {

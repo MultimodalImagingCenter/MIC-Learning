@@ -4,7 +4,6 @@ import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 import ai.djl.modality.cv.output.Rectangle;
-import ai.djl.modality.cv.translator.YoloV5Translator;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.types.DataType;
@@ -15,14 +14,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+public class ImpYoloSegmentationTranslator extends ImpYoloV5Translator{
 
-public class Yolo11SegmentationTranslator extends YoloV5Translator {
     private static final int[] AXIS_0 = new int[]{0};
     private static final int[] AXIS_1 = new int[]{1};
     private final float threshold;
     private final float nmsThreshold;
 
-    public Yolo11SegmentationTranslator(Builder builder) {
+    public ImpYoloSegmentationTranslator(Builder builder) {
         super(builder);
         this.threshold = builder.threshold;
         this.nmsThreshold = builder.nmsThreshold;
@@ -182,6 +181,15 @@ public class Yolo11SegmentationTranslator extends YoloV5Translator {
         return xy.sub(wh).concat(xy.add(wh), -1);
     }
 
+    public DetectedObjects perform_nms_by_class(
+            int imageWidth,
+            int imageHeight,
+            List<Rectangle> boxes,
+            List<Integer> classIds,
+            List<Float> scores) {
+        return nms(imageWidth, imageHeight, boxes, classIds, scores);
+    }
+
     // --- Builder ---
 
     public static Builder builder() {
@@ -201,7 +209,7 @@ public class Yolo11SegmentationTranslator extends YoloV5Translator {
     }
 
     // Inner Builder class
-    public static class Builder extends YoloV5Translator.Builder {
+    public static class Builder extends ImpYoloV5Translator.Builder {
 
         // Default value
         float threshold = 0.5f;
@@ -232,9 +240,9 @@ public class Yolo11SegmentationTranslator extends YoloV5Translator {
 
         // build() method returns an instance of the DebugOriginalYoloSegmentationTranslator
         @Override
-        public Yolo11SegmentationTranslator build() {
+        public ImpYoloSegmentationTranslator build() {
             validate();
-            return new Yolo11SegmentationTranslator(this);
+            return new ImpYoloSegmentationTranslator(this);
         }
 
         protected void configCommon(Map<String, ?> arguments) {

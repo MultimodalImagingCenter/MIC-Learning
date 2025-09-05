@@ -3,7 +3,7 @@ package fr.curie.modelloading.configurators;
 
 import ai.djl.translate.TranslatorFactory;
 import fr.curie.modelloading.ModelConfig;
-import fr.curie.yolo.translators.ImpYolo11SegmentationTranslatorFactory;
+import fr.curie.yolo.translators.ImpYoloSegmentationTranslatorFactory;
 import ij.gui.GenericDialog;
 
 import static fr.curie.modelloading.DjlModelLoader.checkSynsetFile;
@@ -15,7 +15,7 @@ public class YoloSegmentationConfigurator implements TranslatorConfigurator {
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {
         // Return the actual factory class
-        return ImpYolo11SegmentationTranslatorFactory.class;
+        return ImpYoloSegmentationTranslatorFactory.class;
     }
 
     @Override

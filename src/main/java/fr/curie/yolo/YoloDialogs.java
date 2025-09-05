@@ -1,12 +1,12 @@
 package fr.curie.yolo;
 
-import fr.curie.tools.SegmentationUtils;
+import fr.curie.tools.DetectionUtils;
 import ij.gui.GenericDialog;
 
-public class YoloUtils {
+public class YoloDialogs {
 
     // --- YOLO Dialog methods ---
-    public static SegmentationUtils.OutputOptions askUserForYoloOutputs() {
+    public static DetectionUtils.OutputOptions askUserForYoloOutputs() {
         GenericDialog gd = new GenericDialog("YOLO Segmentation Outputs");
         addYoloOutputDialog(gd);
         gd.showDialog();
@@ -29,8 +29,8 @@ public class YoloUtils {
         gd.addCheckbox("Create_Instance_Mask_per_Class (one slice per stack)", false);
     }
 
-    public static SegmentationUtils.OutputOptions getYoloOutputAnswer(GenericDialog gd) {
-        SegmentationUtils.OutputOptions options = new SegmentationUtils.OutputOptions();
+    public static DetectionUtils.OutputOptions getYoloOutputAnswer(GenericDialog gd) {
+        DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
         options.addToRoiManagerBB = gd.getNextBoolean();
         options.addToRoiManagerShapes = gd.getNextBoolean();
         options.createStackMask = gd.getNextBoolean();

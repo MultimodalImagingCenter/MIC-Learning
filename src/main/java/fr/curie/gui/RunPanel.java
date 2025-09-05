@@ -140,6 +140,7 @@ public class RunPanel extends JPanel{
                             // 2. Replace all placeholders
                             String finalMacroScript = macroTemplate.replace("{MODEL_PATH}", modelPath);
                             finalMacroScript = finalMacroScript.replace("{IMP_TITLE}", impTitle);
+                            finalMacroScript = finalMacroScript.replace("\\", "/");
 
                             // 3. Execute the entire script
                             IJ.runMacro(finalMacroScript);

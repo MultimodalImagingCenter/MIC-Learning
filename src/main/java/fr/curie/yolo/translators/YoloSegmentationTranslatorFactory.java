@@ -10,10 +10,10 @@ import java.io.Serializable;
 import java.util.Map;
 
 /**
- * A translatorFactory that creates a {@link Yolo11SegmentationTranslator} instance.
+ * A translatorFactory that creates a {@link YoloSegmentationTranslator} instance.
  */
 
-public class Yolo11SegmentationTranslatorFactory extends ObjectDetectionTranslatorFactory
+public class YoloSegmentationTranslatorFactory extends ObjectDetectionTranslatorFactory
         implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -22,6 +22,6 @@ public class Yolo11SegmentationTranslatorFactory extends ObjectDetectionTranslat
     @Override
     protected Translator<Image, DetectedObjects> buildBaseTranslator(
             Model model, Map<String, ?> arguments) {
-        return Yolo11SegmentationTranslator.builder(arguments).build();
+        return YoloSegmentationTranslator.builder(arguments).build();
     }
 }

@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.awt.event.ActionListener;
 import java.util.function.BiConsumer;
 
-public class SubTasksListPanel extends ButtonDescriptionListPanel{
+public class  SubTasksListPanel extends ButtonDescriptionListPanel{
     private static final Logger log = LoggerFactory.getLogger(SubTasksListPanel.class);
     private final String parentModelId;
 

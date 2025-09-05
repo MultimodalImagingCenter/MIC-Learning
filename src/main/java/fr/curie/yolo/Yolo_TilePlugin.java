@@ -17,7 +17,7 @@ import fr.curie.tools.tiling.TileParameter;
 import fr.curie.tools.tiling.TiledDetectedObjects;
 import fr.curie.tools.tiling.TilingOptions;
 import fr.curie.tools.tiling.TilingDialogs;
-import fr.curie.tools.SegmentationUtils;
+import fr.curie.tools.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
-import static fr.curie.tools.SegmentationUtils.*;
+import static fr.curie.tools.DetectionUtils.*;
 
 /**
  * Plugin to execute Yolo models with tiling option
@@ -71,7 +71,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         addInitialDialogFields(gd);
         gd.addMessage("__________");
         // ask for yolo outputs
-        YoloUtils.addYoloOutputDialog(gd);
+        YoloDialogs.addYoloOutputDialog(gd);
         gd.addMessage("__________");
         // ask for Tiling preferences
         TilingDialogs.addTilingDialog(gd);
@@ -82,7 +82,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
-        SegmentationUtils.OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
+        DetectionUtils.OutputOptions segmentOptions = YoloDialogs.getYoloOutputAnswer(gd);
         TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
 
         // check that model path is valid
@@ -192,7 +192,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
             }
 
             // Process Detections = create ROI from DetectedObject
-            List<ProcessedDetection> processedDetections = SegmentationUtils.processDetections(imp, detectionResult, classIdMap);
+            List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectionResult, classIdMap);
             if (processedDetections.isEmpty()) {
                 IJ.log(" --- No valid detections were processed.");
                 return;

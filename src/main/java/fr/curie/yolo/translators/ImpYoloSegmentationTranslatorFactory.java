@@ -13,14 +13,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
-public class ImpYolo11SegmentationTranslatorFactory extends ImpObjectDetectionTranslatorFactory
+public class ImpYoloSegmentationTranslatorFactory extends ImpObjectDetectionTranslatorFactory
         implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     @Override
     public Translator<ImagePlus, DetectedObjects> buildTranslator(Model model, Map<String, ?> arguments) {
-        return ImpYolo11SegmentationTranslator.builder(arguments).build();
+        return ImpYoloSegmentationTranslator.builder(arguments).build();
     }
 
     @Override

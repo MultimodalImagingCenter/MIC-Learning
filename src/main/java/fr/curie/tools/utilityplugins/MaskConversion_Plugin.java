@@ -1,6 +1,6 @@
 package fr.curie.tools.utilityplugins;
 
-import fr.curie.tools.SegmentationUtils;
+import fr.curie.tools.DetectionUtils;
 import fr.curie.yolo.ProcessedDetection;
 import ij.*;
 import ij.gui.DialogListener;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import static fr.curie.tools.SegmentationUtils.loadClassIDsFromFile;
+import static fr.curie.tools.DetectionUtils.loadClassIDsFromFile;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
@@ -124,18 +124,18 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
             switch (methodIndex) {
                 case METHOD_STACK_MASK:
                     IJ.log("Processing with Stack Mask method using image: " + imp1.getTitle());
-                    results = SegmentationUtils.detectionFromStackMask(imp1, classIdMap);
+                    results = DetectionUtils.detectionFromStackMask(imp1, classIdMap);
                     break;
 
                 case METHOD_INSTANCE_PER_CLASS:
                     IJ.log("Processing with Instances per Class method using image: " + imp1.getTitle());
-                    results = SegmentationUtils.detectionFromInstancePerClasses(imp1, classIdMap);
+                    results = DetectionUtils.detectionFromInstancePerClasses(imp1, classIdMap);
                     break;
 
                 case METHOD_INSTANCE_SEMANTIC:
                     IJ.log("Processing with Instance + Semantic method using images: "
                             + imp1.getTitle() + " (Instance) and " + imp2.getTitle() + " (Semantic)");
-                    results = SegmentationUtils.detectionFromInstanceAndSemantic(imp1, imp2, classIdMap);
+                    results = DetectionUtils.detectionFromInstanceAndSemantic(imp1, imp2, classIdMap);
                     break;
 
                 default:
@@ -165,14 +165,14 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
                 IJ.log("-> Adding ROIs to Manager...");
                 RoiManager rm = getRoiManager(); // Get or create ROI Manager
                 rm.reset(); // Delete previous ROIs
-                SegmentationUtils.addRoisToManager(rm, results, false, true);
+                DetectionUtils.addRoisToManager(rm, results, false, true);
                 IJ.log("ROIs added to manager");
             }
 
             // --- Mask Outputs  ---
             if (outputStackMask) {
                 IJ.log("-> Creating Stack of Instance Masks...");
-                ImagePlus stackMask = SegmentationUtils.createStackMask(imp1, results);
+                ImagePlus stackMask = DetectionUtils.createStackMask(imp1, results);
                 if (stackMask != null) {
                     stackMask.show();
                 } else {
@@ -182,7 +182,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
 
             if (outputInstanceMask) {
                 IJ.log("-> Creating Instance Mask...");
-                ImagePlus instanceMask = SegmentationUtils.createInstanceMask(imp1, results);
+                ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp1, results);
                 if (instanceMask != null) {
                     instanceMask.show();
                 } else {
@@ -192,7 +192,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
 
             if (outputSemanticMask) {
                 IJ.log("-> Creating Semantic Mask...");
-                ImagePlus semanticMask = SegmentationUtils.createSemanticMask(imp1, results);
+                ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp1, results);
                 if (semanticMask != null) {
                     semanticMask.show();
                 } else {
@@ -202,7 +202,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
 
             if (outputInstancePerClass) {
                 IJ.log("-> Creating Stack of Instances per Class...");
-                ImagePlus instanceMaskPerClass = SegmentationUtils.createInstanceMaskPerClass(imp1, results, classIdMap);
+                ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClass(imp1, results, classIdMap);
                 if (instanceMaskPerClass != null) {
                     instanceMaskPerClass.show();
                 } else {

@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class SegmentationUtils {
+public class DetectionUtils {
     
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
@@ -1070,31 +1070,31 @@ public class SegmentationUtils {
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
             roiManager.reset();
-            SegmentationUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes);
+            DetectionUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes);
             roiManager.setVisible(true);
         }
 
         // Create Stack Mask
         if (options.createStackMask) {
-            ImagePlus stackMask = SegmentationUtils.createStackMask(imp, processedDetections);
+            ImagePlus stackMask = DetectionUtils.createStackMask(imp, processedDetections);
             if (stackMask != null) stackMask.show();
         }
 
         // Create Instance Mask
         if (options.createInstanceMask) {
-            ImagePlus instanceMask = SegmentationUtils.createInstanceMask(imp, processedDetections);
+            ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp, processedDetections);
             if (instanceMask != null) instanceMask.show();
         }
 
         // Create Semantic Mask
         if (options.createSemanticMask) {
-            ImagePlus semanticMask = SegmentationUtils.createSemanticMask(imp, processedDetections);
+            ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp, processedDetections);
             if (semanticMask != null) semanticMask.show();
         }
 
         // Create Instance Mask Per Class
         if (options.createInstanceMaskPerClass) {
-            ImagePlus instanceMaskPerClass = SegmentationUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
+            ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
             if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }

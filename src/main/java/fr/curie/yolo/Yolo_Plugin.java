@@ -10,7 +10,7 @@ import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.configurators.YoloConfigurator;
 import fr.curie.modelloading.configurators.YoloSegmentationConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
-import fr.curie.tools.SegmentationUtils;
+import fr.curie.tools.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -27,12 +27,12 @@ import java.util.Map;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
-import static fr.curie.tools.SegmentationUtils.*;
+import static fr.curie.tools.DetectionUtils.*;
 
 /**
  * Plugin to execute Yolo models
  * Input must be ImagePlus, output must be DetectedObject (with or without segmentation mask)
- *
+ * @deprecated
  */
 
 public class Yolo_Plugin implements PlugInFilter {
@@ -66,7 +66,7 @@ public class Yolo_Plugin implements PlugInFilter {
         addInitialDialogFields(gd);
         gd.addMessage("__________");
         // ask for yolo outputs
-        YoloUtils.addYoloOutputDialog(gd);
+        YoloDialogs.addYoloOutputDialog(gd);
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
@@ -74,7 +74,7 @@ public class Yolo_Plugin implements PlugInFilter {
 
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
-        OutputOptions segmentOptions = YoloUtils.getYoloOutputAnswer(gd);
+        OutputOptions segmentOptions = YoloDialogs.getYoloOutputAnswer(gd);
 
         // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
@@ -168,7 +168,7 @@ public class Yolo_Plugin implements PlugInFilter {
             }
 
             // Process Detections = create ROI from DetectedObject
-            List<ProcessedDetection> processedDetections = SegmentationUtils.processDetections(imp, detectionResult, classIdMap);
+            List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectionResult, classIdMap);
             if (processedDetections.isEmpty()) {
                 IJ.log(" --- No valid detections were processed.");
                 return;
