@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<form xmlns="http://www.intellij.com/uidesigner/form/" version="1" bind-to-class="fr.curie.gui.HomePanel">
+  <grid id="27dc6" binding="rootPanel" layout-manager="GridLayoutManager" row-count="6" column-count="3" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+    <margin top="10" left="10" bottom="20" right="10"/>
+    <constraints>
+      <xy x="20" y="20" width="1225" height="498"/>
+    </constraints>
+    <properties/>
+    <border type="none"/>
+    <children>
+      <component id="9d4a8" class="javax.swing.JButton" binding="taskButton">
+        <constraints>
+          <grid row="4" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="2" fill="0" indent="0" use-parent-layout="false">
+            <preferred-size width="310" height="35"/>
+          </grid>
+        </constraints>
+        <properties>
+          <text resource-bundle="UIstrings" key="homePage.taskChoice.button"/>
+        </properties>
+      </component>
+      <component id="edfc3" class="javax.swing.JLabel" binding="taskDescriptionLabel">
+        <constraints>
+          <grid row="5" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="1" anchor="1" fill="0" indent="1" use-parent-layout="false">
+            <preferred-size width="300" height="50"/>
+          </grid>
+        </constraints>
+        <properties>
+          <font style="2"/>
+          <text resource-bundle="UIstrings" key="homePage.taskButtonDescription.text"/>
+        </properties>
+      </component>
+      <component id="f33c5" class="javax.swing.JButton" binding="modelButton">
+        <constraints>
+          <grid row="4" column="2" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="2" fill="0" indent="0" use-parent-layout="false">
+            <preferred-size width="310" height="35"/>
+          </grid>
+        </constraints>
+        <properties>
+          <text resource-bundle="UIstrings" key="homePage.modelChoice.button"/>
+        </properties>
+      </component>
+      <component id="b1d40" class="javax.swing.JLabel" binding="modelDescriptionLable">
+        <constraints>
+          <grid row="5" column="2" row-span="1" col-span="1" vsize-policy="0" hsize-policy="1" anchor="1" fill="0" indent="1" use-parent-layout="false">
+            <preferred-size width="300" height="50"/>
+          </grid>
+        </constraints>
+        <properties>
+          <font style="2"/>
+          <text resource-bundle="UIstrings" key="homePage.modelButtonDescription.text"/>
+        </properties>
+      </component>
+      <component id="3b82f" class="javax.swing.JLabel" binding="askChoiceLabel">
+        <constraints>
+          <grid row="2" column="0" row-span="1" col-span="3" vsize-policy="0" hsize-policy="0" anchor="0" fill="0" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties>
+          <font name="Serif" size="15" style="2"/>
+          <foreground color="-15589580"/>
+          <text resource-bundle="UIstrings" key="homePage.askChoice.text"/>
+        </properties>
+      </component>
+      <hspacer id="77a52">
+        <constraints>
+          <grid row="3" column="0" row-span="1" col-span="3" vsize-policy="1" hsize-policy="6" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
+        </constraints>
+      </hspacer>
+      <component id="3e981" class="javax.swing.JLabel" binding="titleLabel">
+        <constraints>
+          <grid row="0" column="0" row-span="1" col-span="3" vsize-policy="0" hsize-policy="0" anchor="0" fill="0" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties>
+          <font size="18" style="1"/>
+          <text resource-bundle="UIstrings" key="app.title"/>
+        </properties>
+      </component>
+      <hspacer id="3ac5e">
+        <constraints>
+          <grid row="1" column="0" row-span="1" col-span="3" vsize-policy="1" hsize-policy="6" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
+        </constraints>
+      </hspacer>
+      <vspacer id="ba712">
+        <constraints>
+          <grid row="4" column="1" row-span="2" col-span="1" vsize-policy="6" hsize-policy="1" anchor="0" fill="2" indent="0" use-parent-layout="false"/>
+        </constraints>
+      </vspacer>
+    </children>
+  </grid>
+</form>
