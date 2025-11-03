@@ -2,6 +2,7 @@
 
 ## Data
 The data comes from a public dataset, available on [zenodo](https://zenodo.org/records/1214456)
+
 **Data Description "NCT-CRC-HE-100K"**
 - This is a set of 100,000 non-overlapping image patches from hematoxylin & eosin (H&E) stained histological images of human colorectal cancer (CRC) and normal tissue.
 - All images are 224x224 pixels (px) at 0.5 microns per pixel (MPP). All images are color-normalized using Macenko's method (http://ieeexplore.ieee.org/abstract/document/5193250/, DOI [10.1109/ISBI.2009.5193250](https://doi.org/10.1109/ISBI.2009.5193250)).

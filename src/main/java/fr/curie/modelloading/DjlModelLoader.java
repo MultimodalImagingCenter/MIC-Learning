@@ -1,6 +1,7 @@
 package fr.curie.modelloading;
 
 
+import ai.djl.nn.BlockFactory;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ZooModel;
 import fr.curie.modelloading.configurators.TranslatorConfigurator;
@@ -8,6 +9,7 @@ import fr.curie.modelloading.dialogs.ModelDialogs;
 import ij.IJ;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -136,7 +138,7 @@ public class DjlModelLoader<I, O> {
                 .optModelName(config.modelName)
                 .optEngine(config.engine);
 
-        // Add Factory if specified
+        // Add Translator Factory if specified
         if (!config.autoDetectTranslator) {
             if (config.translatorFactory != null) {
                 IJ.log("Building criteria with TranslatorFactory: " + config.translatorFactory.getClass().getName());

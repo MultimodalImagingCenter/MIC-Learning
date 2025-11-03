@@ -13,18 +13,13 @@ import java.util.Map;
 public class MlpHistoBlockFactory implements BlockFactory {
 
     private static final long serialVersionUID = 1L;
+    private static final int IMAGE_WIDTH = 224;
+    private static final int IMAGE_HEIGHT = 224;
+    private static final int CHANNELS = 3;
+    static final int num_of_classes = 3 ;
 
-    public Block newBlock(Model model, Path modelPath, Map<String, ?> arguments) throws IOException {
-        if (!arguments.containsKey("input") || !arguments.containsKey("output") || !arguments.containsKey("hiddenLayers")) {
-            throw new IllegalArgumentException("Missing required arguments for Mlp: input, output, and hiddenLayers must be provided.");
-        }
-
-        int inputSize = ((Number) arguments.get("input")).intValue();
-        int outputSize = ((Number) arguments.get("output")).intValue();
-        List<Integer> hiddenLayerSizesList = (List<Integer>) arguments.get("hiddenLayers");
-
-        int[] hiddenLayerSizes = hiddenLayerSizesList.stream().mapToInt(i -> i).toArray();
-
-        return new Mlp(inputSize, outputSize, hiddenLayerSizes);
+    @Override
+    public Block newBlock(Model model, Path path, Map<String, ?> map) throws IOException {
+        return new Mlp(IMAGE_HEIGHT*IMAGE_WIDTH*CHANNELS, num_of_classes, new int[]{128, 64});
     }
 }
