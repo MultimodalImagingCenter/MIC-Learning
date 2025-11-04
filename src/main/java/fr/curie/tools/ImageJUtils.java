@@ -1,5 +1,6 @@
 package fr.curie.tools;
 
+import ai.djl.engine.Engine;
 import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.ImageFactory;
 import ai.djl.modality.cv.output.BoundingBox;

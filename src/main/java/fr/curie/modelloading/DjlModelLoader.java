@@ -13,6 +13,7 @@ import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public class DjlModelLoader<I, O> {
@@ -111,6 +112,9 @@ public class DjlModelLoader<I, O> {
      * @throws IOException for other loading errors.
      */
     private ZooModel<I, O> tryLoadWithConfig(Path modelPath, ModelConfig config) throws Exception {
+        if (Objects.equals(config.engine, "TensorFlow")){
+            System.out.println("You are trying to load a Tensorflow model. Please sure that you are using a Java version >=11.");
+        }
         Criteria<I, O> criteria = buildCriteriaFromConfig(modelPath, config);
         return criteria.loadModel();
     }

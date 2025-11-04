@@ -3,6 +3,7 @@ package fr.curie.classification;
 import ai.djl.inference.Predictor;
 import ai.djl.modality.Classifications;
 import ai.djl.modality.cv.Image;
+import ai.djl.ndarray.NDManager;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.translate.TranslateException;
 import fr.curie.modelloading.DjlModelLoader;
@@ -143,7 +144,9 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
 
 
         // --- 1. Convert current slice (ImageProcessor) to DJLImage ---
-        Image djlImage = ImageJUtils.imageProcessorToDjlImage(ip);
+        String engine = modelConfig.getEngine();
+        NDManager manager = NDManager.newBaseManager(engine);
+        Image djlImage = ImageJUtils.imageProcessorToDjlImage(ip, manager);
         if (djlImage == null) {
             IJ.log(" --- Failed to convert ImageProcessor of slice " + passCounter + " to DJL Image.");
             return;
