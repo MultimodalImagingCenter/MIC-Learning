@@ -1,24 +1,29 @@
 # Model and data
 
 ## Data
-The training data consists of electron microscopy images of lipid vesicles.
+The training data consists of subset of the Cellpose and Cellpose2 datasets :
+fluorescently labelled cytoplasm with or without an extra nuclear channel,
+brightfield microscopy,
+membrane-labelled cells.
 
 ## Model
-This YOLO model has been trained to differentiate between 3 types of vesicles:
-*   those with intact membranes, which are round in shape
-*   those with broken membranes, which are arch-shaped
-*   and those with a "blackberry" shape, which correspond to a cluster of arches
+This YOLO model has been trained to differentiate between 2 classes:
+*   nucleus : The nuclear region of a cell
+*   cell : The cytoplasm region of a cell (the area of the cell excluding the nucleus).
 
 ## Expected image
-A grayscale image depicting lipid vesicles. The diameter of the vesicles should be between 2% and 15% of the image dimensions.
+An RGB microscopy image with fluorescently labelled cytoplasm and nucleus :
+- Channel 1 (Red): Must contain the nucleus signal.
+- Channel 2 (Green): Must contain the cytoplasm signal.
+
+The diameter of the cells  should be between 4% and 20% of the image dimensions.
 
 # Processing
 
 ## Pre-processing
 These pre-processing steps are applied to each image before prediction:
-1.  Resizing the image to the size expected by the model: 1024x1024.
-2.  Duplicating the grayscale channel to create a 3-channel image.
-3.  Normalizing the pixel values.
+1.  Resizing the image to the size expected by the model: 640x640.
+2. Normalizing the pixel values.
 
 ## Post-processing
 These post-processing steps are applied to the raw prediction output:

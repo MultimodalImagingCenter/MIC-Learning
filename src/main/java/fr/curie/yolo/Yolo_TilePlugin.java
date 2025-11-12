@@ -57,8 +57,6 @@ public class Yolo_TilePlugin implements PlugInFilter {
     @Override
     public int setup(String s, ImagePlus imagePlus) {
         imp = imagePlus;
-        // For yolo, images has to be grayscale 8bit rgb
-        // TODO : if image isn't UNIT8 or RGB, return error and ask user to convert image
         return DOES_RGB + DOES_8G;
     }
 
