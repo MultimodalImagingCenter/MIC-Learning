@@ -26,11 +26,7 @@ public class  SubTasksListPanel extends ButtonDescriptionListPanel{
         return (subTaskId, subTaskName) -> {
 
             // check if the model is implemented
-            String runKeyBase = "run." + subTaskId + "." + parentModelId;
-            boolean isRunnable = false;
-            if (bundle.containsKey(runKeyBase + ".runnable")) {
-                isRunnable = Boolean.parseBoolean(bundle.getString(runKeyBase + ".runnable"));
-            }
+            boolean isRunnable = uiStructure.isRunnable(subTaskId, parentModelId);
 
             // define the action depending on weather the model is runnable or not
             ActionListener selectAction;
@@ -49,12 +45,14 @@ public class  SubTasksListPanel extends ButtonDescriptionListPanel{
     }
 
     private void displayFinalDescription(String taskId , ActionListener selectAction) {
-        String titleKey = propertyKey + "." + taskId + ".description.title";
-        String contentKey = propertyKey + "." + taskId + ".description.content";
 
         try {
-            String title = bundle.getString(titleKey);
-            String markdownFilePath = contentFolder + bundle.getString(contentKey);
+            //fetch title
+            String titleKey = propertyKey + "." + taskId + ".description.title";
+            String title = uiStructure.getString(titleKey);
+
+
+            String markdownFilePath = uiStructure.getTaskDescriptionForModelPath(parentModelId, taskId);
             String htmlContent = ContentLoader.loadAndParseMarkdown(markdownFilePath);
 
             if (selectAction != null) {

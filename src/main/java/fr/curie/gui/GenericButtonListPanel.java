@@ -2,7 +2,7 @@ package fr.curie.gui;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.ResourceBundle;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 public class GenericButtonListPanel extends JPanel {
@@ -16,7 +16,7 @@ public class GenericButtonListPanel extends JPanel {
 
     protected MainApplication_Frame mainFrame;
 
-    protected ResourceBundle bundle;
+    protected StructureManager uiStructure;
     protected String pageTitle;
     protected String propertyKey; // e.g., "task" or "model"
     protected BiConsumer<String, String> buttonActionHandler;
@@ -37,10 +37,10 @@ public class GenericButtonListPanel extends JPanel {
         this.pageTitle = pageTitle;
         this.propertyKey = propertyKey;
         try {
-            this.bundle = mainFrame.getResourceBundle();
+            this.uiStructure = mainFrame.getUIStructure();
         } catch (Exception e) {
             System.err.println(getClass().getSimpleName() + ": Error loading resource bundle");
-            this.bundle = null;
+            this.uiStructure = null;
         }
     }
 
@@ -60,16 +60,16 @@ public class GenericButtonListPanel extends JPanel {
     }
 
     protected void populateButtons() {
-        if (bundle == null) {
+        if (uiStructure == null) {
             buttonsPanel.add(new JLabel("Error: Content definitions not loaded."));
             return;
         }
         String question;
         try {
-            question = bundle.getString(propertyKey+".askChoice.text");
+            question = uiStructure.getString(propertyKey+".askChoice.text");
         } catch (Exception e) {
             try {
-                question = bundle.getString("askChoice.text");
+                question = uiStructure.getString("askChoice.text");
             } catch (Exception ee) {
                 question = "choose an option";
             }
@@ -97,31 +97,29 @@ public class GenericButtonListPanel extends JPanel {
         gbc.anchor = GridBagConstraints.CENTER;
         gbc.insets = new Insets(1, 5, 1, 5); // padding
 
-        String idsString;
-        try {
-            idsString = bundle.getString(propertyKey+".list.ids");
-        } catch (Exception e) {
-            System.err.println("Missing property for button IDs: " + propertyKey);
-            buttonsPanel.add(new JLabel("<html>No items defined for this list.</html>"));
-            return;
-        }
 
-        if (idsString.trim().isEmpty()) {
+        List<String> itemIds = uiStructure.getIdsList(propertyKey);
+        if (itemIds.isEmpty()){
             buttonsPanel.add(new JLabel("\"<html>No items defined for this list.</html>\""));
             return;
         }
 
-        String[] itemIds = idsString.split(",");
+
         int currentRow = 2; // starts at 1 because 0 use by spacer
 
         for (String id : itemIds) {
             String trimmedId = id.trim();
             if (trimmedId.isEmpty()) continue;
 
-            String buttonTextKey = propertyKey + "." + trimmedId + ".name";
+            // if propertyKey as format rf.task or classification.model, only use final part to find button name
+            String buttonPropertyKey = propertyKey;
+            if (propertyKey.contains(".")){
+                buttonPropertyKey = buttonPropertyKey.split("\\.")[1];
+            }
+            String buttonTextKey = buttonPropertyKey + "." + trimmedId + ".name";
             String buttonText;
             try {
-                buttonText = bundle.getString(buttonTextKey);
+                buttonText = uiStructure.getString(buttonTextKey);
             } catch (Exception e) {
                 System.err.println("Missing property for button name: " + buttonTextKey);
                 buttonText = "Unnamed (" + trimmedId + ")";

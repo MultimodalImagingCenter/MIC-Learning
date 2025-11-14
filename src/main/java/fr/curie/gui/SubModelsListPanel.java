@@ -1,10 +1,13 @@
 package fr.curie.gui;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.awt.event.ActionListener;
 import java.util.function.BiConsumer;
 
 public class SubModelsListPanel extends ButtonDescriptionListPanel{
-
+    private static final Logger log = LoggerFactory.getLogger(SubTasksListPanel.class);
     private final String parentTaskId;
 
     public SubModelsListPanel(MainApplication_Frame mainFrame, String pageTitle, String parentTaskId) {
@@ -22,11 +25,7 @@ public class SubModelsListPanel extends ButtonDescriptionListPanel{
         return (subModelId, subModelName) -> {
 
             // check if the model is implemented
-            String runKeyBase = "run." + parentTaskId + "." + subModelId;
-            boolean isRunnable = false;
-            if (bundle.containsKey(runKeyBase + ".runnable")) {
-                isRunnable = Boolean.parseBoolean(bundle.getString(runKeyBase + ".runnable"));
-            }
+            boolean isRunnable = uiStructure.isRunnable(parentTaskId, subModelId);
 
             // define the action depending on weather the model is runnable or not
             ActionListener selectAction;
@@ -45,12 +44,13 @@ public class SubModelsListPanel extends ButtonDescriptionListPanel{
     }
 
     private void displayFinalDescription(String modelId, ActionListener selectAction) {
-        String titleKey = propertyKey + "." + modelId + ".description.title";
-        String contentKey = propertyKey + "." + modelId + ".description.content";
-
         try {
-            String title = bundle.getString(titleKey);
-            String markdownFilePath = contentFolder + bundle.getString(contentKey);
+            //fetch title
+            String titleKey = propertyKey + "." + modelId + ".description.title";
+            String title = uiStructure.getString(titleKey);
+
+            // find markdown file + retrieve markdown content
+            String markdownFilePath = uiStructure.getModelDescriptionForTaskPath(parentTaskId, modelId);
             String htmlContent = ContentLoader.loadAndParseMarkdown(markdownFilePath);
 
             if (selectAction != null) {
@@ -64,6 +64,7 @@ public class SubModelsListPanel extends ButtonDescriptionListPanel{
             // Fallback if any keys are missing
             descriptionPanel.updateContentDisabled("Information", "<html><body>Configuration for this combination is incomplete.</body></html>");
             System.err.println("Missing description/configuration for key base: " + propertyKey + "." + modelId );
+            log.error("e: ", e);
         }
     }
 }

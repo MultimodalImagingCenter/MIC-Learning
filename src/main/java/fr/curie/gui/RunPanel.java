@@ -24,7 +24,7 @@ public class RunPanel extends JPanel{
     private JScrollPane scrollPane;
 
     private MainApplication_Frame mainFrame;
-    private ResourceBundle bundle;
+    protected StructureManager uiStructure;
     private String baseKey;
     private String modelPath;
     private boolean defaultParameters;
@@ -33,7 +33,12 @@ public class RunPanel extends JPanel{
     public RunPanel(MainApplication_Frame mainFrame) {
 
         this.mainFrame = mainFrame;
-        this.bundle = mainFrame.getResourceBundle(); // Get bundle from main frame
+        try {
+            this.uiStructure = mainFrame.getUIStructure();
+        } catch (Exception e) {
+            System.err.println(getClass().getSimpleName() + ": Error loading resource bundle");
+            this.uiStructure = null;
+        }
 
         // Add the rootPanel from the .form file to this JPanel
         this.setLayout(new BorderLayout());
@@ -49,11 +54,11 @@ public class RunPanel extends JPanel{
     public void configurePanel(String taskId, String modelId) {
         this.baseKey = "run." + taskId + "." + modelId;
 
-        titleLabel.setText(bundle.getString(baseKey + ".title"));
+        titleLabel.setText(uiStructure.getString(baseKey + ".title"));
 
         String contentKey = baseKey + ".content";
-        String contentFolder = bundle.getString("content.folder");
-        String markdownFilePath = contentFolder + bundle.getString(contentKey);
+        String contentFolder = uiStructure.getString("content.folder");
+        String markdownFilePath = contentFolder + uiStructure.getString(contentKey);
         descriptionArea.setText(ContentLoader.loadAndParseMarkdown(markdownFilePath));
         descriptionArea.setCaretPosition(0); // Scroll to top
         // by default : default params are used
@@ -72,7 +77,7 @@ public class RunPanel extends JPanel{
         exampleImageButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String exampleImageName = bundle.getString(baseKey + ".exampleImage");
+                String exampleImageName = uiStructure.getString(baseKey + ".exampleImage");
                 if (!exampleImageName.isEmpty()) {
                     // Construct the absolute path to the image
                     String absoluteImagePath = modelPath + File.separator + exampleImageName;
@@ -133,9 +138,9 @@ public class RunPanel extends JPanel{
                     try {
                         String macroKey = defaultParameters ? baseKey + ".macroTemplate.default": baseKey + ".macroTemplate.options";
 
-                        if (bundle.containsKey(macroKey)) {
+                        if (!uiStructure.getString(macroKey).isEmpty()) { //bricolage pour compiler le temps de faire les modifs
                             // 1. Get the template string
-                            String macroTemplate = bundle.getString(macroKey);
+                            String macroTemplate = uiStructure.getString(macroKey);
 
                             // 2. Replace all placeholders
                             String finalMacroScript = macroTemplate.replace("{MODEL_PATH}", modelPath);
@@ -167,7 +172,7 @@ public class RunPanel extends JPanel{
             }
 
             // Get the specific subfolder name for this model from properties
-            String modelSubfolder = bundle.getString(baseKey + ".modelSubfolder");
+            String modelSubfolder = uiStructure.getString(baseKey + ".modelSubfolder");
 
             // Construct the full, absolute path to the specific model directory
             String absoluteModelPath = baseModelPath + File.separator + modelSubfolder;

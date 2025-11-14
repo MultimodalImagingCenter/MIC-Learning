@@ -18,26 +18,23 @@ public class ButtonDescriptionListPanel extends GenericButtonListPanel{
         super(mainFrame, pageTitle, propertyKey);
 
         // add the description panel to the right side
-        String selectText = bundle.getString("select.button");
-        String notAvailableText = bundle.getString("unavailable.text");
+        String selectText = uiStructure.getString("select.button");
+        String notAvailableText = uiStructure.getString("unavailable.text");
         descriptionPanel = new DescriptionPanel(selectText, notAvailableText);
         getSplitPane().setRightComponent(descriptionPanel);
 
-        // find content folder
-        contentFolder = bundle.getString("content.folder");
+
     }
 
     public void displayDescriptionContent(String itemId, ActionListener selectAction){
-        if (bundle == null) return;
+        if (uiStructure == null) return;
         try {
-            // Construct keys from the itemId (e.g., "classification")
+            // Fetch title from properties
             String titleKey = propertyKey + "." + itemId + ".description.title";
-            String contentKey = propertyKey + "." + itemId + ".description.content";
+            String title = uiStructure.getString(titleKey);
 
-            // Fetch strings from properties
-            String title = bundle.getString(titleKey);
-
-            String markdownFilePath = contentFolder + bundle.getString(contentKey);
+            // find markdown file + retrieve markdown content
+            String markdownFilePath = uiStructure.getDescriptionPath(propertyKey, itemId);
             String htmlContent = ContentLoader.loadAndParseMarkdown(markdownFilePath);
 
             // Update the description panel

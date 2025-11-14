@@ -8,7 +8,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.util.ResourceBundle;
 import java.util.Stack;
 
 public class MainApplication_Frame extends PlugInFrame {
@@ -21,8 +20,9 @@ public class MainApplication_Frame extends PlugInFrame {
 
     private MenuBar mainMenuBar;
 
-    private ResourceBundle bundle; // Add this field
-    private static final String BUNDLE_NAME = "UIstrings";
+    // retrieve structure of the app (models and tasks lists...)
+    public StructureManager structure = StructureManager.getInstance();
+
     private static final String MODELS_SUBFOLDER = "MicLearningModels";
 
     // Constants for panel names in CardLayout
@@ -41,16 +41,10 @@ public class MainApplication_Frame extends PlugInFrame {
     // stack to keep track of the user's navigation history
     private final Stack<NavigationStep> navigationHistory = new Stack<>();
 
+
+
     public MainApplication_Frame() {
         super("MIC learning Plug-in");
-
-        try {
-            this.bundle = ResourceBundle.getBundle(BUNDLE_NAME);
-        } catch (Exception e) {
-            System.err.println("MainApplicationFrame: Error loading resource bundle: " + BUNDLE_NAME);
-            IJ.error("Configuration Error", "Could not load text resources. Plugin may not function correctly.");
-            this.bundle = null;
-        }
 
         if (rootPanel == null) {
             IJ.error("Plugin UI Error", "The main UI panel (rootPanel) could not be initialized from the form");
@@ -109,9 +103,6 @@ public class MainApplication_Frame extends PlugInFrame {
         return contentAreaPanel;
     }
 
-    public ResourceBundle getResourceBundle() {
-        return bundle;
-    }
 
     /**
      * Shows a specific panel (card) in the content area.
@@ -170,6 +161,9 @@ public class MainApplication_Frame extends PlugInFrame {
     }
 
 
+    public StructureManager getUIStructure() {
+        return structure;
+    }
 
     public void navigateToHomePage() {
         navigationHistory.clear(); // Going home resets the history
@@ -219,13 +213,14 @@ public class MainApplication_Frame extends PlugInFrame {
     }
 
     public void navigateToSubTasksList( String pageTitle, String parentModelId ) {
-        String modelName = bundle.getString("model." + parentModelId + ".name");
+        String modelName = structure.getModelName(parentModelId);
         Runnable action = () -> navigateToSubTasksList(pageTitle, parentModelId);
 
         while (!navigationHistory.isEmpty() && navigationHistory.peek().getCardLayoutKey().equals(SUB_TASKS_LIST_PANEL_KEY)) {
             navigationHistory.pop();
         }
         navigationHistory.push(new NavigationStep(modelName, SUB_TASKS_LIST_PANEL_KEY, action));
+
         SubTasksListPanel subTasksListPanel = new SubTasksListPanel(this, pageTitle, parentModelId );
         contentAreaPanel.add(subTasksListPanel, SUB_TASKS_LIST_PANEL_KEY);
         rebuildProgress();
@@ -233,7 +228,7 @@ public class MainApplication_Frame extends PlugInFrame {
     }
 
     public void navigateToSubModelsList(String pageTitle, String parentTaskId) {
-        String taskName = bundle.getString("task." + parentTaskId + ".name");
+        String taskName = structure.getTaskName(parentTaskId);
         Runnable action = () -> navigateToSubModelsList(pageTitle, parentTaskId);
 
         while (!navigationHistory.isEmpty() && navigationHistory.peek().getCardLayoutKey().equals(SUB_MODELS_LIST_PANEL_KEY)) {
