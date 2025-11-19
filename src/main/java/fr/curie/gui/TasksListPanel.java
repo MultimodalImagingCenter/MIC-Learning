@@ -22,8 +22,8 @@ public class TasksListPanel extends ButtonDescriptionListPanel {
         return (taskId, taskName) -> {
             // Define the action for the "Select" button
             ActionListener selectAction = selectEvent -> {
-                String title = taskName + " task selection";
-                mainFrame.navigateToSubModelsList(title, taskId);
+                String navigationStepName = taskName + " model selection";
+                mainFrame.navigateToSubModelsList(navigationStepName, taskId);
             };
 
             this.displayDescriptionContent(taskId, selectAction);

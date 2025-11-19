@@ -3,10 +3,12 @@ package fr.curie.gui;
 // ConfigManager.java
 
 import ij.IJ;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class StructureManager {
 
@@ -69,31 +71,28 @@ public class StructureManager {
             idsString = structureConfig.getProperty(key + ".ids", "");
         } catch (Exception e) {
             System.err.println("Missing property in structure.properties for key: " + key);
-            return null;
+            return Collections.emptyList();
         }
         return Arrays.asList(idsString.split(","));
     }
 
-    public List<String> getModelIds() { return getIdsList("model"); }
 
-    public List<String> getTaskIds() { return getIdsList("task"); }
-
-    public List<String> getModelIdsForTask(String taskId) {
-        String key = taskId + ".model";
-        return getIdsList(key);
-    }
-
-    public List<String> getTaskIdsForModel(String modelId) {
-        String key = modelId + ".task";
-        return getIdsList(key);
-    }
-
-    public List<String> getExampleIdsFor(String taskId, String modelId) {
+    public List<String> getExampleIds(String taskId, String modelId) {
         String key = "run." + taskId + "." + modelId + ".examples";
-        if (!isRunnable(taskId, modelId) || !structureConfig.containsKey(key)) {
+
+        //check that the "runnable" key is true
+        if (!isRunnable(taskId, modelId) ) {
             return Collections.emptyList();
         }
+
         return getIdsList(key);
+    }
+
+    public List<DisplayItem> getExampleDisplayItems(List<String> exampleIds) {
+
+        return exampleIds.stream()
+                .map(id -> new DisplayItem(id, getExampleName(id)))
+                .collect(Collectors.toList());
     }
 
     // Get localized UI text
@@ -101,11 +100,29 @@ public class StructureManager {
         return uiStrings.getString(key);
     }
 
+    // try to get text, return alternative if not found
+    public String getString(String key, String alternativeText) {
+        String result;
+        try {
+            result = uiStrings.getString(key);
+        } catch (Exception e) {
+            result= alternativeText;
+            System.err.println("Missing property in UIstrings for key: " + key);
+        }
+        return result;
+    }
+
     public String getTaskName(String taskId) { return getString("task." + taskId + ".name");}
 
     public String getModelName(String modelId) { return getString("model." + modelId + ".name"); }
 
-    public String getExampleName(String exampleId) { return getString("example." + exampleId + ".name"); }
+    public String getExampleName(String exampleId) {
+        if (exampleId != null && !exampleId.trim().isEmpty()) {
+            return getString("example." + exampleId + ".name", "no name (" + exampleId + ")");
+        } else {
+            return null;
+        }
+    }
     public String getDescriptionTitle(String exampleId) { return getString("example." + exampleId + ".description.title"); }
 
 
@@ -120,15 +137,6 @@ public class StructureManager {
         return getContentBasePath() + propertyKey + "/" + itemId + "/" + itemId + ".md";
     }
 
-
-    public String getTaskDescriptionPath(String taskId) {
-        return getContentBasePath() + "task/" + taskId + "/" + taskId + ".md";
-    }
-
-    public String getModelDescriptionPath(String modelId) {
-        return getContentBasePath() + "model/" + modelId + "/" + modelId + ".md";
-    }
-
     public String getModelDescriptionForTaskPath(String taskId, String modelId) {
         return getContentBasePath() + "task/" + taskId + "/model/" + modelId + ".md";
     }
@@ -141,10 +149,18 @@ public class StructureManager {
         return getContentBasePath() + "example/" + exampleId + ".md";
     }
 
-    // Check if a couple task/model has a runnable example
+    // Check if a couple task/model is defined as runnable
     public boolean isRunnable(String taskId, String modelId) {
         String key = "run." + taskId + "." + modelId + ".runnable";
         return Boolean.parseBoolean(structureConfig.getProperty(key, "false"));
+    }
+
+    // verify a couple task/model is actually runnable
+    // First check if the associated key is defined as true (verification done when fetching ids list)
+    // Then verify if the list of example id isn't empty
+    public boolean checkIfRunnable(String taskId, String modelId){
+        List<String> exampleIds = getExampleIds(taskId, modelId);
+        return exampleIds != null && !exampleIds.isEmpty() && exampleIds.stream().allMatch(StringUtils::isNotEmpty);
     }
 
     // Load useCase config (instructions on where and how to use an example model)
@@ -165,11 +181,11 @@ public class StructureManager {
             String descriptionTitle = getDescriptionTitle(exampleId);
 
             // Resolve the model path  relative to the use case dir
-            String relativeModelDirPath = useCaseProps.getProperty("model.directory", ".");
+            String relativeModelDirPath = useCaseProps.getProperty("model.folder", ".");
             String modelPath = "";
             if (relativeModelDirPath != null && !relativeModelDirPath.isEmpty()) {
                 File modelDir = new File(useCaseDir, relativeModelDirPath);
-                modelPath = modelDir.getCanonicalPath().replace("\\", "/");
+                modelPath = modelDir.getCanonicalPath();
             }
 
             // Resolve the example image path  relative to the use case dir

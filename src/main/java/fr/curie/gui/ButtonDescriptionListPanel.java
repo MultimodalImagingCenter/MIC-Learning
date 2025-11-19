@@ -4,7 +4,6 @@ import java.awt.event.ActionListener;
 
 public class ButtonDescriptionListPanel extends GenericButtonListPanel{
     protected DescriptionPanel descriptionPanel;
-    protected String contentFolder;
 
     /**
      * Constructor for the generic button list panel.
@@ -18,22 +17,21 @@ public class ButtonDescriptionListPanel extends GenericButtonListPanel{
         super(mainFrame, pageTitle, propertyKey);
 
         // add the description panel to the right side
-        String selectText = uiStructure.getString("select.button");
-        String notAvailableText = uiStructure.getString("unavailable.text");
-        descriptionPanel = new DescriptionPanel(selectText, notAvailableText);
+        descriptionPanel = new DescriptionPanel(uiStructure);
         getSplitPane().setRightComponent(descriptionPanel);
-
 
     }
 
+    // (only for ModelListPanel and taskListPanel)
+    // update the description Panel depending on clicked button
     public void displayDescriptionContent(String itemId, ActionListener selectAction){
         if (uiStructure == null) return;
         try {
             // Fetch title from properties
             String titleKey = propertyKey + "." + itemId + ".description.title";
-            String title = uiStructure.getString(titleKey);
+            String title = uiStructure.getString(titleKey, "could not find title (" + propertyKey +"." + itemId + ")");
 
-            // find markdown file + retrieve markdown content
+            // find markdown file path + fetch markdown content
             String markdownFilePath = uiStructure.getDescriptionPath(propertyKey, itemId);
             String htmlContent = ContentLoader.loadAndParseMarkdown(markdownFilePath);
 

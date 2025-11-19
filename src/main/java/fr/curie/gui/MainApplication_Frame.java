@@ -187,8 +187,8 @@ public class MainApplication_Frame extends PlugInFrame {
             contentAreaPanel.add(tasksListPanel, TASKS_LIST_PANEL_KEY);
         }
 
-        rebuildProgress();
         tasksListPanel.onPanelShown();
+        rebuildProgress();
         showView(TASKS_LIST_PANEL_KEY);
     }
 
@@ -242,8 +242,8 @@ public class MainApplication_Frame extends PlugInFrame {
         showView(SUB_MODELS_LIST_PANEL_KEY);
     }
 
-    public void navigateToRunPage(String taskId, String modelId, String progressText) {
-        Runnable action = () -> navigateToRunPage(taskId, modelId, progressText);
+    public void navigateToRunPage(String modelId, String progressText) {
+        Runnable action = () -> navigateToRunPage(modelId, progressText);
         while (!navigationHistory.isEmpty() && navigationHistory.peek().getCardLayoutKey().equals(RUN_PANEL_KEY)) {
             navigationHistory.pop();
         }
@@ -256,7 +256,7 @@ public class MainApplication_Frame extends PlugInFrame {
         }
 
         // Configure the panel with the correct context
-        runPanel.configurePanel(taskId, modelId);
+        runPanel.configurePanel(modelId);
 
         rebuildProgress();
         // show the view

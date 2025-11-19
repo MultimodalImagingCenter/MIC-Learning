@@ -8,7 +8,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
-import java.util.ResourceBundle;
+
 
 public class RunPanel extends JPanel{
     private JPanel rootPanel;
@@ -23,10 +23,10 @@ public class RunPanel extends JPanel{
     private JRadioButton userParamRButton;
     private JScrollPane scrollPane;
 
-    private MainApplication_Frame mainFrame;
+    private final MainApplication_Frame mainFrame;
     protected StructureManager uiStructure;
-    private String baseKey;
     private String modelPath;
+    private UseCaseConfig currentUseCase;
     private boolean defaultParameters;
 
 
@@ -40,59 +40,84 @@ public class RunPanel extends JPanel{
             this.uiStructure = null;
         }
 
-        // Add the rootPanel from the .form file to this JPanel
         this.setLayout(new BorderLayout());
         this.add(rootPanel, BorderLayout.CENTER);
 
-        // Setup listeners - they will be generic, their context comes from fields
+        // Setup listeners
         setupListeners();
     }
 
     /**
-     * Configures the entire panel for a specific task and model combination.
+     * Configures the entire panel for a specific example model
      */
-    public void configurePanel(String taskId, String modelId) {
-        this.baseKey = "run." + taskId + "." + modelId;
+    public void configurePanel(String exampleId) {
+        // load the configuration for this use case.
+        this.currentUseCase = uiStructure.loadUseCase(mainFrame.getModelDirectoryPath(), exampleId);
 
-        titleLabel.setText(uiStructure.getString(baseKey + ".title"));
+        // handle the case where the configuration might fail to load.
+        if (this.currentUseCase == null) {
+            titleLabel.setText("Error");
+            descriptionArea.setText("<html>Could not load the configuration for " + exampleId + ".<br>Check logs for details.</html>");
+            runButton.setEnabled(false);
+            exampleImageButton.setEnabled(false);
+            userImageButton.setEnabled(false);
+            return;
+        }
 
-        String contentKey = baseKey + ".content";
-        String contentFolder = uiStructure.getString("content.folder");
-        String markdownFilePath = contentFolder + uiStructure.getString(contentKey);
+        // populate the UI elements from the loaded UseCaseConfig object.
+        titleLabel.setText(currentUseCase.getDescriptionTitle());
+
+        String markdownFilePath = uiStructure.getExampleDescriptionPath(exampleId);
         descriptionArea.setText(ContentLoader.loadAndParseMarkdown(markdownFilePath));
         descriptionArea.setCaretPosition(0); // Scroll to top
-        // by default : default params are used
+
+        // reset UI state with default param
         defaultParameters = true;
         defaultParamRButton.setSelected(true);
         userParamRButton.setSelected(false);
+        userImageButton.setEnabled(true);
 
-        // Retrieve the model folder + check if valid
-        this.modelPath = getModelFolder(taskId, modelId);
+        // only enable the run button if a valid model path is provided in the config
+        runButton.setEnabled(true);
+        // get model path
+        this.modelPath = currentUseCase.getModelDirectoryPath();
+        System.out.println("model path = " + modelPath);
+        // check if path valid
+        File modelDir = new File(modelPath);
+        if (!modelDir.exists() || !modelDir.isDirectory()) {
+            IJ.error("Model Not Found", "The required model directory does not exist at:\n" + modelPath);
+            this.modelPath = null;
+            runButton.setEnabled(false);
+        }
 
-        // --- Configure the RUN button's action command or properties ---
-        runButton.setActionCommand(taskId + ":" + modelId);
+
+        // only enable the example image button if a valid path is provided in the config
+        // and path exist
+        if (currentUseCase.getExampleImagePath() == null || currentUseCase.getExampleImagePath().isEmpty()) {
+            exampleImageButton.setEnabled(false);
+            IJ.error("Image Path Not Found", "No example image path was found for model " + exampleId );
+        } else {
+            File imageFile = new File(currentUseCase.getExampleImagePath());
+            if (!imageFile.exists() ) {
+                IJ.error("Image Not Found", "The required example image does not exist at:\n" + currentUseCase.getExampleImagePath());
+                exampleImageButton.setEnabled(false);
+            } else {
+                exampleImageButton.setEnabled(true);
+            }
+        }
     }
+
 
     private void setupListeners() {
         exampleImageButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String exampleImageName = uiStructure.getString(baseKey + ".exampleImage");
-                if (!exampleImageName.isEmpty()) {
-                    // Construct the absolute path to the image
-                    String absoluteImagePath = modelPath + File.separator + exampleImageName;
-                    // Check if the image actually exists
-                    File imageFile = new File(absoluteImagePath);
-                    if (!imageFile.exists() ) {
-                        IJ.error("Image Not Found", "The required example image does not exist at:\n" + absoluteImagePath + "\nPlease ensure the model is downloaded and in the correct location.");
-                        return;
-                    }
-                        IJ.open(absoluteImagePath);
-
-                }
+                String exampleImagePath = currentUseCase.getExampleImagePath();
+                IJ.open(exampleImagePath);
+                // (no need to check for null, the button is disabled if the path is missing)
             }
         });
-        
+
         userImageButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -126,9 +151,6 @@ public class RunPanel extends JPanel{
         runButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String[] command = e.getActionCommand().split(":");
-                String taskId = command[0];
-                String modelId = command[1];
                 // get the active image (necessary for some plugins)
                 ImagePlus imp = IJ.getImage();
                 String impTitle = (imp != null) ? imp.getTitle() : "";
@@ -136,61 +158,34 @@ public class RunPanel extends JPanel{
                 // Running the macro on a new thread to avoid freezing the GUI
                 new Thread(() -> {
                     try {
-                        String macroKey = defaultParameters ? baseKey + ".macroTemplate.default": baseKey + ".macroTemplate.options";
+                        // 1. Get the correct macro template
+                        String macroTemplate = defaultParameters
+                                ? currentUseCase.getDefaultMacro()
+                                : currentUseCase.getOptionMacro();
 
-                        if (!uiStructure.getString(macroKey).isEmpty()) { //bricolage pour compiler le temps de faire les modifs
-                            // 1. Get the template string
-                            String macroTemplate = uiStructure.getString(macroKey);
+                        if (macroTemplate != null && !macroTemplate.isEmpty()) {
+                            // 2. Get the pre-resolved model path
+                            String modelDir = modelPath;
 
-                            // 2. Replace all placeholders
-                            String finalMacroScript = macroTemplate.replace("{MODEL_PATH}", modelPath);
-                            finalMacroScript = finalMacroScript.replace("{IMP_TITLE}", impTitle);
-                            finalMacroScript = finalMacroScript.replace("\\", "/");
+                            // 3. Replace placeholders.
+                            String finalMacroScript = macroTemplate.replace("{MODEL_PATH}", modelDir)
+                                    .replace("{IMP_TITLE}", impTitle);
 
-                            // 3. Execute the entire script
+                            // 4. Execute the script.
                             IJ.runMacro(finalMacroScript);
-
                         } else {
-                            IJ.error("Configuration Error", "No macro definition found for this task/model combination.");
+                            IJ.error("Configuration Error", "No macro definition found for this parameter choice.");
                         }
 
                     } catch (Exception ex) {
-                        IJ.error("Macro Execution Failed", "Could not run the macro. Check properties file and model configuration.\nError: " + ex.getMessage());
+                        IJ.error("Macro Execution Failed", "Could not run the macro. Check usecase.properties and model configuration.\nError: " + ex.getMessage());
                         ex.printStackTrace();
                     }
+
                 }).start();
             }
         });
-    }
 
-    private String getModelFolder(String taskId, String modelId){
-        try {
-            // Get the base path for all models
-            String baseModelPath = mainFrame.getModelDirectoryPath();
-            if (baseModelPath == null) {
-                return null;
-            }
 
-            // Get the specific subfolder name for this model from properties
-            String modelSubfolder = uiStructure.getString(baseKey + ".modelSubfolder");
-
-            // Construct the full, absolute path to the specific model directory
-            String absoluteModelPath = baseModelPath + File.separator + modelSubfolder;
-
-            // Check if the specific model directory actually exists
-            File modelDir = new File(absoluteModelPath);
-            if (!modelDir.exists() || !modelDir.isDirectory()) {
-                IJ.error("Model Not Found", "The required model directory does not exist at:\n" + absoluteModelPath + "\nPlease ensure the model is downloaded and in the correct location.");
-                return null;
-            }
-
-            return absoluteModelPath;
-
-        } catch (Exception ex) {
-            // Catch any MissingResourceException or other errors
-            IJ.error("Macro Execution Failed", "Could not run the macro. Check properties file and model configuration.\nError: " + ex.getMessage());
-            ex.printStackTrace();
-        }
-        return null;
     }
 }

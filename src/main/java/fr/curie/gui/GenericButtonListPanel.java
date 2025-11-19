@@ -18,7 +18,10 @@ public class GenericButtonListPanel extends JPanel {
 
     protected StructureManager uiStructure;
     protected String pageTitle;
-    protected String propertyKey; // e.g., "task" or "model"
+    protected String propertyKey; // context of the list,
+    // e.g., "task" or "model" : list of all available tasks or models
+    // or "cnn.task", "detection.model" : list of sub-tasks for cnn, of sub-models for detection...
+
     protected BiConsumer<String, String> buttonActionHandler;
 
     /**
@@ -48,7 +51,6 @@ public class GenericButtonListPanel extends JPanel {
         this.setLayout(new BorderLayout());
         this.add(rootPanel, BorderLayout.CENTER);
 
-        // get the resources bundle from main frame
 
         // give 15% of the space to the left panel
         splitPane.setResizeWeight(0.15);
@@ -60,23 +62,17 @@ public class GenericButtonListPanel extends JPanel {
     }
 
     protected void populateButtons() {
+        // check if bundle existing
         if (uiStructure == null) {
-            buttonsPanel.add(new JLabel("Error: Content definitions not loaded."));
+            buttonsPanel.add(new JLabel("Error: button list not loaded."));
             return;
         }
-        String question;
-        try {
-            question = uiStructure.getString(propertyKey+".askChoice.text");
-        } catch (Exception e) {
-            try {
-                question = uiStructure.getString("askChoice.text");
-            } catch (Exception ee) {
-                question = "choose an option";
-            }
-        }
+
+        // fetch question text to display at the top of button list
+        String question = uiStructure.getString(propertyKey+".askChoice.text", "choose an option");
         questionLabel.setText(question);
 
-
+        // define constraints
         GridBagConstraints gbc = new GridBagConstraints();
 
         // Spacer to push content down
@@ -97,7 +93,7 @@ public class GenericButtonListPanel extends JPanel {
         gbc.anchor = GridBagConstraints.CENTER;
         gbc.insets = new Insets(1, 5, 1, 5); // padding
 
-
+        // fetch list of item ids
         List<String> itemIds = uiStructure.getIdsList(propertyKey);
         if (itemIds.isEmpty()){
             buttonsPanel.add(new JLabel("\"<html>No items defined for this list.</html>\""));
@@ -107,24 +103,31 @@ public class GenericButtonListPanel extends JPanel {
 
         int currentRow = 2; // starts at 1 because 0 use by spacer
 
+        // for each button id
         for (String id : itemIds) {
             String trimmedId = id.trim();
             if (trimmedId.isEmpty()) continue;
 
-            // if propertyKey as format rf.task or classification.model, only use final part to find button name
+            // fetch button name using propertyKey + button id
+            // if propertyKey has format rf.task or classification.model, only use final part to find button name
+            // e.g., to find name for rf.task.semanticSegmentation, search at task.semanticSegmentation (to avoid duplications in UIstrings)
+            // TODO : move this logic to StructureManager
             String buttonPropertyKey = propertyKey;
             if (propertyKey.contains(".")){
                 buttonPropertyKey = buttonPropertyKey.split("\\.")[1];
             }
+
             String buttonTextKey = buttonPropertyKey + "." + trimmedId + ".name";
             String buttonText;
             try {
                 buttonText = uiStructure.getString(buttonTextKey);
             } catch (Exception e) {
                 System.err.println("Missing property for button name: " + buttonTextKey);
+                // if error, just use id
                 buttonText = "Unnamed (" + trimmedId + ")";
             }
 
+            // create button
             JButton button = new JButton(buttonText);
             button.setActionCommand(trimmedId); // Set an action command to easily identify the button later
 
@@ -135,7 +138,9 @@ public class GenericButtonListPanel extends JPanel {
                 }
             });
 
+            // go to next line
             gbc.gridy = currentRow++;
+            // add button to panel
             buttonsPanel.add(button, gbc);
         }
 
