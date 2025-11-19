@@ -4,7 +4,6 @@ import java.awt.event.ActionListener;
 
 public class ButtonDescriptionListPanel extends GenericButtonListPanel{
     protected DescriptionPanel descriptionPanel;
-    protected String contentFolder;
 
     /**
      * Constructor for the generic button list panel.
@@ -18,26 +17,22 @@ public class ButtonDescriptionListPanel extends GenericButtonListPanel{
         super(mainFrame, pageTitle, propertyKey);
 
         // add the description panel to the right side
-        String selectText = bundle.getString("select.button");
-        String notAvailableText = bundle.getString("unavailable.text");
-        descriptionPanel = new DescriptionPanel(selectText, notAvailableText);
+        descriptionPanel = new DescriptionPanel(uiStructure);
         getSplitPane().setRightComponent(descriptionPanel);
 
-        // find content folder
-        contentFolder = bundle.getString("content.folder");
     }
 
+    // (only for ModelListPanel and taskListPanel)
+    // update the description Panel depending on clicked button
     public void displayDescriptionContent(String itemId, ActionListener selectAction){
-        if (bundle == null) return;
+        if (uiStructure == null) return;
         try {
-            // Construct keys from the itemId (e.g., "classification")
+            // Fetch title from properties
             String titleKey = propertyKey + "." + itemId + ".description.title";
-            String contentKey = propertyKey + "." + itemId + ".description.content";
+            String title = uiStructure.getString(titleKey, "could not find title (" + propertyKey +"." + itemId + ")");
 
-            // Fetch strings from properties
-            String title = bundle.getString(titleKey);
-
-            String markdownFilePath = contentFolder + bundle.getString(contentKey);
+            // find markdown file path + fetch markdown content
+            String markdownFilePath = uiStructure.getDescriptionPath(propertyKey, itemId);
             String htmlContent = ContentLoader.loadAndParseMarkdown(markdownFilePath);
 
             // Update the description panel

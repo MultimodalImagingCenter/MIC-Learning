@@ -29,6 +29,7 @@
               <component id="41dbc" class="javax.swing.JLabel" binding="questionLabel">
                 <constraints border-constraint="North"/>
                 <properties>
+                  <labelFor value="db78b"/>
                   <text value=""/>
                 </properties>
               </component>

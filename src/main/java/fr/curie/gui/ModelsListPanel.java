@@ -11,7 +11,6 @@ public class ModelsListPanel extends ButtonDescriptionListPanel {
                 "model"                  // Property key prefix for button name
         );
 
-
         BiConsumer<String, String> buttonHandler = createButtonHandler(mainFrame);
         this.setButtonActionHandler(buttonHandler);
         this.initializePanel();
@@ -23,8 +22,8 @@ public class ModelsListPanel extends ButtonDescriptionListPanel {
         return (modelId, modelName) -> {
             // Define the action for the "Select" button
             ActionListener selectAction = selectEvent -> {
-                String title = modelName + " task selection";
-                mainFrame.navigateToSubTasksList(title, modelId);
+                String navigationStepName = modelName + " task selection"; //TODO : faire en sorte que change en fonction locale
+                mainFrame.navigateToSubTasksList(navigationStepName, modelId);
             };
 
             this.displayDescriptionContent(modelId, selectAction);
