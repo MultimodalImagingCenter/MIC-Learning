@@ -22,7 +22,7 @@ public class StructureManager {
     private Properties structureConfig;
     private ResourceBundle uiStrings;
     private String languageCode;
-    private String defaultLanguage = "en";// Default, could be made dynamic later
+    private String defaultLanguage = "en"; // Default
 
     // Private constructor to prevent instantiation
     private StructureManager() {
@@ -131,23 +131,42 @@ public class StructureManager {
     private String getContentBasePath() {
         return GLOBAL_CONTENT_FOLDER + "/" + languageCode + "/";
     }
+    private String getDefaultContentPathBase() {return GLOBAL_CONTENT_FOLDER + "/" + defaultLanguage + "/";}
+
+    // return full content path
+    // check if file exist within locale
+    // if not, return default locale file
+    private String getContentPathOrDefault(String endPath) {
+        String contentPath = getContentBasePath() + endPath;
+        File contentFile = new File(contentPath);
+        if (!contentFile.exists()){
+            contentPath =  getDefaultContentPathBase() + endPath;
+        }
+        return contentPath;
+    }
 
     public String getDescriptionPath(String propertyKey, String itemId){
         // eg. content/en/model/cnn/cnn.md
-        return getContentBasePath() + propertyKey + "/" + itemId + "/" + itemId + ".md";
+        String endPath = propertyKey + "/" + itemId + "/" + itemId + ".md";
+        return getContentPathOrDefault(endPath);
     }
 
+
     public String getModelDescriptionForTaskPath(String taskId, String modelId) {
-        return getContentBasePath() + "task/" + taskId + "/model/" + modelId + ".md";
+        String endPath = "task/" + taskId + "/model/" + modelId + ".md";
+        return getContentPathOrDefault(endPath);
     }
 
     public String getTaskDescriptionForModelPath(String modelId, String taskId) {
-        return getContentBasePath() + "model/" + modelId + "/task/" + taskId + ".md";
+        String endPath = "model/" + modelId + "/task/" + taskId + ".md";
+        return getContentPathOrDefault(endPath);
     }
 
     public String getExampleDescriptionPath(String exampleId) {
-        return getContentBasePath() + "example/" + exampleId + ".md";
+        String endPath = "example/" + exampleId + ".md";
+        return getContentPathOrDefault(endPath);
     }
+
 
     // Check if a couple task/model is defined as runnable
     public boolean isRunnable(String taskId, String modelId) {

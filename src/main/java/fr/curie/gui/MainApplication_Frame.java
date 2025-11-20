@@ -40,7 +40,10 @@ public class MainApplication_Frame extends PlugInFrame {
 
     // stack to keep track of the user's navigation history
     private final Stack<NavigationStep> navigationHistory = new Stack<>();
-
+    // texts for navigation steps
+    private String homeNavText;
+    private String taskListNavText;
+    private String modelListNavText;
 
 
     public MainApplication_Frame() {
@@ -53,6 +56,9 @@ public class MainApplication_Frame extends PlugInFrame {
         // Set the content of this PlugInFrame to be the rootPanel from the form
         this.setLayout(new BorderLayout());
         this.add(rootPanel, BorderLayout.CENTER);
+
+        // get text to display in navigation
+        getNavStepsTexts();
 
         // Create and set the menu bar
         createMainMenuBar();
@@ -92,6 +98,12 @@ public class MainApplication_Frame extends PlugInFrame {
             contentAreaPanel.add(homePanel, HOME_PANEL_KEY);
             navigateToHomePage();
         }
+    }
+
+    private void getNavStepsTexts(){
+        homeNavText = structure.getString("navigation.home.text");
+        taskListNavText = structure.getString("navigation.taskList.text");
+        modelListNavText = structure.getString("navigation.modelList.text");
     }
 
 
@@ -167,7 +179,7 @@ public class MainApplication_Frame extends PlugInFrame {
 
     public void navigateToHomePage() {
         navigationHistory.clear(); // Going home resets the history
-        navigationHistory.push(new NavigationStep("Home", HOME_PANEL_KEY, this::navigateToHomePage));
+        navigationHistory.push(new NavigationStep(homeNavText, HOME_PANEL_KEY, this::navigateToHomePage));
         rebuildProgress();
         showView(HOME_PANEL_KEY);
     }
@@ -179,7 +191,7 @@ public class MainApplication_Frame extends PlugInFrame {
         while (!navigationHistory.isEmpty() && navigationHistory.peek().getCardLayoutKey().equals(TASKS_LIST_PANEL_KEY)) {
             navigationHistory.pop();
         }
-        navigationHistory.push(new NavigationStep("Tasks List", TASKS_LIST_PANEL_KEY, action));
+        navigationHistory.push(new NavigationStep(taskListNavText, TASKS_LIST_PANEL_KEY, action));
 
 
         if (tasksListPanel == null) {
@@ -199,7 +211,7 @@ public class MainApplication_Frame extends PlugInFrame {
         while (!navigationHistory.isEmpty() && navigationHistory.peek().getCardLayoutKey().equals(MODELS_LIST_PANEL_KEY)) {
             navigationHistory.pop();
         }
-        navigationHistory.push(new NavigationStep("Models List", MODELS_LIST_PANEL_KEY, action));
+        navigationHistory.push(new NavigationStep(modelListNavText, MODELS_LIST_PANEL_KEY, action));
 
 
         if (modelsListPanel == null) {
