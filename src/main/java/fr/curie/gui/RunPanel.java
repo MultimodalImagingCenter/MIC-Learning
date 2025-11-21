@@ -168,6 +168,7 @@ public class RunPanel extends JPanel{
                             String modelDir = modelPath;
 
                             // 3. Replace placeholders.
+                            modelDir=modelDir.replace('\\','/');
                             String finalMacroScript = macroTemplate.replace("{MODEL_PATH}", modelDir)
                                     .replace("{IMP_TITLE}", impTitle);
 
