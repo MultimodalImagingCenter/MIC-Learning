@@ -57,6 +57,9 @@ public class MainApplication_Frame extends PlugInFrame {
         this.setLayout(new BorderLayout());
         this.add(rootPanel, BorderLayout.CENTER);
 
+
+        // forces the Manager to check if the user changed the language
+        StructureManager.getInstance().refreshLanguage();
         // get text to display in navigation
         getNavStepsTexts();
 
@@ -78,12 +81,76 @@ public class MainApplication_Frame extends PlugInFrame {
     private void createMainMenuBar() {
         mainMenuBar = new MenuBar();
 
+        // --- File menu ---
         Menu fileMenu = new Menu("File");
         MenuItem closeItem = new MenuItem("Close Plugin Window");
         closeItem.addActionListener(e -> this.close());
         fileMenu.add(closeItem);
         mainMenuBar.add(fileMenu);
 
+        // --- Settings Menu ---
+        Menu settingsMenu = new Menu("Settings");
+        Menu languageMenu = new Menu("Language");
+
+        // Get current preference to check the right box
+        String currentPref = StructureManager.getInstance().getLanguagePreference();
+
+        // Create items
+        CheckboxMenuItem itemAuto = new CheckboxMenuItem("Auto (System Default)");
+        CheckboxMenuItem itemEn = new CheckboxMenuItem("English");
+        CheckboxMenuItem itemFr = new CheckboxMenuItem("Français");
+
+        // set state based on stored preference
+        itemAuto.setState("auto".equals(currentPref));
+        itemEn.setState("en".equals(currentPref));
+        itemFr.setState("fr".equals(currentPref));
+
+        // define the action listener
+        // (specific listener to handle the "Restart" message)
+        java.awt.event.ItemListener languageChangeListener = e -> {
+            Object source = e.getSource();
+            String newLang = "auto";
+
+            // determine which language was clicked
+            if (source == itemEn) newLang = "en";
+            else if (source == itemFr) newLang = "fr";
+
+            // update Checkboxes UI
+            itemAuto.setState("auto".equals(newLang));
+            itemEn.setState("en".equals(newLang));
+            itemFr.setState("fr".equals(newLang));
+
+            // get the currently active language preference
+            String currentLang = StructureManager.getInstance().getLanguagePreference();
+
+            // 4. Only process the change if it's actually different
+            if (!newLang.equals(currentLang)) {
+                // Save the new preference
+                StructureManager.getInstance().setLanguagePreference(newLang);
+
+                // Show the message
+                IJ.showMessage("Language Changed",
+                        "Please close and reopen the plugin window to apply the language change.");
+            }
+            // save to ImageJ Prefs
+            StructureManager.getInstance().setLanguagePreference(newLang);
+
+        };
+
+        // Add listeners
+        itemAuto.addItemListener(languageChangeListener);
+        itemEn.addItemListener(languageChangeListener);
+        itemFr.addItemListener(languageChangeListener);
+
+        // Add items to sub-menu
+        languageMenu.add(itemAuto);
+        languageMenu.add(itemEn);
+        languageMenu.add(itemFr);
+
+        settingsMenu.add(languageMenu);
+        mainMenuBar.add(settingsMenu);
+
+        // --- help menu ---
         Menu helpMenu = new Menu("Help");
         MenuItem aboutItem = new MenuItem("About");
         aboutItem.addActionListener(e -> IJ.showMessage("About Mic Learning", "Version 1.0\n"));

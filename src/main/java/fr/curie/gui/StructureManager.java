@@ -1,10 +1,8 @@
 package fr.curie.gui;
 
-// ConfigManager.java
-
 import ij.IJ;
 import org.apache.commons.lang3.StringUtils;
-
+import ij.Prefs;
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
@@ -16,36 +14,71 @@ public class StructureManager {
     private static final String UI_BUNDLE_NAME = "UIstrings";
     private static final String GLOBAL_CONTENT_FOLDER = "content";
 
+    // key for ImageJ preferences
+    private static final String PREF_LANG_KEY = "mic_learning.language";
+
     // Singleton Instance
     private static final StructureManager INSTANCE = new StructureManager();
 
     private Properties structureConfig;
     private ResourceBundle uiStrings;
-    private String languageCode;
+    private String languageCode; //current locale code
     private String defaultLanguage = "en"; // Default
 
-    // Private constructor to prevent instantiation
-    private StructureManager() {
-        try {
-            // Load the structural configuration (number and ids of models, classes and examples)
-            structureConfig = new Properties();
-            InputStream structureStream = StructureManager.class.getResourceAsStream(STRUCTURE_PROPERTIES_PATH);
-            if (structureStream == null) {
-                throw new RuntimeException("ERROR: " + STRUCTURE_PROPERTIES_PATH + " not found in resources.");
-            }
-            structureConfig.load(structureStream);
 
-            // Load the translated content
-            // 1. Load the UI strings
+    private StructureManager() {
+        // load structure config
+        loadStructureConfig();
+        // lad the language data
+        loadLanguageData();
+
+    }
+
+    public static StructureManager getInstance() {
+        return INSTANCE;
+    }
+
+    private void loadStructureConfig() {
+        if (structureConfig == null) {
             try {
-                this.uiStrings = ResourceBundle.getBundle(UI_BUNDLE_NAME);
+                structureConfig = new Properties();
+                InputStream structureStream = StructureManager.class.getResourceAsStream(STRUCTURE_PROPERTIES_PATH);
+                if (structureStream == null) {
+                    throw new RuntimeException("ERROR: " + STRUCTURE_PROPERTIES_PATH + " not found in resources.");
+                }
+                structureConfig.load(structureStream);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private void loadLanguageData() {
+        try {
+            // Load the translated content - Determine Locale from pref
+            //  check ImageJ preferences (default is "auto")
+            String storedLang = Prefs.get(PREF_LANG_KEY, "auto");
+            Locale targetLocale;
+            if ("auto".equals(storedLang)) {
+                targetLocale = Locale.getDefault(); // Use System Language
+            } else {
+                targetLocale = new Locale(storedLang);
+            }
+
+            // set the Global (allows the Swing Designer to pick up the correct language.)
+            Locale.setDefault(targetLocale);
+
+            // load the UI strings with the specific target Locale
+            try {
+                this.uiStrings = ResourceBundle.getBundle(UI_BUNDLE_NAME, targetLocale);
             } catch (Exception e) {
                 System.err.println("MainApplicationFrame: Error loading resource bundle: " + UI_BUNDLE_NAME);
                 IJ.error("Configuration Error", "Could not load text resources. Plugin may not function correctly.");
                 this.uiStrings = null;
             }
 
-            // 2. Determine which language was actually loaded (for constructing content paths)
+            // set language code for content paths
+            // determine which language was actually loaded (for constructing content paths)
             Locale loadedLocale = this.uiStrings.getLocale();
 
             // If the locale is ROOT or has no language, it means the fallback (UIstrings.properties) was used.
@@ -56,12 +89,47 @@ public class StructureManager {
             }
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize StructureManager", e);
+            IJ.error("Config Error", "Failed to load language.");
+            e.printStackTrace();
         }
     }
 
-    public static StructureManager getInstance() {
-        return INSTANCE;
+    // check and reload if necessary
+    public void refreshLanguage() {
+        // Get the language currently stored in Prefs
+        // check ImageJ preferences (default is "auto")
+        String storedPref = Prefs.get(PREF_LANG_KEY, "auto");
+
+        String targetLang;
+        if ("auto".equals(storedPref)) {
+            targetLang = Locale.getDefault().getLanguage(); // System Default Language
+        } else {
+            targetLang = storedPref; // Stored Language
+        }
+
+        // If the stored preference is different from what is currently loaded
+        if (!targetLang.equals(this.languageCode)) {
+            ResourceBundle.clearCache();
+            // reload
+            loadLanguageData();
+        }
+    }
+
+
+
+    /**
+     * Saves the language preference.
+     * @param langCode "en", "fr", etc., or "auto" for system default.
+     */
+    public void setLanguagePreference(String langCode) {
+        Prefs.set(PREF_LANG_KEY, langCode);
+    }
+
+    /**
+     * Returns the currently stored preference (e.g., "auto", "en", "fr")
+     */
+    public String getLanguagePreference() {
+        return Prefs.get(PREF_LANG_KEY, "auto");
     }
 
     // Get list of ids (list of models available, tasks for a model...)
