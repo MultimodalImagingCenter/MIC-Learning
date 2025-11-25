@@ -1,3 +1,6 @@
+# Warning
+**This model can only be run with Java 11 (ImageJ default is Java 8)**
+
 # Model and data
 The model is a **U-Net** from the **BioImage Model Zoo**. This instance segmentation model was trained to segment ***B. subtilis*** cells in widefield microscopy images.
 

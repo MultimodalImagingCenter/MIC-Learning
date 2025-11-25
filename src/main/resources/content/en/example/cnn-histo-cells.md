@@ -14,35 +14,33 @@ Only 3 classes were kept : LYM, MUS and ADI.
 The data was split into 70% for training, 15% for validation, and 15% for testing. Subsampling was applied to the test set to balance the classes.
 
 ## Model
-This is a Multi-Layer Perceptron (MLP) composed of 3 fully connected layers with Batch Normalization and Dropout:
+This model follows the standard **ResNet-18** architecture, a Deep Convolutional Neural Network with 18 learnable layers, organized into 5 stages:
 
-1.  **Flatten:** Unrolls the 3D image tensor (`3 x 64 x 64`) into a 1D vector.
-    *   *Output Vector Size: `12,288`*
-
-2.  **Linear Block 1:**
-    *   **Linear:** Reduces dimension from 12,288 to **1024** neurons.
-    *   **BatchNorm1d:** Normalizes the layer inputs to stabilize training.
-    *   **ReLU:** Activation function.
-    *   **Dropout (0.5):** Randomly zeros 50% of neurons to prevent overfitting.
-
-3.  **Linear Block 2:**
-    *   **Linear:** Reduces dimension from 1024 to **512** neurons.
-    *   **BatchNorm1d:** Normalizes the layer inputs.
-    *   **ReLU:** Activation function.
-    *   **Dropout (0.5):** Randomly zeros 50% of neurons.
-
-4.  **Linear (Output Layer):** Maps the 512 features to the **3** target classes.
+1.  **Initial Block:** Applies 64 filters with a `7x7` kernel and stride 2, followed by **BatchNorm**, **ReLU** activation, and a **MaxPool2d** layer.
+    *   *Output Shape: `64 x 56 x 56`*
+2.  **Layer 1 (Residual Block):** Two sequences of convolutions (64 filters, `3x3`) with residual connections.
+    *   *Output Shape: `64 x 56 x 56`*
+3.  **Layer 2 (Residual Block):** Downsamples the image using stride 2 and increases filters to 128.
+    *   *Output Shape: `128 x 28 x 28`*
+4.  **Layer 3 (Residual Block):** Downsamples using stride 2 and increases filters to 256.
+    *   *Output Shape: `256 x 14 x 14`*
+5.  **Layer 4 (Residual Block):** Downsamples using stride 2 and increases filters to 512.
+    *   *Output Shape: `512 x 7 x 7`*
+6.  **AdaptiveAvgPool2d:** Averages each 7x7 feature map into a single value.
+    *   *Output Vector Size: `512`*
+7.  **Linear (Output Layer):** Modified from the original ImageNet layer. It maps the 512 features to the **3** target classes (ADI, LYM, MUS).
 
 ## Expected image
-An RGB image of a homogeneous tissue (HE staining), composed of a single cell type.
+An RGB image of a homogeneous tissue, composed of a single cell type.
 
 # Processing
 
 ## Pre-processing
 These pre-processing steps are applied to each image before prediction:
-1.  Resizing the image to **64x64** pixels (bilinear interpolation).
+1.  Resizing the image to **224x224** pixels (bilinear interpolation).
 2.  Converting to Tensor (scaling pixel values from 0-255 to 0.0-1.0).
-3.  Normalizing using ImageNet statistics (Mean: `[0.485, 0.456, 0.406]`, Std: `[0.229, 0.224, 0.225]`).
+3.  Normalizing using ImageNet statistics (Mean: `[0.485, 0.456, 0.406]`, Std: `[0.229, 0.224, 0.225]`)
+
 ## Post-processing
 These post-processing steps are applied to the raw prediction output:
 1.  Apply a Softmax function to the logits to obtain a probability distribution.
