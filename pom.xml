@@ -19,7 +19,7 @@
             <dependency>
                 <groupId>ai.djl</groupId>
                 <artifactId>bom</artifactId>
-                <version>0.32.0</version>
+                <version>0.34.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -50,6 +50,12 @@
         <dependency>
             <groupId>ai.djl.pytorch</groupId>
             <artifactId>pytorch-engine</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/ai.djl.pytorch/pytorch-model-zoo -->
+        <dependency>
+            <groupId>ai.djl.pytorch</groupId>
+            <artifactId>pytorch-model-zoo</artifactId>
         </dependency>
 
         <!-- Runtime TensorFlow -->

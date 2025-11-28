@@ -88,7 +88,7 @@ public abstract class BaseImagePlusTranslator<T> implements Translator<ImagePlus
         Shape shape = list.get(0).getShape();
 
 
-        // 4. Adjust dimensions if neede
+        // 4. Adjust dimensions if needed
         // if shape = HW, need to add a new dimension : CHW
         if(shape.dimension() == 2){
             NDArray originalArray = list.get(0);
