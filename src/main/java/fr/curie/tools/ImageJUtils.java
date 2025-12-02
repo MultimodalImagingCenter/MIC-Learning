@@ -1,6 +1,5 @@
 package fr.curie.tools;
 
-import ai.djl.engine.Engine;
 import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.ImageFactory;
 import ai.djl.modality.cv.output.BoundingBox;
@@ -24,10 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -260,6 +256,13 @@ public class ImageJUtils {
         return manager.create(buffer, shape, DataType.FLOAT32);
     }
 
+    public static Image imagePlusToDjlImage(ImagePlus imp, NDManager manager){
+        return imageProcessorToDjlImage(imp.getProcessor(), manager);
+    }
+
+    public static Image imagePlusToDjlImage(ImagePlus imp){
+        return imageProcessorToDjlImage(imp.getProcessor());
+    }
 
 
     public static Image imageProcessorToDjlImage(ImageProcessor ip, NDManager manager) {
@@ -280,6 +283,80 @@ public class ImageJUtils {
     public static Image imageProcessorToDjlImage(ImageProcessor ip) {
         NDManager manager = NDManager.newBaseManager();
         return imageProcessorToDjlImage(ip, manager);
+    }
+
+    public static ImagePlus NDArray2ImageStack(NDArray ndarray){
+        return NDArray2ImageStack(ndarray, "result stack");
+    }
+
+    public static ImagePlus NDArray2ImageStack(NDArray ndarray, String title) {
+        try (NDArray outputs = get3DTensor(ndarray)) {
+
+            Shape shape = outputs.getShape();
+            long[] dims = shape.getShape();
+
+            int channels;
+            int height;
+            int width;
+            boolean isCHW;
+
+            //  determine tensor format (CHW vs. HWC)
+            //  Assuming that the channel dimension is the smallest of the three.
+            if (dims[0] < dims[1] && dims[0] < dims[2]) {
+                isCHW = true;
+                channels = (int) dims[0];
+                height = (int) dims[1];
+                width = (int) dims[2];
+            } else {
+                isCHW = false;
+                height = (int) dims[0];
+                width = (int) dims[1];
+                channels = (int) dims[2];
+            }
+            IJ.log("Interpreted as " + (isCHW ? "CHW" : "HWC") + " with " + channels + " channels.");
+            ImageStack stack = new ImageStack(width, height);
+
+            // Iterate through each channel, create a processor, and add it to the stack.
+            for (int c = 0; c < channels; c++) {
+                try (
+                        // Step 1: Slice the tensor to get the channel view.
+                        NDArray channelData = isCHW ? outputs.get(c) : outputs.get("...," + c);
+                        NDArray contiguousChannelData = channelData.duplicate()
+                ) {
+
+                    // Convert the 2D channel data into a 1D float array for ImageJ.
+                    float[] pixels = contiguousChannelData.toFloatArray();
+
+                    FloatProcessor fp = new FloatProcessor(width, height);
+                    fp.setPixels(pixels);
+
+                    // Add the processor to the stack
+                    stack.addSlice("Channel " + (c + 1), fp);
+
+                }
+            }
+            return new ImagePlus(title, stack);
+        }
+    }
+
+    /**
+     * Helper function to handle 3D and 4D tensors, returning a 3D tensor view.
+     */
+    private static NDArray get3DTensor(NDArray rawOutputs) {
+        long[] dims = rawOutputs.getShape().getShape();
+        if (dims.length == 4) {
+            if (dims[0] != 1) {
+                throw new IllegalArgumentException("Unsupported batch size. Expected 1, got " + dims[0]);
+            }
+            // Squeeze out the batch dimension. This returns a view, not a copy
+            // The original rawOutputs still holds the memory.
+            return rawOutputs.squeeze(0);
+        } else if (dims.length == 3) {
+            // Return the original array itself.
+            return rawOutputs;
+        } else {
+            throw new IllegalArgumentException("Unsupported NDArray shape. Expected 3 or 4 dimensions, got " + dims.length);
+        }
     }
 
 
@@ -345,7 +422,7 @@ public class ImageJUtils {
      * @param imp       The original ImagePlus the detection was run on.
      * @param detection The DetectedObjects result from the YOLO model.
      */
-    public static List<Roi> roiFromDetection2(ImagePlus imp, DetectedObjects detection) {
+    public static List<Roi> roiFromDetection(ImagePlus imp, DetectedObjects detection) {
         if (imp == null || detection == null) {
             IJ.log("Error: Input ImagePlus or DetectedObjects is null.");
             return null;
@@ -470,7 +547,7 @@ public class ImageJUtils {
     }
 
     public static ImagePlus stackMaskFromDetection2(ImagePlus imp, DetectedObjects detection){
-        List<Roi> shapeRois = roiFromDetection2(imp, detection);
+        List<Roi> shapeRois = roiFromDetection(imp, detection);
         return (shapeRois != null)? stackMaskFromRoi(imp, shapeRois) : null;
     }
 
@@ -498,7 +575,7 @@ public class ImageJUtils {
     }
 
     public static ImagePlus instanceMaskFromDetection2(ImagePlus imp, DetectedObjects detection){
-        List<Roi> shapeRois = roiFromDetection2(imp, detection);
+        List<Roi> shapeRois = roiFromDetection(imp, detection);
         return (shapeRois != null)? instanceMaskFromRoi(imp, shapeRois) : null;
     }
 
@@ -524,7 +601,7 @@ public class ImageJUtils {
     }
 
     public static ImagePlus semanticMaskFromDetection(ImagePlus imp, DetectedObjects detection){
-        List<Roi> shapeRois = roiFromDetection2(imp, detection);
+        List<Roi> shapeRois = roiFromDetection(imp, detection);
         return (shapeRois != null)? semanticMaskFromRoi(imp, shapeRois) : null;
     }
 
@@ -570,7 +647,7 @@ public class ImageJUtils {
     }
 
     public static ImagePlus instanceMaskPerClassesFromDetection(ImagePlus imp, DetectedObjects detection){
-        List<Roi> shapeRois = roiFromDetection2(imp, detection);
+        List<Roi> shapeRois = roiFromDetection(imp, detection);
         return (shapeRois != null)? instanceMaskPerClassesFromRoi(imp, shapeRois) : null;
     }
 }

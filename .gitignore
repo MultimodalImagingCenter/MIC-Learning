@@ -67,6 +67,9 @@ src/main/resources/models/
 #test images
 src/main/resources/images/
 
+#log#
+src/main/resources/log4j2.xml
+
 # virtual machine crash logs
 hs_err_pid*
 replay_pid*

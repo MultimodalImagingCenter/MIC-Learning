@@ -58,6 +58,7 @@
             <artifactId>pytorch-model-zoo</artifactId>
         </dependency>
 
+
         <!-- Runtime TensorFlow -->
         <dependency>
             <groupId>ai.djl.tensorflow</groupId>
@@ -82,6 +83,13 @@
             <artifactId>mxnet-engine</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/ai.djl.mxnet/mxnet-model-zoo -->
+        <dependency>
+            <groupId>ai.djl.mxnet</groupId>
+            <artifactId>mxnet-model-zoo</artifactId>
+        </dependency>
+
 
         <!-- Runtime ONNX -->
         <dependency>
@@ -118,6 +126,18 @@
             <version>2.10.1</version> <!-- Or the latest version -->
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.23.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.23.1</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -133,6 +153,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <!-- standard service loader files -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

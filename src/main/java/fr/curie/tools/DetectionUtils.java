@@ -87,13 +87,33 @@ public class DetectionUtils {
         if (detection instanceof TiledDetectedObjects){
             return processFromTiledDetection(imp, detection, externalClassIdMap);
         } else {
-            return processFromNonTiledDetection(imp, detection, externalClassIdMap);
+            return processFromNonTiledDetection(imp, detection.items(), externalClassIdMap);
         }
+    }
+
+    public static List<ProcessedDetection> processDetections(
+            ImagePlus imp,
+            List<DetectedObjects.DetectedObject> detections,
+            Map<String, Integer> externalClassIdMap) {
+
+        if (imp == null || detections == null) {
+            IJ.log("Error: Input ImagePlus or DetectedObjects is null.");
+            return Collections.emptyList();
+        }
+        if (detections.isEmpty()) {
+            IJ.log("No objects were detected.");
+            return Collections.emptyList();
+        }
+
+        IJ.log("Processing detections...");
+
+        return processFromNonTiledDetection(imp, detections, externalClassIdMap);
+
     }
 
     private static List<ProcessedDetection> processFromNonTiledDetection(
             ImagePlus imp,
-            DetectedObjects detection,
+            List<DetectedObjects.DetectedObject> detections,
             Map<String, Integer> externalClassIdMap){
         int imageWidth = imp.getWidth();
         int imageHeight = imp.getHeight();
@@ -119,15 +139,19 @@ public class DetectionUtils {
         }
 
 
-        List<DetectedObjects.DetectedObject> items = detection.items();
-        for (DetectedObjects.DetectedObject item : items) {
+        for (DetectedObjects.DetectedObject item : detections) {
             // --- Get metadata ---
             String className = item.getClassName();
             BoundingBox box = item.getBoundingBox();
             double probability = item.getProbability();
 
-            if (className == null || className.trim().isEmpty() || box == null) {
-                IJ.log("Warning: Detection ignored: empty class name or missing BoundingBox.");
+            if (className == null || className.trim().isEmpty()) {
+                IJ.log("Warning: Detection ignored: empty class name.");
+                continue;
+            }
+
+            if (box == null) {
+                IJ.log("Warning: Detection ignored: missing BoundingBox.");
                 continue;
             }
 
@@ -158,15 +182,16 @@ public class DetectionUtils {
             Roi boundingBoxRoi = createRoiFromBB(box, imageWidth, imageHeight);
             if (boundingBoxRoi == null) {
                 IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
-                continue;
+                //continue;
             }
-            boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);
-            boundingBoxRoi.setGroup(groupId);
+            //boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);
+            //boundingBoxRoi.setGroup(groupId);
             //imp.setRoi(boundingBoxRoi); // Optional: for visual feedback during processing (+ fun to watch)
 
             // --- Create Shape ROI (if mask available) ---
             Roi shapeRoi = null;
             if (box instanceof Mask) {
+                System.out.println("bounding box is instance of mask, creating mask ROI");
                 Mask mask = (Mask) box;
                 shapeRoi = createRoiFromBBMask(mask, imageWidth, imageHeight);
                 if (shapeRoi != null) {
@@ -362,12 +387,21 @@ public class DetectionUtils {
             }
         }
 
+        System.out.println("img width = " + imageWidth);
+        System.out.println("img height = " + imageHeight);
+        System.out.println("mask width = " + maskWidth);
+        System.out.println("mask height = " + maskHeight);
+
         // Calculate pixel coordinates within the tile for the bounding box
         int boxX = (int) (rect.getX() * tile_width);
         int boxY = (int) (rect.getY() * tile_height);
         int boxWidth = (int) (rect.getWidth() * tile_width);
         int boxHeight = (int) (rect.getHeight() * tile_height);
 
+        System.out.println("boxX = " + boxX);
+        System.out.println("boxY = " + boxY);
+        System.out.println("box width = " + boxWidth);
+        System.out.println("box height = " + boxHeight);
 
         // Create a temporary mask processor covering the entire image
         ByteProcessor processor = new ByteProcessor(imageWidth, imageHeight); // Initialized to 0
@@ -408,6 +442,7 @@ public class DetectionUtils {
         // Create ROI from the thresholded mask
         processor.setThreshold(128, 255, ImageProcessor.BLACK_AND_WHITE_LUT);
         ThresholdToSelection t2s = new ThresholdToSelection();
+        System.out.println("creating ROI from threshold mask");
         Roi roi = t2s.convert(processor);
 
         return roi;

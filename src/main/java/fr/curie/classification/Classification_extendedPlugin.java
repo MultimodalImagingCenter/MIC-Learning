@@ -87,6 +87,7 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
         IJ.log("\n --- Starting prediction");
 
         // --- 2. Try to Load Model ---
+        IJ.log("loading model from path " + modelPath);
         DjlModelLoader<Image, Classifications> modelLoader =
                 new DjlModelLoader<>(Image.class, Classifications.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<Image, Classifications> loadedResult = modelLoader.loadModel(modelPath, initialChoice);

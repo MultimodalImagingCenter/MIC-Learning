@@ -64,11 +64,11 @@ public class DjlModelLoader<I, O> {
         }
 
         // 2. If user did not request manual configuration, attempt to load the model directly.
-        if (!initialChoice.forceManualConfiguration) {
-            IJ.log("Attempting to load model directly...");
+        if (!initialChoice.forceManualConfiguration && baseConfig != null) {
+            IJ.log("Attempting to load model directly....");
             try {
                 ZooModel<I, O> model = tryLoadWithConfig(modelPath, baseConfig);
-                IJ.log(" --- Model loaded successfully: " + (baseConfig != null ? baseConfig.getModelName() : "Unknown Model") + " ---");
+                IJ.log(" --- Model loaded successfully: " + baseConfig.getModelName() + " ---");
                 return new LoadedModel<>(model, baseConfig, false); // Success, no rewrite needed
             } catch (Exception e) {
                 IJ.log("Could not load model: " + e.getMessage());
@@ -112,11 +112,22 @@ public class DjlModelLoader<I, O> {
      * @throws IOException for other loading errors.
      */
     private ZooModel<I, O> tryLoadWithConfig(Path modelPath, ModelConfig config) throws Exception {
-        if (Objects.equals(config.engine, "TensorFlow")){
-            System.out.println("You are trying to load a Tensorflow model. Please sure that you are using a Java version >=11.");
-        }
-        Criteria<I, O> criteria = buildCriteriaFromConfig(modelPath, config);
-        return criteria.loadModel();
+
+            if (Objects.equals(config.engine, "TensorFlow")){
+                IJ.log("Warning: TensorFlow requires Java 11+.");
+            }
+            // This method might trigger internal DJL initialization, so we wrap it too
+            Criteria<I, O> criteria = buildCriteriaFromConfig(modelPath, config);
+
+            if (criteria == null){
+                IJ.error("criteria could not be built");
+                return null;
+            }
+
+            // 3. Load the model.
+            return criteria.loadModel();
+
+
     }
 
     /**
@@ -138,9 +149,9 @@ public class DjlModelLoader<I, O> {
 
         Criteria.Builder<I, O> builder = Criteria.builder()
                 .setTypes(inputClass, outputClass)
+                .optEngine(config.engine)
                 .optModelPath(modelPath)
-                .optModelName(config.modelName)
-                .optEngine(config.engine);
+                .optModelName(config.modelName);
 
         // Add Translator Factory if specified
         if (!config.autoDetectTranslator) {
