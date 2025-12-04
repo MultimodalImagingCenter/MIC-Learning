@@ -43,7 +43,7 @@ public class BioImage_Plugin implements PlugInFilter {
     }
     // List of engine available
     private static final String[] ENGINE_CHOICES = {"", "TensorFlow",  "PyTorch", "OnnxRuntime"};
-
+    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.bioimage";
 
     @Override
     public int setup(String s, ImagePlus imagePlus) {
@@ -56,7 +56,7 @@ public class BioImage_Plugin implements PlugInFilter {
         // --- 1. Initial dialog box ---
         // ask for model repository + config info
         GenericDialog gd = new GenericDialog("Model Directory");
-        addInitialDialogFields(gd);
+        addInitialDialogFields(gd,PREF_LAST_MODEL_DIR);
         gd.showDialog();
         if (gd.wasCanceled()) return; // User canceled
 

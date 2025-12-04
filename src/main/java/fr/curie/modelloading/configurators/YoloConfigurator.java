@@ -9,8 +9,7 @@ import static fr.curie.modelloading.DjlModelLoader.checkSynsetFile;
 
 public class YoloConfigurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "fr.curie.yolo.translators.ImpYoloV8TranslatorFactory"; // Replace with your actual package
-
+    public static final String FACTORY_CLASS_NAME = "fr.curie.yolo.translators.ImpYoloV8TranslatorFactory";
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {
         // Return the actual factory class

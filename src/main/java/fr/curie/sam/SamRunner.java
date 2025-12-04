@@ -5,7 +5,6 @@ import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.modality.cv.output.Rectangle;
-import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.repository.zoo.Criteria;
@@ -24,18 +23,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static fr.curie.tools.ImageJUtils.*;
 
-public final class Sam2Test6 {
+public final class SamRunner {
 
-    private static final Logger logger = LoggerFactory.getLogger(Sam2Test6.class);
+    private static final Logger logger = LoggerFactory.getLogger(SamRunner.class);
     private static final Path MODELS_BASE_DIR = Paths.get("src", "main", "resources", "models");
     private static final Path IMAGES_BASE_DIR = Paths.get("src", "main", "resources", "images");
 
-    private Sam2Test6() {}
+    private SamRunner() {}
 
     public static void main(String[] args) throws Exception {
         predict();
@@ -43,9 +41,6 @@ public final class Sam2Test6 {
     }
 
     public static void predict() throws Exception {
-        // String url = "https://raw.githubusercontent.com/facebookresearch/segment-anything-2/main/notebooks/images/truck.jpg";
-        //Image image = ImageFactory.getInstance().fromUrl(url);
-
 
         Path imagePath = IMAGES_BASE_DIR.resolve("cell_input3.png");
         ImagePlus image = loadImageJImage(imagePath, "input");
@@ -60,7 +55,6 @@ public final class Sam2Test6 {
         Criteria<ImpSam2Input, DetectedObjects> criteria =
                 Criteria.builder()
                         .setTypes(ImpSam2Input.class, DetectedObjects.class)
-                        //.optModelUrls("djl://ai.djl.pytorch/sam2-hiera-tiny") // for PyTorch
                         .optModelPath(modelPath)
                         .optTranslator(translator)
                         .optProgress(new ProgressBar())
@@ -68,7 +62,7 @@ public final class Sam2Test6 {
                         .build();
         System.out.println("criteria created");
 
-        System.out.println("loading model");
+        System.out.println("loading model with path " + modelPath);
         try (ZooModel<ImpSam2Input, DetectedObjects> model = criteria.loadModel();
              Predictor<ImpSam2Input, DetectedObjects> predictor = model.newPredictor()) {
             System.out.println("model loaded + predictor created");
@@ -77,50 +71,32 @@ public final class Sam2Test6 {
             List<Double> probabilities = new ArrayList<>();
             List<BoundingBox > boundingBoxes = new ArrayList<>();
 
-            // 1. Create a Session Manager for the features
+            //  Create a Session Manager for the features
             try (NDManager sessionManager = model.getNDManager().newSubManager()) {
 
+                // encode image
                 System.out.println("Encoding image...");
                 NDList encodedImage = translator.encode(model, image, sessionManager);
-
-
-                // visualize encoded image
-                System.out.println("embeddings size : " + encodedImage.size());
-                System.out.println("embeddings dimensions : " + Arrays.toString(encodedImage.getShapes()));
-                try (NDArray features = encodedImage.get(0).duplicate()){
-                    ImagePlus imp = NDArray2ImageStack(features, "features 0");
-                    imp.show();
-                }
-                try (NDArray features = encodedImage.get(1).duplicate()){
-                    ImagePlus imp = NDArray2ImageStack(features, "features 1");
-                    imp.show();
-                }
-                try (NDArray features = encodedImage.get(2).duplicate()){
-                    ImagePlus imp = NDArray2ImageStack(features, "features 2");
-                    imp.show();
-                }
-
-
                 System.out.println("image encoded");
 
+                // first detection
                 ImpSam2Input input =
                         ImpSam2Input.builder(image).addPoint(315, 131).build();
                 input.setFeatures(encodedImage);
                 DetectedObjects detection1 = predictor.predict(input);
                 System.out.println("prediction 1 done");
-                //showMask(input, detection1, "1");
                 DetectedObjects.DetectedObject item1 = detection1.item(0);
                 boundingBoxes.add(item1.getBoundingBox());
                 probabilities.add(item1.getProbability());
                 classNames.add("1");
 
-
+                // second detection
                 ImpSam2Input input2 =
                         ImpSam2Input.builder(image).addPoint(416, 122).build();
                 input2.setFeatures(encodedImage);
                 DetectedObjects detection2 = predictor.predict(input2);
                 System.out.println("prediction 2 done");
-                //showMask(input2, detection2, "2");
+
                 DetectedObjects.DetectedObject item2 = detection2.item(0);
                 boundingBoxes.add(item2.getBoundingBox());
                 probabilities.add(item2.getProbability());

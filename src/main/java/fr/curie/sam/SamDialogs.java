@@ -1,13 +1,13 @@
-package fr.curie.yolo;
+package fr.curie.sam;
 
 import fr.curie.tools.DetectionUtils;
 import ij.gui.GenericDialog;
 
-public class YoloDialogs {
+public class SamDialogs {
 
-    // --- YOLO Dialog methods ---
+    // --- SAM Dialog methods ---
     public static DetectionUtils.OutputOptions askUserForOutputs() {
-        GenericDialog gd = new GenericDialog("YOLO Segmentation Outputs");
+        GenericDialog gd = new GenericDialog("SAM Segmentation Outputs");
         addOutputDialog(gd);
         gd.showDialog();
         if (gd.wasCanceled()) {
@@ -19,9 +19,7 @@ public class YoloDialogs {
 
     public static void addOutputDialog(GenericDialog gd) {
         gd.addMessage("Select the outputs to generate:");
-        gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", true);
 
-        gd.addMessage(" --- If the model is a segmentation model --");
         gd.addCheckbox("Add_Shape_ROIs to ROI Manager", false);
         gd.addCheckbox("Create_Stack_Mask (one slice per instance, unique value per class)", false);
         gd.addCheckbox("Create_Instance_Mask (unique value per instance)", false);
@@ -31,7 +29,7 @@ public class YoloDialogs {
 
     public static DetectionUtils.OutputOptions getOutputAnswer(GenericDialog gd) {
         DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
-        options.addToRoiManagerBB = gd.getNextBoolean();
+        options.addToRoiManagerBB = false; // bouding boxes are not an output of SAM
         options.addToRoiManagerShapes = gd.getNextBoolean();
         options.createStackMask = gd.getNextBoolean();
         options.createInstanceMask = gd.getNextBoolean();

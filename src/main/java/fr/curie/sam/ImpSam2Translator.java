@@ -36,7 +36,9 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
     private Predictor<NDList, NDList> predictor;
     private String encoderPath;
     private String encodeMethod;
-    protected String preProcessmacroName;
+    protected String preProcessmacroName; // TODO ajouter macro preprocessing
+
+
 
     public ImpSam2Translator(Builder builder) {
         this.pipeline.add(new Resize(1024, 1024));
@@ -182,7 +184,8 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
         NDArray masks = logits.gt(0.0F).squeeze(0);
 
         float[][] dist = Mask.toMask(masks.get(new long[]{best}).toType(DataType.FLOAT32, true));
-        Mask mask = new Mask((double)0.0F, (double)0.0F, (double)width, (double)height, dist, true);
+        //Mask mask = new Mask((double)0.0F, (double)0.0F, (double)width, (double)height, dist, true);
+        Mask mask = new Mask((double)0.0F, (double)0.0F, (double)1.0, (double)1.0, dist, true);
         double probability = (double)scores.getFloat(new long[]{best});
         List<String> classes = Collections.singletonList("");
         List<Double> probabilities = Collections.singletonList(probability);

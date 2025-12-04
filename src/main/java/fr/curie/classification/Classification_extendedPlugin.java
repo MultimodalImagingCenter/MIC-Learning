@@ -42,6 +42,7 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
     }
 
     private final String[] ENGINE_CHOICES = {"", "PyTorch", "TorchScript"};
+    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.classif";
 
     private static ImagePlus currentImp;
     private static ZooModel<Image, Classifications> loadedModel;
@@ -72,7 +73,7 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
 
         // --- 1. Prompt user for model repository ---
         GenericDialog gd = new GenericDialog("Model Directory");
-        addInitialDialogFields(gd);
+        addInitialDialogFields(gd,PREF_LAST_MODEL_DIR );
         gd.showDialog();
         if (gd.wasCanceled()) {
             return DONE; // User canceled

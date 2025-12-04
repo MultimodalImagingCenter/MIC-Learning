@@ -2,6 +2,7 @@ package fr.curie.sam;
 
 import ai.djl.MalformedModelException;
 import ai.djl.ModelException;
+import ai.djl.engine.Engine;
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.DetectedObjects;
@@ -71,7 +72,6 @@ public class DisplayEncoded_Plugin implements PlugInFilter {
                 Criteria.builder()
                         .setTypes(ImpSam2Translator.ImpSam2Input.class, DetectedObjects.class)
                         .optModelPath(modelPath)
-                        //.optModelUrls("djl://ai.djl.pytorch/sam2-hiera-tiny")
                         .optTranslator(translator)
                         .optProgress(new ProgressBar())
                         .optEngine("PyTorch")

@@ -168,7 +168,7 @@ public class YoloSegmentationTranslator extends YoloV5Translator {
              */
 
             // Create Mask object
-            Mask bb = new Mask(x, y, w, h, maskFloat, true);
+            Mask bb = new Mask(x, y, w, h, maskFloat, false); //not fullImageMask : mask only cover a portion of the image
             retBB.add(bb);
         }
 

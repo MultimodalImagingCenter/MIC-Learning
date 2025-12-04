@@ -66,7 +66,7 @@ public class Yolo_Plugin implements PlugInFilter {
         addInitialDialogFields(gd);
         gd.addMessage("__________");
         // ask for yolo outputs
-        YoloDialogs.addYoloOutputDialog(gd);
+        YoloDialogs.addOutputDialog(gd);
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
@@ -74,7 +74,7 @@ public class Yolo_Plugin implements PlugInFilter {
 
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
-        OutputOptions segmentOptions = YoloDialogs.getYoloOutputAnswer(gd);
+        OutputOptions segmentOptions = YoloDialogs.getOutputAnswer(gd);
 
         // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {

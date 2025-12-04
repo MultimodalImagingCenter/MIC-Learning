@@ -54,9 +54,9 @@ public class ModelDialogs {
      *
      * @param gd The GenericDialog to add fields to.
      */
-    public static void addInitialDialogFields(GenericDialog gd) {
+    public static void addInitialDialogFields(GenericDialog gd, String lastModelPrefKey) {
         String defaultDir = null;
-        String lastDir = Prefs.get(PREF_LAST_MODEL_DIR, defaultDir);
+        String lastDir = Prefs.get(lastModelPrefKey, defaultDir);
         if (lastDir != null && Files.isDirectory(Paths.get(lastDir))) {
             defaultDir = lastDir;
         } else {
@@ -66,6 +66,9 @@ public class ModelDialogs {
         gd.addDirectoryField("Model_Directory:", defaultDir, 60);
         gd.addStringField("Properties_File_Name:", DEFAULT_PROPERTIES_FILENAME, 30);
         gd.addCheckbox("Show_manual_configuration_dialog", false);
+    }
+    public static void addInitialDialogFields(GenericDialog gd){
+        addInitialDialogFields(gd, PREF_LAST_MODEL_DIR);
     }
 
     /**

@@ -53,6 +53,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         KNOWN_CONFIGURATORS = Collections.unmodifiableMap(tempMap);
     }
     private final String[] ENGINE_CHOICES = {"", "PyTorch"};
+    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.yolo";
 
     @Override
     public int setup(String s, ImagePlus imagePlus) {
@@ -66,10 +67,10 @@ public class Yolo_TilePlugin implements PlugInFilter {
         // --- 1. initial dialog box ---
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
-        addInitialDialogFields(gd);
+        addInitialDialogFields(gd,PREF_LAST_MODEL_DIR);
         gd.addMessage("__________");
         // ask for yolo outputs
-        YoloDialogs.addYoloOutputDialog(gd);
+        YoloDialogs.addOutputDialog(gd);
         gd.addMessage("__________");
         // ask for Tiling preferences
         TilingDialogs.addTilingDialog(gd);
@@ -80,7 +81,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
-        DetectionUtils.OutputOptions segmentOptions = YoloDialogs.getYoloOutputAnswer(gd);
+        DetectionUtils.OutputOptions segmentOptions = YoloDialogs.getOutputAnswer(gd);
         TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
 
         // check that model path is valid
