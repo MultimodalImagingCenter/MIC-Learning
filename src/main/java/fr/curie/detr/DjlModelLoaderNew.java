@@ -1,12 +1,14 @@
-package fr.curie.modelloading;
+package fr.curie.detr;
 
 
 import ai.djl.Device;
+import ai.djl.MalformedModelException;
 import ai.djl.nn.BlockFactory;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ZooModel;
-import fr.curie.modelloading.configurators.TranslatorConfigurator;
-import fr.curie.modelloading.dialogs.ModelDialogs;
+import ai.djl.translate.TranslatorFactory;
+import fr.curie.detr.configurators.TranslatorConfigurator;
+import fr.curie.detr.dialogs.ModelDialogs;
 import ij.IJ;
 
 import java.io.IOException;
@@ -14,28 +16,29 @@ import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
-public class DjlModelLoader<I, O> {
+public class DjlModelLoaderNew<I, O> {
 
     private final Class<I> inputClass;
     private final Class<O> outputClass;
     private final Map<String, TranslatorConfigurator> knownConfigurators;
     private final String[] engineChoices;
+    private final String[] deviceChoices;
     private final ModelDialogs modelDialogs;
 
     private static final String DEFAULT_PROPERTIES_FILENAME = "serving.properties";
 
-    public DjlModelLoader(
+    public DjlModelLoaderNew(
             Class<I> inputClass,
             Class<O> outputClass,
             Map<String, TranslatorConfigurator> knownConfigurators,
-            String[] engineChoices) {
+            String[] engineChoices, String[] deviceChoices) {
         this.inputClass = inputClass;
         this.outputClass = outputClass;
         this.knownConfigurators = knownConfigurators;
         this.engineChoices = engineChoices;
+        this.deviceChoices = deviceChoices;
         this.modelDialogs = new ModelDialogs();
     }
 
@@ -54,26 +57,27 @@ public class DjlModelLoader<I, O> {
         if (Files.isRegularFile(propertiesPath)) {
             baseConfig.setModelPath(modelPath);
             try {
-                IJ.log("Found configuration file: " + propertiesPath.getFileName());
+                IJ.log("Found properties file: " + propertiesPath.getFileName() + ". Loading for configuration.");
                 baseConfig = ModelConfigManager.loadConfigFromFile(propertiesPath);
             } catch (IOException e) {
                 IJ.log("Warning: Could not read properties file: " + e.getMessage());
                 // Proceed with an empty config
             }
         } else {
-            IJ.log("Properties file named " + propertiesPath.getFileName() + " not found. Trying with default configuration.");
+            IJ.log("Properties" + propertiesPath.getFileName() + "file not found. Trying with default configuration.");
         }
 
         // 2. If user did not request manual configuration, attempt to load the model directly.
-        if (!initialChoice.forceManualConfiguration && baseConfig != null) {
-            IJ.log("Attempting to load model directly....");
+        if (!initialChoice.forceManualConfiguration) {
+            IJ.log("Attempting to load model directly...");
             try {
                 ZooModel<I, O> model = tryLoadWithConfig(modelPath, baseConfig);
-                IJ.log(" --- Model loaded successfully: " + baseConfig.getModelName() + " ---");
+                IJ.log(" --- Model loaded successfully: " + (baseConfig != null ? baseConfig.getModelName() : "Unknown Model") + " ---");
                 return new LoadedModel<>(model, baseConfig, false); // Success, no rewrite needed
             } catch (Exception e) {
                 IJ.log("Could not load model: " + e.getMessage());
                 IJ.log("Falling back to manual configuration dialog...");
+                IJ.handleException(e);
             }
         } else {
             IJ.log("User requested manual configuration.");
@@ -81,9 +85,9 @@ public class DjlModelLoader<I, O> {
 
         // 3. Fallback or Forced Manual: Prompt user for full configuration, using baseConfig for defaults.
         try {
-            if (baseConfig == null) baseConfig = new ModelConfig();
+            if (baseConfig == null) {baseConfig = new ModelConfig();}
             Optional<ModelDialogs.UserConfigurationResult> userConfigResultOpt =
-                    modelDialogs.promptForFullConfiguration(baseConfig, modelPath, engineChoices, knownConfigurators);
+                    modelDialogs.promptForFullConfiguration(baseConfig, modelPath, engineChoices, deviceChoices, knownConfigurators);
 
             if (!userConfigResultOpt.isPresent()) {
                 return new LoadedModel<>(false, true); // User cancelled the detailed dialog
@@ -94,6 +98,8 @@ public class DjlModelLoader<I, O> {
 
             IJ.log("Attempting to load model with new user-provided configuration...");
             ZooModel<I, O> model = tryLoadWithConfig(modelPath, userConfig);
+            IJ.log(" --- Model loaded successfully: " + (userConfig != null ? userConfig.getModelName() : "Unknown Model") + " ---");
+
 
             return new LoadedModel<>(model, userConfig, true, userResult.newPropertiesFileName); // Success, config was rewritten
 
@@ -110,23 +116,12 @@ public class DjlModelLoader<I, O> {
      * @param modelPath The path to the model directory.
      * @param config The configuration to use.
      * @return The loaded ZooModel.
-     * @throws ai.djl.MalformedModelException if the model cannot be loaded.
+     * @throws MalformedModelException if the model cannot be loaded.
      * @throws IOException for other loading errors.
      */
     private ZooModel<I, O> tryLoadWithConfig(Path modelPath, ModelConfig config) throws Exception {
-            if (Objects.equals(config.engine, "TensorFlow")){
-                IJ.log("Warning: TensorFlow requires Java 11+.");
-            }
-            Criteria<I, O> criteria = buildCriteriaFromConfig(modelPath, config);
-
-            if (criteria == null){
-                IJ.error("criteria could not be built");
-                return null;
-            }
-
-            // Load the model.
-            return criteria.loadModel();
-
+        Criteria<I, O> criteria = buildCriteriaFromConfig(modelPath, config);
+        return criteria.loadModel();
     }
 
     /**
@@ -148,11 +143,11 @@ public class DjlModelLoader<I, O> {
 
         Criteria.Builder<I, O> builder = Criteria.builder()
                 .setTypes(inputClass, outputClass)
-                .optEngine(config.engine)
                 .optModelPath(modelPath)
-                .optModelName(config.modelName);
+                .optModelName(config.modelName)
+                .optEngine(config.engine);
 
-        // Add Translator Factory if specified
+        // Add Factory if specified
         if (!config.autoDetectTranslator) {
             if (config.translatorFactory != null) {
                 IJ.log("Building criteria with TranslatorFactory: " + config.translatorFactory.getClass().getName());
@@ -182,7 +177,7 @@ public class DjlModelLoader<I, O> {
             }
         }
 
-        // add device
+        // Determine device from options if specified
         Device device = Device.cpu(); // Default
         if (config.options != null) {
             String deviceOption = config.options.get("device");
@@ -201,7 +196,9 @@ public class DjlModelLoader<I, O> {
         }
         builder.optDevice(device);
 
+
         try {
+            System.out.println();
             return builder.build();
         } catch (Exception e) {
             IJ.log(" --- Error building DJL Criteria: " + e.getMessage());
@@ -223,7 +220,8 @@ public class DjlModelLoader<I, O> {
             // check if file exists
             if (Files.exists(potentialSynsetPath) && Files.isRegularFile(potentialSynsetPath)) {
                 config.arguments.put("synsetFileName", synsetName);
-                config.arguments.put("synsetFilePath", String.valueOf(potentialSynsetPath));
+                config.setSynsetFileName(synsetName);
+                config.setSynsetFilePath(potentialSynsetPath);
                 //IJ.log("Found synset file specified in properties: " + potentialSynsetPath);
             }
         }
@@ -232,7 +230,8 @@ public class DjlModelLoader<I, O> {
             Path potentialDefaultSynset = modelPath.resolve("synset.txt");
             if (Files.isRegularFile(potentialDefaultSynset)) {
                 config.arguments.put("synsetFileName", "synset.txt");
-                config.arguments.put("synsetFilePath", String.valueOf(potentialDefaultSynset));
+                config.setSynsetFileName("synset.txt");
+                config.setSynsetFilePath(potentialDefaultSynset);
                 IJ.log("Found default synset file 'synset.txt' in model directory.");
             }
         }
@@ -308,7 +307,7 @@ public class DjlModelLoader<I, O> {
             return cancelled;
         }
 
-        public boolean needToRewriteServing() {
+        public boolean needToRewriteSynset() {
             return rewritePropertiesFile;
         }
 

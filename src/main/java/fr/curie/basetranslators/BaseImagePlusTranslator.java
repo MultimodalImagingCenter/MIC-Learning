@@ -72,7 +72,7 @@ public abstract class BaseImagePlusTranslator<T> implements Translator<ImagePlus
     public NDList processInput(TranslatorContext ctx, ImagePlus input) throws IOException {
         this.engineName = ctx.getNDManager().getEngine().getEngineName();
         log.debug("Translator : input dimensions = {}", Arrays.toString(input.getDimensions()));
-        // 1. run pre-processing macro (for now, option only implemented in the BioImageTranslator)
+        // 1. run pre-processing macro
         if (preProcessmacroName != null && !preProcessmacroName.isEmpty()) {
             System.out.println("Running macro '" + preProcessmacroName + "' on image: " + input.getTitle());
             applyMacro(ctx, input, preProcessmacroName);

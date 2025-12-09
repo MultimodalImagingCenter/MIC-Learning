@@ -35,7 +35,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Sam_Plugin implements PlugInFilter {
     protected static ImagePlus imp;
-    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.sam";
+    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam";
 
     // List of configurators available
     private static final Map<String, TranslatorConfigurator> KNOWN_CONFIGURATORS;
@@ -65,7 +65,7 @@ public class Sam_Plugin implements PlugInFilter {
         // --- 1. initial dialog box ---
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
-        addInitialDialogFields(gd, PREF_LAST_MODEL_DIR);
+        addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
         gd.addMessage("__________");
         // ask for SAM outputs
         SamDialogs.addOutputDialog(gd);
@@ -75,7 +75,7 @@ public class Sam_Plugin implements PlugInFilter {
         }
 
         // retrieve choices
-        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY );
         DetectionUtils.OutputOptions segmentOptions = SamDialogs.getOutputAnswer(gd);
         if (initialChoice == null){
             IJ.error("initial choice error", "initial choice is null");

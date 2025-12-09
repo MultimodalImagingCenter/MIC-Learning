@@ -1,7 +1,8 @@
-package fr.curie.modelloading;
+package fr.curie.detr;
 
+import ai.djl.nn.BlockFactory;
 import ai.djl.translate.TranslatorFactory;
-import fr.curie.tools.tiling.TilingOptions;
+import fr.curie.detr.TilingOptions;
 import ij.IJ;
 
 import java.nio.file.Path;
@@ -9,7 +10,7 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
-
+// --- Inner Helper Class for Configuration ---
 public class ModelConfig {
 
     // universal fields
@@ -17,12 +18,16 @@ public class ModelConfig {
     String engine;
     String modelName;
     TranslatorFactory translatorFactory;
+    BlockFactory blockFactory;
     public boolean autoDetectTranslator = false;
 
     Map<String, String> arguments = new HashMap<>();
     Map<String, String> options = new HashMap<>();
 
-    // Tiling
+    // specific fields
+    String synsetFileName;
+    Path synsetFilePath;
+
     TilingOptions tilingOptions = new TilingOptions();
 
     float NMS_DEFAULT_VALUE = 0.4f;
@@ -32,8 +37,11 @@ public class ModelConfig {
         engine = null;
         modelName = null;
         translatorFactory = null;
+        blockFactory = null;
         options.clear();
         arguments.clear();
+        synsetFileName = null;
+        synsetFilePath = null;
         tilingOptions.reset();
     }
 
@@ -54,6 +62,10 @@ public class ModelConfig {
         return translatorFactory;
     }
 
+    public BlockFactory getBlockFactory() {
+        return blockFactory;
+    }
+
     public Map<String, String> getArguments() {
         return arguments;
     }
@@ -63,23 +75,21 @@ public class ModelConfig {
     }
 
     public Path getSynsetFilePath() {
-        if (arguments.get("synsetFilePath") != null){
-            return Paths.get(arguments.get("synsetFilePath"));
-        }
-        return arguments.get("synsetFileName") != null ? Paths.get(arguments.get("synsetFileName")) : null;
-    }
-
-    public String getSynsetFileName() {
-        return arguments.get("synsetFileName");
+        return Paths.get(arguments.get("synsetFileName"));
     }
 
     public String getDevice(){
         return options.get("device") != null ? options.get("device") : "cpu";
     }
 
+    public String getSynsetFileName() {
+        return arguments.get("synsetFileName");
+    }
+
     public int getDefaultWidth(){
         return arguments.get("width") != null ? Integer.parseInt(arguments.get("width")) : -1;
     }
+
     public int getDefaultHeight(){
         return arguments.get("height") != null ? Integer.parseInt(arguments.get("height")) : -1;
     }
@@ -104,6 +114,10 @@ public class ModelConfig {
         this.engine = engine;
     }
 
+    public void setDevice(String device){
+        options.put("device", device != null ? device : "cpu");
+    }
+
     public void setModelName(String modelName) {
         this.modelName = modelName;
     }
@@ -112,9 +126,7 @@ public class ModelConfig {
         this.translatorFactory = translatorFactory;
     }
 
-    public void setDevice(String device){
-        options.put("device", device != null ? device : "cpu");
-    }
+    public void setBlockFactory(BlockFactory blockFactory){this.blockFactory = blockFactory; }
 
     public void setAutoDetectTranslator(boolean autoDetectTranslator){this.autoDetectTranslator = autoDetectTranslator;}
 
@@ -122,6 +134,13 @@ public class ModelConfig {
         this.arguments.put(key, value);
     }
 
+    public void setSynsetFileName(String synsetFileName) {
+        this.synsetFileName = synsetFileName;
+    }
+
+    public void setSynsetFilePath(Path synsetFilePath) {
+        this.synsetFilePath = synsetFilePath;
+    }
 
     public void setTilingOptions(boolean useTiling, int tileWidth, int tileHeight, double overlap){
         this.tilingOptions.useTiling = useTiling;
@@ -137,14 +156,15 @@ public class ModelConfig {
 
     public void printConfig() {
         IJ.log("\n===========================================");
-        IJ.log(" --- Model Configurations ---");
+        IJ.log(" --- Print Model Configurations ---");
         IJ.log("------------------------------------------------------------------------------");
         IJ.log("Model Path: " + modelPath);
         IJ.log("Engine: " + engine);
         IJ.log("Model Name: " + modelName);
         IJ.log("Translator Factory: " + (translatorFactory!= null ? translatorFactory.getClass().getName() : "null"));
-        IJ.log("Synset File Name: " + getSynsetFileName());
-        IJ.log("Synset File Path: " + getSynsetFilePath());
+//          IJ.log("Block Factory: " + (blockFactory != null ? blockFactory.getClass().getName() : "null"));
+        IJ.log("Synset File Name: " + synsetFileName);
+        IJ.log("Synset File Path: " + synsetFilePath);
 
         IJ.log(" --- Arguments ---");
         for (Map.Entry<String, String> entry : arguments.entrySet()) {
@@ -168,4 +188,5 @@ public class ModelConfig {
 //        System.out.println("Device: " + getDevice());
         IJ.log("===========================================\n");
     }
+
 }

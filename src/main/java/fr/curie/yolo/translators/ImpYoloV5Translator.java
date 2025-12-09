@@ -23,7 +23,7 @@ import java.util.Map;
 public class ImpYoloV5Translator extends ImpObjectDetectionTranslator {
 
     private YoloOutputType yoloOutputLayerType;
-    private float nmsThreshold;
+    protected float nmsThreshold;
 
     /**
      * Creates the {@link ImpObjectDetectionTranslator} from the given builder.

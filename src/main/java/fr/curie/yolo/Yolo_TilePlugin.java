@@ -53,7 +53,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         KNOWN_CONFIGURATORS = Collections.unmodifiableMap(tempMap);
     }
     private final String[] ENGINE_CHOICES = {"", "PyTorch"};
-    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.yolo";
+    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.yolo";
 
     @Override
     public int setup(String s, ImagePlus imagePlus) {
@@ -67,7 +67,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         // --- 1. initial dialog box ---
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
-        addInitialDialogFields(gd,PREF_LAST_MODEL_DIR);
+        addInitialDialogFields(gd,PREF_LAST_MODEL_KEY);
         gd.addMessage("__________");
         // ask for yolo outputs
         YoloDialogs.addOutputDialog(gd);
@@ -80,7 +80,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         }
 
         // retrieve choices
-        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY);
         DetectionUtils.OutputOptions segmentOptions = YoloDialogs.getOutputAnswer(gd);
         TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
 
@@ -90,7 +90,6 @@ public class Yolo_TilePlugin implements PlugInFilter {
             return;
         }
         Path modelPath = initialChoice.modelPath;
-
 
         // --- 2. Try to Load Model ---
         IJ.log("\n --- Starting YOLO prediction");
@@ -159,36 +158,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
             // --- 5. Process Detections
             // Load ClassIdMap
-            Map<String, Integer> classIdMap = null;
-            // Try with provided info
-            if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
-                classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
-                if (classIdMap == null) {
-                    IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() );
-                } else {
-                    IJ.log("Successfully loaded class IDs from: "+ modelConfig.getSynsetFilePath().getFileName().toString());
-                }
-            } else if (modelConfig.getSynsetFileName() != null) {
-                classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFileName());
-                if (classIdMap == null) {
-                    IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName());
-                } else {
-                    IJ.log("Successfully loaded class IDs using name: " + modelConfig.getSynsetFileName());
-                }
-            } else {
-                IJ.log("No synset/labels file specified in serving.properties.");
-            }
-
-            // if no info or loading failed -> try with default name = synset.txt
-            if (classIdMap == null){
-                //try with default name = synset.txt
-                classIdMap = loadClassIDsFromModel(model, "synset.txt");
-                if (classIdMap == null) {
-                    IJ.log("Failed to load class IDs from : synset.txt. Using default numeration.");
-                } else {
-                    IJ.log("Successfully loaded class IDs using default file name : synset.txt");
-                }
-            }
+            Map<String, Integer> classIdMap = getClassIdMap(modelConfig, model);
 
             // Process Detections = create ROI from DetectedObject
             List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectionResult, classIdMap);
@@ -201,7 +171,6 @@ public class Yolo_TilePlugin implements PlugInFilter {
             IJ.log(" --- Generating output... ");
             generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
-
             IJ.log(" --- YOLO detection complete.");
 
         } catch (Exception e) { // Catch other unexpected errors during prediction/processing
@@ -210,6 +179,40 @@ public class Yolo_TilePlugin implements PlugInFilter {
             IJ.handleException(e);
         }
 
+    }
+
+    private static Map<String, Integer> getClassIdMap(ModelConfig modelConfig, ZooModel<ImagePlus, DetectedObjects> model) {
+        Map<String, Integer> classIdMap = null;
+        // Try with provided info
+        if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
+            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() );
+            } else {
+                IJ.log("Successfully loaded class IDs from: "+ modelConfig.getSynsetFilePath().getFileName().toString());
+            }
+        } else if (modelConfig.getSynsetFileName() != null) {
+            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFileName());
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName());
+            } else {
+                IJ.log("Successfully loaded class IDs using name: " + modelConfig.getSynsetFileName());
+            }
+        } else {
+            IJ.log("No synset/labels file specified in serving.properties.");
+        }
+
+        // if no info or loading failed -> try with default name = synset.txt
+        if (classIdMap == null){
+            //try with default name = synset.txt
+            classIdMap = loadClassIDsFromModel(model, "synset.txt");
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs from : synset.txt. Using default numeration.");
+            } else {
+                IJ.log("Successfully loaded class IDs using default file name : synset.txt");
+            }
+        }
+        return classIdMap;
     }
 
     private TiledDetectedObjects runTiledDetection(ZooModel<ImagePlus, DetectedObjects> model, TilingOptions tileOptions, ModelConfig config){
@@ -226,7 +229,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         int tile_width = tileOptions.tileWidth;
         int tile_height = tileOptions.tileHeight;
         double overlap = tileOptions.overlap;
-        IJ.log("orginal image dimensions : w=" + image_width + " h=" + image_height);
+        //IJ.log("orginal image dimensions : w=" + image_width + " h=" + image_height);
 
         int x_step = (int) Math.floor(tile_width*(1-overlap));
         int y_step = (int) Math.floor(tile_height*(1-overlap));
@@ -235,7 +238,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
         tile_width = Math.min(tile_width, image_width);
         tile_height = Math.min(tile_height, image_height);
 
-        IJ.log("tiles dimensions : w="+ tile_width + " h=" + tile_height);
+        //IJ.log("tiles dimensions : w="+ tile_width + " h=" + tile_height);
 
         int tiles_number=0;
 

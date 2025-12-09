@@ -1,16 +1,20 @@
-package fr.curie.modelloading;
+package fr.curie.detr;
 
 import ai.djl.nn.BlockFactory;
 import ai.djl.translate.TranslatorFactory;
 import ij.IJ;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Reader;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.Properties;
+import java.util.Map;
 
 /**
  * Utility class to manages the creation and persistence of ModelConfig objects
@@ -58,9 +62,12 @@ public final class ModelConfigManager {
         String translatorFactoryClassName = (config.arguments.get("translatorFactory") != null ? config.arguments.get("translatorFactory") : null);
         boolean hasFactoryClass = translatorFactoryClassName != null;
 
+        String blockFactoryClassName = (config.arguments.get("blockFactory") != null ? config.arguments.get("blockFactory") : null);
+        boolean hasBlockFactoryClass = blockFactoryClassName != null;
 
         config.setTranslatorFactory(null);
         config.autoDetectTranslator = false;
+        config.blockFactory = null;
 
         // Instantiate TranslatorFactory
         try {
@@ -81,6 +88,23 @@ public final class ModelConfigManager {
             IJ.handleException(e);
             IJ.log("Failed to instantiate TranslatorFactory specified in properties: " + translatorFactoryClassName);
             return null;
+        }
+
+        // Instantiate BlockFactory
+        // probably won't be kept !
+        if (hasBlockFactoryClass) {
+            try {
+                @SuppressWarnings("unchecked")
+                Class<? extends BlockFactory> factoryClass = (Class<? extends BlockFactory>) Class.forName(blockFactoryClassName);
+                Constructor<? extends BlockFactory> constructor = factoryClass.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                config.blockFactory = constructor.newInstance();
+                //IJ.log("Successfully instantiated BlockFactory: " + blockFactoryClassName);
+            } catch (Exception e) {
+                IJ.handleException(e);
+                IJ.log("Failed to instantiate BlockFactory specified in properties: " + blockFactoryClassName);
+                return null;
+            }
         }
 
         return config;

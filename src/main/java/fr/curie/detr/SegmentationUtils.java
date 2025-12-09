@@ -1,34 +1,40 @@
-package fr.curie.tools;
+package fr.curie.detr;
 
+import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.repository.zoo.ZooModel;
+import fr.curie.detr.DetailedDetectedObjects;
 import fr.curie.tools.tiling.TileParameter;
 import fr.curie.tools.tiling.TiledDetectedObjects;
-import fr.curie.yolo.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Roi;
+import ij.measure.ResultsTable;
 import ij.plugin.filter.ThresholdToSelection;
 import ij.plugin.frame.RoiManager;
 import ij.process.*;
+import fr.curie.yolo.ProcessedDetection;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static ij.IJ.error;
 import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class DetectionUtils {
+public class SegmentationUtils {
     
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
@@ -43,12 +49,15 @@ public class DetectionUtils {
         public boolean createSemanticMask = false;
         public boolean createInstanceMaskPerClass = false;
         public boolean showDetectionResultTables = false;
+        public boolean saveResultsData = true;
+        public boolean applyPreproMacro = true;
+        public boolean clearResults = true;
+        public double pixelSize;
     }
 
     // --- ROI names prefix ---
     private static final String ROI_MASK_PREFIX = "mask_";
-    private static final String ROI_BB_PREFIX = "box_";
-
+    private static final String ROI_BB_PREFIX = "";
 
     // --- DetectedObject processing ---
 
@@ -83,38 +92,18 @@ public class DetectionUtils {
             return Collections.emptyList();
         }
 
-        IJ.log("Processing detections...");
+        IJ.log("Processing detections");
 
-        if (detection instanceof TiledDetectedObjects){
+        if (detection instanceof TiledDetectedObjects) {
             return processFromTiledDetection(imp, detection, externalClassIdMap);
         } else {
-            return processFromNonTiledDetection(imp, detection.items(), externalClassIdMap);
+            return processFromNonTiledDetection(imp, detection, externalClassIdMap);
         }
-    }
-
-    public static List<ProcessedDetection> processDetections(
-            ImagePlus imp,
-            List<DetectedObjects.DetectedObject> detections,
-            Map<String, Integer> externalClassIdMap) {
-
-        if (imp == null || detections == null) {
-            IJ.log("Error: Input ImagePlus or DetectedObjects is null.");
-            return Collections.emptyList();
-        }
-        if (detections.isEmpty()) {
-            IJ.log("No objects were detected.");
-            return Collections.emptyList();
-        }
-
-        IJ.log("Processing detections...");
-
-        return processFromNonTiledDetection(imp, detections, externalClassIdMap);
-
     }
 
     private static List<ProcessedDetection> processFromNonTiledDetection(
             ImagePlus imp,
-            List<DetectedObjects.DetectedObject> detections,
+            DetectedObjects detection,
             Map<String, Integer> externalClassIdMap){
         int imageWidth = imp.getWidth();
         int imageHeight = imp.getHeight();
@@ -139,20 +128,16 @@ public class DetectionUtils {
             nextGroupId = new AtomicInteger(1);
         }
 
-
-        for (DetectedObjects.DetectedObject item : detections) {
+        boolean returnAllScores = detection instanceof DetailedDetectedObjects;
+        List<DetailedDetectedObjects.DetailedDetectedObject> items = detection.items();
+        for (DetailedDetectedObjects.DetailedDetectedObject item : items) {
             // --- Get metadata ---
             String className = item.getClassName();
             BoundingBox box = item.getBoundingBox();
             double probability = item.getProbability();
 
-            if (className == null || className.trim().isEmpty()) {
-                IJ.log("Warning: Detection ignored: empty class name.");
-                continue;
-            }
-
-            if (box == null) {
-                IJ.log("Warning: Detection ignored: missing BoundingBox.");
+            if (className == null || className.trim().isEmpty() || box == null) {
+                IJ.log("Warning: Detection ignored: empty class name or missing BoundingBox.");
                 continue;
             }
 
@@ -205,10 +190,12 @@ public class DetectionUtils {
             } else {
                 //IJ.log("    " + roiName + " (Group " + groupId + ")");
             }
-
-            processedResults.add(new ProcessedDetection(
-                    className, probability, groupId, roiName, boundingBoxRoi, shapeRoi
-            ));
+            ProcessedDetection processedDetection = new ProcessedDetection(
+                    className, probability, groupId, roiName, boundingBoxRoi, shapeRoi);
+            if (returnAllScores && item.getAllScore()!=null) {
+                processedDetection.setAllScore(item.getAllScore());
+            }
+            processedResults.add(processedDetection);
         }
         return processedResults;
     }
@@ -392,6 +379,7 @@ public class DetectionUtils {
         int boxY = (int) (rect.getY() * tile_height);
         int boxWidth = (int) (rect.getWidth() * tile_width);
         int boxHeight = (int) (rect.getHeight() * tile_height);
+
 
         // Create a temporary mask processor covering the entire image
         ByteProcessor processor = new ByteProcessor(imageWidth, imageHeight); // Initialized to 0
@@ -639,7 +627,7 @@ public class DetectionUtils {
         // dimension check
         if (instanceImp.getWidth() != semanticImp.getWidth() ||
                 instanceImp.getHeight() != semanticImp.getHeight()) {
-            IJ.error("detectionFromInstanceAndSemantic: Instance and Semantic images must have the same dimensions.");
+            error("detectionFromInstanceAndSemantic: Instance and Semantic images must have the same dimensions.");
             return Collections.emptyList();
         }
         // check if stack/composite image
@@ -785,13 +773,15 @@ public class DetectionUtils {
      * @param addBB            True to add bounding box ROIs.
      * @param addShape         True to add shape ROIs.
      */
-    public static void addRoisToManager(RoiManager manager, List<ProcessedDetection> processedResults, boolean addBB, boolean addShape) {
+    public static void addRoisToManager(RoiManager manager, List<ProcessedDetection> processedResults, boolean addBB, boolean addShape, int sliceNb) {
         if (manager == null || processedResults.isEmpty()) return;
         // iterate twice through the Rois, to add first the bounding boxes, then the masks
         if (addBB){
             for (ProcessedDetection result : processedResults) {
                 if (result.getBoundingBoxRoi() != null) {
-                    manager.addRoi((Roi) result.getBoundingBoxRoi().clone());
+                    Roi roi = (Roi) result.getBoundingBoxRoi().clone();
+                    roi.setPosition(sliceNb);
+                    manager.add(roi, sliceNb);
                 }
             }
             IJ.log("Bounding Box ROIs created");
@@ -1084,41 +1074,184 @@ public class DetectionUtils {
         return processor;
     }
 
+    public static double estimateMeanDiameter(Roi roi, OutputOptions options) {
+        double width = roi.getBounds().getWidth();
+        double height = roi.getBounds().getHeight();
+        return ((width + height) / 2.0) * options.pixelSize;
+    }
+
     /**
      * Generates the selected output visualizations (masks, ROIs).
      * @param processedDetections List of processed detections.
      * @param options User choices for output types.
      */
-    public static void generateOutputs(ImagePlus imp, List<ProcessedDetection> processedDetections, OutputOptions options , Map<String, Integer> classIdMap) {
+    public static void generateOutputs(ImagePlus imp, int sliceNb, List<ProcessedDetection> processedDetections, OutputOptions options , Map<String, Integer> classIdMap, Integer mode) {
         // Add to ROI Manager
+        int lastRoiIndex = 0;
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            roiManager.reset();
-            DetectionUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes);
+            roiManager.runCommand("Associate", "true");
+            lastRoiIndex = roiManager.getCount();
+            SegmentationUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes, sliceNb);
             roiManager.setVisible(true);
+        }
+
+        RoiManager roiManager = getRoiManager();
+        // Create a map to count occurrences of each class
+        Map<String, Integer> classCounts = new HashMap<>();
+
+        // Store diameters if needed
+        Map<String, List<Double>> classDiams = new HashMap<>();
+
+        // Sort by class id (ascending order)
+        List<Map.Entry<String, Integer>> sortedClasses = new ArrayList<>(classIdMap.entrySet());
+        sortedClasses.sort(Map.Entry.comparingByValue());
+        // Prepare detection results table
+        String rtTableName = "Detr detection Results";
+        ResultsTable rt = ResultsTable.getResultsTable(rtTableName);
+        if (rt == null) {
+            rt = new ResultsTable();
+            rt.setPrecision(5);
+        }
+        rt.showRowIndexes(true);
+        int count = rt.getCounter();
+        int roiIncrement = 1;
+        for(ProcessedDetection detection:processedDetections){
+            rt.incrementCounter(); // Adds a new row
+            if(imp.hasImageStack()){
+                rt.setValue("stack", count, imp.getTitle());
+                rt.setValue("image name", count, imp.getStack().getShortSliceLabel(sliceNb));
+            } else {
+                rt.setValue("stack", count, "");
+                rt.setValue("image name", count, imp.getTitle());
+            }
+            rt.setValue("slice", count, sliceNb);
+            String detClassName = detection.getClassName();
+            Double detScore = detection.getProbability();
+            rt.setValue("class", count,detClassName);
+            rt.setValue("score", count, detScore);
+            if(detection.hasAllScore()){
+                List<Float> allScore = detection.getAllScore();
+                for (Map.Entry<String, Integer> entry : sortedClasses){
+                    String className = entry.getKey();
+                    int index = entry.getValue();
+                    rt.setValue("score " + className, count, allScore.get(index-1));
+                }
+            }
+            // Add ROI ID
+            if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
+                rt.setValue("ROI ID", count, roiManager.getName(lastRoiIndex));
+                lastRoiIndex++;
+            }
+
+            // Add object to classCounts (and if needed classDiam
+            String className = detection.getClassName();
+
+            //noinspection SwitchStatementWithTooFewBranches
+            switch (mode) {
+                case 1:
+                    double diameter = estimateMeanDiameter(detection.getBoundingBoxRoi(), options);
+                    rt.setValue("diam (nm)", count, diameter);
+                    classDiams.computeIfAbsent(className, k -> new ArrayList<>()).add(diameter);
+                    break;
+            }
+
+            classCounts.put(className, classCounts.getOrDefault(className, 0) + 1);
+            count++;
+        }
+
+        String rtAllTableName = "Results";
+        ResultsTable rtAll = ResultsTable.getResultsTable(rtAllTableName);
+        if (rtAll == null) {
+            rtAll = new ResultsTable();
+        }
+        int countAll = rtAll.getCounter();
+        rtAll.incrementCounter();
+        if(imp.hasImageStack()){
+            rtAll.setValue("stack", countAll, imp.getTitle());
+            rtAll.setValue("image name", countAll, imp.getStack().getShortSliceLabel(sliceNb));
+        } else {
+            rtAll.setValue("stack", countAll, "");
+            rtAll.setValue("image name", countAll, imp.getTitle());
+        }
+        rtAll.setValue("slice", countAll, sliceNb);
+
+        // Add class counts to the summary table
+        for (Map.Entry<String, Integer> entry : sortedClasses) {
+            String className = entry.getKey();
+            // Get count from classCounts, default to 0 if not present
+            int classNb = classCounts.getOrDefault(className, 0);
+            rtAll.setValue("Nb " + className, countAll, classNb);
+
+        }
+        rtAll.setValue("Total objects", countAll, processedDetections.size());
+
+        //noinspection SwitchStatementWithTooFewBranches
+        switch (mode) {
+            case 1:
+//                // For now only save the "round" mean diameter!
+//                if (classIdMap.containsKey("round") && classCounts.getOrDefault("round", 0) > 0){
+//                    int totalRound = classCounts.getOrDefault("round", 0);
+//                    rtAll.setValue("Round mean diam (nm)", countAll, classDiam.getOrDefault("round", 0.)/ totalRound);
+//                }
+//                break;
+
+                // Save both mean and standard deviation for "round" diameters
+                if (classIdMap.containsKey("round") && classCounts.getOrDefault("round", 0) > 0) {
+                    List<Double> roundDiameters = classDiams.get("round");
+                    if (roundDiameters != null && !roundDiameters.isEmpty()) {
+                        int totalRound = roundDiameters.size();
+
+                        // Compute mean
+                        double sum = roundDiameters.stream().mapToDouble(Double::doubleValue).sum();
+                        double mean = sum / totalRound;
+
+                        // Compute standard deviation
+                        double variance = 0.0;
+                        double sum_of_squared = 0.0;
+                        for (double d : roundDiameters) {
+                            sum_of_squared += Math.pow(d, 2);
+                            variance += Math.pow(d - mean, 2);
+                        }
+                        double stdDev = Math.sqrt(variance / totalRound);
+
+                        // Save results
+                        rtAll.setValue("Round mean diam (nm)", countAll, mean);
+                        rtAll.setValue("Round diam std (nm)", countAll, stdDev);
+                        rtAll.setValue("Round : sum of diam squared", countAll, sum_of_squared);
+                    }
+                }
+                break;
+
+        }
+
+        // Display the result tables according to user setting
+        if(options.showDetectionResultTables){
+            rt.show(rtTableName);
+            rtAll.show(rtAllTableName);
         }
 
         // Create Stack Mask
         if (options.createStackMask) {
-            ImagePlus stackMask = DetectionUtils.createStackMask(imp, processedDetections);
+            ImagePlus stackMask = SegmentationUtils.createStackMask(imp, processedDetections);
             if (stackMask != null) stackMask.show();
         }
 
         // Create Instance Mask
         if (options.createInstanceMask) {
-            ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp, processedDetections);
+            ImagePlus instanceMask = SegmentationUtils.createInstanceMask(imp, processedDetections);
             if (instanceMask != null) instanceMask.show();
         }
 
         // Create Semantic Mask
         if (options.createSemanticMask) {
-            ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp, processedDetections);
+            ImagePlus semanticMask = SegmentationUtils.createSemanticMask(imp, processedDetections);
             if (semanticMask != null) semanticMask.show();
         }
 
         // Create Instance Mask Per Class
         if (options.createInstanceMaskPerClass) {
-            ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
+            ImagePlus instanceMaskPerClass = SegmentationUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
             if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }

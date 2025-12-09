@@ -1,7 +1,7 @@
-package fr.curie.modelloading.dialogs;
+package fr.curie.detr.dialogs;
 
-import fr.curie.modelloading.ModelConfig;
-import fr.curie.modelloading.configurators.TranslatorConfigurator;
+import fr.curie.detr.ModelConfig;
+import fr.curie.detr.configurators.TranslatorConfigurator;
 import ij.IJ;
 import ij.Prefs;
 import ij.gui.GenericDialog;
@@ -20,7 +20,7 @@ import java.util.Optional;
  */
 public class ModelDialogs {
 
-    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir";
+    private static String PREF_LAST_MODEL_DIR;
     private static final String DEFAULT_PROPERTIES_FILENAME = "serving.properties";
     private static final String AUTO_DETECT_TRANSLATOR_OPTION = "[Auto-detect from 'libs' folder]";
 
@@ -54,9 +54,10 @@ public class ModelDialogs {
      *
      * @param gd The GenericDialog to add fields to.
      */
-    public static void addInitialDialogFields(GenericDialog gd, String lastModelPrefKey) {
+    public static void addInitialDialogFields(GenericDialog gd, String plugin_name) {
         String defaultDir = null;
-        String lastDir = Prefs.get(lastModelPrefKey, defaultDir);
+        PREF_LAST_MODEL_DIR = plugin_name + ".lastmodeldir";
+        String lastDir = Prefs.get(PREF_LAST_MODEL_DIR, defaultDir);
         if (lastDir != null && Files.isDirectory(Paths.get(lastDir))) {
             defaultDir = lastDir;
         } else {
@@ -66,9 +67,6 @@ public class ModelDialogs {
         gd.addDirectoryField("Model_Directory:", defaultDir, 60);
         gd.addStringField("Properties_File_Name:", DEFAULT_PROPERTIES_FILENAME, 30);
         gd.addCheckbox("Show_manual_configuration_dialog", false);
-    }
-    public static void addInitialDialogFields(GenericDialog gd){
-        addInitialDialogFields(gd, PREF_LAST_MODEL_DIR);
     }
 
     /**
@@ -101,25 +99,24 @@ public class ModelDialogs {
      * @param gd The GenericDialog from which to retrieve answers.
      * @return An InitialChoice object with the user's selections.
      */
-    public static InitialChoice getInitialChoice(GenericDialog gd, String lastModelPrefKey) {
+    public static InitialChoice getInitialChoice(GenericDialog gd) {
         String dirPath = gd.getNextString();
+        IJ.log("Model Directory : " + dirPath);
         String propsFileName = gd.getNextString();
+        IJ.log("Properties File Name : " + propsFileName);
         boolean forceManual = gd.getNextBoolean();
+        IJ.log("Show manual configuration dialog : " + forceManual);
 
         Path modelPath = Paths.get(dirPath);
         if (Files.isDirectory(modelPath)) {
             // Save the selected directory for next time
-            Prefs.set(lastModelPrefKey, dirPath);
+            Prefs.set(PREF_LAST_MODEL_DIR, dirPath);
             Prefs.savePreferences();
             return new InitialChoice(modelPath, propsFileName, forceManual);
         } else {
             IJ.error("Selection Error", "The selected path is not a valid directory:\n" + dirPath);
             return null;
         }
-    }
-
-    public static InitialChoice getInitialChoice(GenericDialog gd){
-        return getInitialChoice(gd, PREF_LAST_MODEL_DIR);
     }
 
     /**
@@ -135,6 +132,7 @@ public class ModelDialogs {
             ModelConfig config,
             Path modelPath,
             String[] engineChoices,
+            String[] deviceChoices,
             Map<String, TranslatorConfigurator> knownConfigurators
     ) throws InstantiationException, IllegalAccessException {
 
@@ -147,6 +145,7 @@ public class ModelDialogs {
         // 1.1.1 Retrieve defaults from serving properties if available
         String defaultModelName = config.getModelName() != null ? config.getModelName() : modelPath.getFileName().toString();
         String defaultEngine = config.getEngine() != null ? config.getEngine() : (engineChoices.length > 0 ? engineChoices[0] : "");
+        String defaultDevice = config.getDevice() != null ? config.getDevice() : (deviceChoices.length > 0 ? deviceChoices[0] : "cpu");
         int defaultWidth = config.getDefaultWidth() > 0 ? config.getDefaultWidth() : 256;
         int defaultHeight = config.getDefaultHeight() > 0 ? config.getDefaultHeight() : 256;
 
@@ -171,6 +170,7 @@ public class ModelDialogs {
         gdCore.addMessage("Required arguments and options");
         gdCore.addStringField("Model_Name_Prefix:", defaultModelName, 40);
         gdCore.addChoice("Engine:", engineChoices, defaultEngine);
+        gdCore.addChoice("Device:", deviceChoices, defaultDevice);
         gdCore.addChoice("Translator_Type:", translatorOptions.toArray(new String[0]), defaultTranslatorChoice);
         gdCore.addNumericField("Input_Width:", defaultWidth, 0);
         gdCore.addNumericField("Input_Height:", defaultHeight, 0);
@@ -188,7 +188,7 @@ public class ModelDialogs {
         config.getOptions().put("modelName", config.getModelName());
         config.setEngine(gdCore.getNextChoice());
         config.getArguments().put("engine", config.getEngine());
-
+        config.setDevice(gdCore.getNextChoice());
         String chosenTranslatorName = gdCore.getNextChoice();
         config.addArgument("width", String.valueOf((int) gdCore.getNextNumber()));
         config.addArgument("height", String.valueOf((int) gdCore.getNextNumber()));
@@ -255,6 +255,9 @@ public class ModelDialogs {
         String[] rangeChoices = {"(None)", "0,1", "-1,1"};
         String defaultRange = config.getArguments().getOrDefault("range", rangeChoices[0]);
         gdDetails.addChoice("Pixel_Value_Range:", rangeChoices, defaultRange);
+        // Macro
+        String defaultPreMacro = config.getArguments().getOrDefault("preProcessingMacro", "");
+        gdDetails.addStringField("Pre-processing_Macro (.ijm):", defaultPreMacro, 40);
 
         // 2.1.2 Add translator fields using the selected configurator + the default values from initial config
         if (selectedConfigurator != null) {
@@ -288,6 +291,8 @@ public class ModelDialogs {
         if(!normalize.trim().isEmpty()) config.getArguments().put("normalize", normalize);
         String range = gdDetails.getNextChoice();
         if (!range.equals(rangeChoices[0])) config.getArguments().put("range", range);
+        String preProcessingMacro = gdDetails.getNextString();
+        if(!preProcessingMacro.trim().isEmpty()) config.getArguments().put("preProcessingMacro", preProcessingMacro);
 
         // Retrieve translator-specific results
         if (selectedConfigurator != null) {

@@ -19,15 +19,20 @@ import ai.djl.translate.*;
 import ai.djl.util.JsonUtils;
 import com.google.gson.annotations.SerializedName;
 import fr.curie.sam.ImpSam2Translator.ImpSam2Input;
+import ij.IJ;
 import ij.ImagePlus;
+import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
 import static fr.curie.tools.ImageJUtils.ImagePlusToNDArray;
+import static ij.IJ.runMacro;
 
 public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, DetectedObjects> {
     private static final float[] MEAN = new float[]{0.485F, 0.456F, 0.406F};
@@ -36,7 +41,8 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
     private Predictor<NDList, NDList> predictor;
     private String encoderPath;
     private String encodeMethod;
-    protected String preProcessmacroName; // TODO ajouter macro preprocessing
+    protected String preProcessmacroName;
+    protected ImagePlus imp;
 
 
 
@@ -46,6 +52,7 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
         this.pipeline.add(new Normalize(MEAN, STD));
         this.encoderPath = builder.encoderPath;
         this.encodeMethod = builder.encodeMethod;
+        this.preProcessmacroName = builder.preProcessMacroName;
     }
 
     /**
@@ -87,6 +94,7 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
     @Override
     public void prepare(TranslatorContext ctx) throws IOException, ModelException {
         ensureEncoderInitialized(ctx.getModel());
+
     }
 
     /**
@@ -100,7 +108,13 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
             throw new IllegalStateException("Encoder not configured in Translator");
         }
 
-        // Pre-process
+        // run pre-processing macro
+        if (preProcessmacroName != null && !preProcessmacroName.isEmpty()) {
+            System.out.println("Running macro '" + preProcessmacroName + "' on image.");
+            applyMacro(model, image, preProcessmacroName);
+        }
+
+        // Pipeline pre-processing
         NDArray array = ImagePlusToNDArray(image, manager);
         array = pipeline.transform(new NDList(array)).get(0).expandDims(0);
 
@@ -139,6 +153,13 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
         if (input.getFeatures() != null) {
             embeddings = input.getFeatures();
         } else {
+            // run pre-processing macro
+            if (preProcessmacroName != null && !preProcessmacroName.isEmpty()) {
+                System.out.println("Running macro '" + preProcessmacroName + "' on image.");
+                applyMacro(ctx.getModel(), image, preProcessmacroName);
+            }
+
+            // Pipeline pre-processing
             NDArray array = ImagePlusToNDArray(image, manager);
             array = pipeline.transform(new NDList(array)).get(0).expandDims(0);
 
@@ -193,6 +214,18 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
         return new DetectedObjects(classes, probabilities, boxes);
     }
 
+    private void applyMacro(Model model, ImagePlus imp, String macroName) throws IOException {
+        String macroContent = model.getArtifact(macroName, is -> {
+            try {
+                return IOUtils.toString(is, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
+        IJ.log("running macro : " + macroName);
+        runMacro(macroContent);
+    }
+
     public static Builder builder() {
         return builder(Collections.emptyMap());
     }
@@ -204,10 +237,12 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
     public static class Builder {
         String encoderPath;
         String encodeMethod;
+        String preProcessMacroName;
 
         Builder(Map<String, ?> arguments) {
             this.encoderPath = ArgumentsUtil.stringValue(arguments, "encoder");
             this.encodeMethod = ArgumentsUtil.stringValue(arguments, "encode_method");
+            this.preProcessMacroName = ArgumentsUtil.stringValue(arguments, "preProcessingMacro");
         }
 
         public Builder optEncoderPath(String encoderPath) {
@@ -217,6 +252,11 @@ public class ImpSam2Translator implements NoBatchifyTranslator<ImpSam2Input, Det
 
         public Builder optEncodeMethod(String encodeMethod) {
             this.encodeMethod = encodeMethod;
+            return this;
+        }
+
+        public Builder optPreProcessMacro(String preProcessMacroName) {
+            this.preProcessMacroName = preProcessMacroName;
             return this;
         }
 

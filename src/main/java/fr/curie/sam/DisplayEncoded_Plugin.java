@@ -38,7 +38,7 @@ public class DisplayEncoded_Plugin implements PlugInFilter {
     @Override
     public int setup(String s, ImagePlus imagePlus) {
         imp = imagePlus;
-        return DOES_RGB;
+        return DOES_RGB + DOES_8G;
     }
 
     @Override
