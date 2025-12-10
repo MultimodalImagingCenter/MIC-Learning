@@ -1,7 +1,7 @@
 package fr.curie.yolo.translators;
 
 import ai.djl.Model;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.translate.Translator;
 import ai.djl.util.Pair;
 import fr.curie.basetranslators.ImpObjectDetectionTranslatorFactory;

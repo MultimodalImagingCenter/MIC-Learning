@@ -1,11 +1,10 @@
 package fr.curie.detr;
 
 import ai.djl.Model;
-import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.translate.Translator;
 import ai.djl.util.Pair;
 import fr.curie.basetranslators.ImpObjectDetectionTranslatorFactory;
-import fr.curie.yolo.translators.ImpYoloV8Translator;
+import fr.curie.tools.detection.DetectedObjects;
 import ij.ImagePlus;
 
 import java.io.Serializable;

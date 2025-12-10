@@ -1,6 +1,6 @@
 package fr.curie.yolo;
 
-import fr.curie.tools.DetectionUtils;
+import fr.curie.tools.detection.DetectionUtils;
 import ij.gui.GenericDialog;
 
 public class YoloDialogs {

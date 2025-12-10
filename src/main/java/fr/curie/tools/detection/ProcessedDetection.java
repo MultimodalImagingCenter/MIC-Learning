@@ -1,4 +1,4 @@
-package fr.curie.yolo;
+package fr.curie.tools.detection;
 
 import ij.gui.Roi;
 

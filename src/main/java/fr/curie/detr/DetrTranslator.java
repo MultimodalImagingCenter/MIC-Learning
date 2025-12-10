@@ -3,17 +3,14 @@ package fr.curie.detr;
 import ai.djl.modality.cv.output.BoundingBox;
 import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.ndarray.NDArray;
-import ai.djl.ndarray.NDArrays;
 import ai.djl.ndarray.NDList;
-import ai.djl.ndarray.NDManager;
-import ai.djl.ndarray.index.NDIndex;
 import ai.djl.ndarray.types.DataType;
 import ai.djl.ndarray.types.Shape;
 import ai.djl.nn.Activation;
 import ai.djl.translate.ArgumentsUtil;
 import ai.djl.translate.TranslatorContext;
+import fr.curie.tools.detection.DetailedDetectedObjects;
 import fr.curie.yolo.translators.ImpYoloV8Translator;
-import ij.IJ;
 import ij.ImagePlus;
 
 import java.io.IOException;
@@ -26,36 +23,13 @@ public class DetrTranslator extends ImpYoloV8Translator {
     private int top_k;
 
     /**
-     * Constructs an ImageTranslator with the provided builder.
+     * Constructs an ImagePlusTranslator with the provided builder.
      *
      * @param builder the data to build with
      */
     protected DetrTranslator(Builder builder) {
         super(builder);
         top_k = builder.top_k;
-    }
-
-    /**
-     * Creates a builder to build a {@code YoloV8Translator} with specified arguments.
-     *
-     * @return a new builder
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * Creates a builder to build a {@code YoloV8Translator} with specified arguments.
-     *
-     * @param arguments arguments to specify builder options
-     * @return a new builder
-     */
-    public static Builder builder(Map<String, ?> arguments) {
-        Builder builder = new Builder();
-        builder.configPreProcess(arguments);
-        builder.configPostProcess(arguments);
-
-        return builder;
     }
 
     @Override
@@ -72,55 +46,6 @@ public class DetrTranslator extends ImpYoloV8Translator {
         NDList finalList = new NDList(pixelValues, pixelMask);
         System.out.println("nd list shapes= " + Arrays.toString(finalList.getShapes()));
         return new NDList(pixelValues, pixelMask);
-    }
-
-    protected DetailedDetectedObjects nms(
-            int imageWidth,
-            int imageHeight,
-            List<Rectangle> boxes,
-            List<Integer> classIds,
-            List<Float> scores,
-            List<List<Float>> allScores) {
-        // IJ.log("nms threshold : " + nmsThreshold);
-        List<String> retClasses = new ArrayList<>();
-        List<Double> retProbs = new ArrayList<>();
-        List<BoundingBox> retBB = new ArrayList<>();
-        List<List<Float>> retAllScores = new ArrayList<>();
-
-        // Convert scores to Double for NMS
-        List<Double> scoreDoubles = new ArrayList<>();
-        for (Float score : scores) {
-            scoreDoubles.add(score.doubleValue());
-        }
-
-        List<Integer> nms = Rectangle.nms(boxes, scoreDoubles, nmsThreshold);
-        for (int index : nms) {
-            //int pos = map.get(index);
-            int classId = classIds.get(index);
-            retClasses.add(classes.get(classId));
-            retProbs.add(scoreDoubles.get(index));
-            retAllScores.add(allScores.get(index));
-            Rectangle rect = boxes.get(index);
-            if (removePadding) {
-                int padW = (width - imageWidth) / 2;
-                int padH = (height - imageHeight) / 2;
-                rect =
-                        new Rectangle(
-                                (rect.getX() - padW) / imageWidth,
-                                (rect.getY() - padH) / imageHeight,
-                                rect.getWidth() / imageWidth,
-                                rect.getHeight() / imageHeight);
-            } else if (applyRatio) {
-                rect =
-                        new Rectangle(
-                                rect.getX() / width,
-                                rect.getY() / height,
-                                rect.getWidth() / width,
-                                rect.getHeight() / height);
-            }
-            retBB.add(rect);
-        }
-        return new DetailedDetectedObjects(retClasses, retProbs, retBB, retAllScores);
     }
 
     @Override
@@ -180,7 +105,83 @@ public class DetrTranslator extends ImpYoloV8Translator {
         return nms(imageWidth, imageHeight, boxes, classIds, scores, allScores);
     }
 
+    protected DetailedDetectedObjects nms(
+            int imageWidth,
+            int imageHeight,
+            List<Rectangle> boxes,
+            List<Integer> classIds,
+            List<Float> scores,
+            List<List<Float>> allScores) {
+        // IJ.log("nms threshold : " + nmsThreshold);
+        List<String> retClasses = new ArrayList<>();
+        List<Double> retProbs = new ArrayList<>();
+        List<BoundingBox> retBB = new ArrayList<>();
+        List<List<Float>> retAllScores = new ArrayList<>();
 
+        // Convert scores to Double for NMS
+        List<Double> scoreDoubles = new ArrayList<>();
+        for (Float score : scores) {
+            scoreDoubles.add(score.doubleValue());
+        }
+
+        List<Integer> nms = Rectangle.nms(boxes, scoreDoubles, nmsThreshold);
+        for (int index : nms) {
+            //int pos = map.get(index);
+            int classId = classIds.get(index);
+            retClasses.add(classes.get(classId));
+            retProbs.add(scoreDoubles.get(index));
+            retAllScores.add(allScores.get(index));
+            Rectangle rect = boxes.get(index);
+            if (removePadding) {
+                int padW = (width - imageWidth) / 2;
+                int padH = (height - imageHeight) / 2;
+                rect =
+                        new Rectangle(
+                                (rect.getX() - padW) / imageWidth,
+                                (rect.getY() - padH) / imageHeight,
+                                rect.getWidth() / imageWidth,
+                                rect.getHeight() / imageHeight);
+            } else if (applyRatio) {
+                rect =
+                        new Rectangle(
+                                rect.getX() / width,
+                                rect.getY() / height,
+                                rect.getWidth() / width,
+                                rect.getHeight() / height);
+            }
+            retBB.add(rect);
+        }
+        return new DetailedDetectedObjects(retClasses, retProbs, retBB, retAllScores);
+    }
+
+    // --- Builder ---
+
+    /**
+     * Creates a builder to build a {@code DetrTranslator} with specified arguments.
+     *
+     * @return a new builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+    
+    /**
+     * Creates a builder to build a {@code DetrTranslator} with specified arguments.
+     *
+     * @param arguments arguments to specify builder options
+     * @return a new builder
+     */
+    public static Builder builder(Map<String, ?> arguments) {
+        Builder builder = new Builder();
+
+        if (arguments != null) {
+            builder.configPreProcess(arguments);
+            builder.configPostProcess(arguments);
+        }
+
+        return builder;
+    }
+    
     /** The builder for {@link DetrTranslator}. */
     public static class Builder extends ImpYoloV8Translator.Builder {
         int top_k = 150;
@@ -214,4 +215,6 @@ public class DetrTranslator extends ImpYoloV8Translator {
             top_k = ArgumentsUtil.intValue(arguments, "top_k", 150);
         }
     }
+    
+    
 }

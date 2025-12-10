@@ -1,40 +1,34 @@
-package fr.curie.detr;
+package fr.curie.tools.detection;
 
-import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.repository.zoo.ZooModel;
-import fr.curie.detr.DetailedDetectedObjects;
+import fr.curie.modelloading.ModelConfig;
+import fr.curie.tools.detection.DetailedDetectedObjects;
 import fr.curie.tools.tiling.TileParameter;
 import fr.curie.tools.tiling.TiledDetectedObjects;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Roi;
-import ij.measure.ResultsTable;
 import ij.plugin.filter.ThresholdToSelection;
 import ij.plugin.frame.RoiManager;
 import ij.process.*;
-import fr.curie.yolo.ProcessedDetection;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static ij.IJ.error;
 import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class SegmentationUtils {
+public class DetectionUtils {
     
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
@@ -49,15 +43,12 @@ public class SegmentationUtils {
         public boolean createSemanticMask = false;
         public boolean createInstanceMaskPerClass = false;
         public boolean showDetectionResultTables = false;
-        public boolean saveResultsData = true;
-        public boolean applyPreproMacro = true;
-        public boolean clearResults = true;
-        public double pixelSize;
     }
 
     // --- ROI names prefix ---
     private static final String ROI_MASK_PREFIX = "mask_";
-    private static final String ROI_BB_PREFIX = "";
+    private static final String ROI_BB_PREFIX = "box_";
+
 
     // --- DetectedObject processing ---
 
@@ -92,18 +83,19 @@ public class SegmentationUtils {
             return Collections.emptyList();
         }
 
-        IJ.log("Processing detections");
+        IJ.log("Processing detections...");
 
-        if (detection instanceof TiledDetectedObjects) {
+        if (detection instanceof TiledDetectedObjects){
             return processFromTiledDetection(imp, detection, externalClassIdMap);
         } else {
             return processFromNonTiledDetection(imp, detection, externalClassIdMap);
         }
     }
 
+
     private static List<ProcessedDetection> processFromNonTiledDetection(
             ImagePlus imp,
-            DetectedObjects detection,
+            DetectedObjects detections,
             Map<String, Integer> externalClassIdMap){
         int imageWidth = imp.getWidth();
         int imageHeight = imp.getHeight();
@@ -128,16 +120,21 @@ public class SegmentationUtils {
             nextGroupId = new AtomicInteger(1);
         }
 
-        boolean returnAllScores = detection instanceof DetailedDetectedObjects;
-        List<DetailedDetectedObjects.DetailedDetectedObject> items = detection.items();
-        for (DetailedDetectedObjects.DetailedDetectedObject item : items) {
+        boolean returnAllScores = detections instanceof DetailedDetectedObjects;
+        List<DetectedObjects.DetectedObject> items = detections.items();
+        for (DetectedObjects.DetectedObject item : items) {
             // --- Get metadata ---
             String className = item.getClassName();
             BoundingBox box = item.getBoundingBox();
             double probability = item.getProbability();
 
-            if (className == null || className.trim().isEmpty() || box == null) {
-                IJ.log("Warning: Detection ignored: empty class name or missing BoundingBox.");
+            if (className == null || className.trim().isEmpty()) {
+                IJ.log("Warning: Detection ignored: empty class name.");
+                continue;
+            }
+
+            if (box == null) {
+                IJ.log("Warning: Detection ignored: missing BoundingBox.");
                 continue;
             }
 
@@ -190,11 +187,17 @@ public class SegmentationUtils {
             } else {
                 //IJ.log("    " + roiName + " (Group " + groupId + ")");
             }
+
             ProcessedDetection processedDetection = new ProcessedDetection(
                     className, probability, groupId, roiName, boundingBoxRoi, shapeRoi);
-            if (returnAllScores && item.getAllScore()!=null) {
-                processedDetection.setAllScore(item.getAllScore());
+
+            if (returnAllScores) {
+                DetailedDetectedObjects.DetailedDetectedObject detailedItem = (DetailedDetectedObjects.DetailedDetectedObject) item;
+                 if(detailedItem.getAllScore()!=null) {
+                     processedDetection.setAllScore(detailedItem.getAllScore());
+                 }
             }
+
             processedResults.add(processedDetection);
         }
         return processedResults;
@@ -379,7 +382,6 @@ public class SegmentationUtils {
         int boxY = (int) (rect.getY() * tile_height);
         int boxWidth = (int) (rect.getWidth() * tile_width);
         int boxHeight = (int) (rect.getHeight() * tile_height);
-
 
         // Create a temporary mask processor covering the entire image
         ByteProcessor processor = new ByteProcessor(imageWidth, imageHeight); // Initialized to 0
@@ -627,7 +629,7 @@ public class SegmentationUtils {
         // dimension check
         if (instanceImp.getWidth() != semanticImp.getWidth() ||
                 instanceImp.getHeight() != semanticImp.getHeight()) {
-            error("detectionFromInstanceAndSemantic: Instance and Semantic images must have the same dimensions.");
+            IJ.error("detectionFromInstanceAndSemantic: Instance and Semantic images must have the same dimensions.");
             return Collections.emptyList();
         }
         // check if stack/composite image
@@ -773,15 +775,13 @@ public class SegmentationUtils {
      * @param addBB            True to add bounding box ROIs.
      * @param addShape         True to add shape ROIs.
      */
-    public static void addRoisToManager(RoiManager manager, List<ProcessedDetection> processedResults, boolean addBB, boolean addShape, int sliceNb) {
+    public static void addRoisToManager(RoiManager manager, List<ProcessedDetection> processedResults, boolean addBB, boolean addShape) {
         if (manager == null || processedResults.isEmpty()) return;
         // iterate twice through the Rois, to add first the bounding boxes, then the masks
         if (addBB){
             for (ProcessedDetection result : processedResults) {
                 if (result.getBoundingBoxRoi() != null) {
-                    Roi roi = (Roi) result.getBoundingBoxRoi().clone();
-                    roi.setPosition(sliceNb);
-                    manager.add(roi, sliceNb);
+                    manager.addRoi((Roi) result.getBoundingBoxRoi().clone());
                 }
             }
             IJ.log("Bounding Box ROIs created");
@@ -1074,184 +1074,45 @@ public class SegmentationUtils {
         return processor;
     }
 
-    public static double estimateMeanDiameter(Roi roi, OutputOptions options) {
-        double width = roi.getBounds().getWidth();
-        double height = roi.getBounds().getHeight();
-        return ((width + height) / 2.0) * options.pixelSize;
-    }
-
     /**
      * Generates the selected output visualizations (masks, ROIs).
      * @param processedDetections List of processed detections.
      * @param options User choices for output types.
      */
-    public static void generateOutputs(ImagePlus imp, int sliceNb, List<ProcessedDetection> processedDetections, OutputOptions options , Map<String, Integer> classIdMap, Integer mode) {
+    public static void generateOutputs(ImagePlus imp, List<ProcessedDetection> processedDetections, OutputOptions options , Map<String, Integer> classIdMap) {
         // Add to ROI Manager
-        int lastRoiIndex = 0;
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            roiManager.runCommand("Associate", "true");
-            lastRoiIndex = roiManager.getCount();
-            SegmentationUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes, sliceNb);
+            roiManager.reset();
+            DetectionUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes);
             roiManager.setVisible(true);
         }
 
-        RoiManager roiManager = getRoiManager();
-        // Create a map to count occurrences of each class
-        Map<String, Integer> classCounts = new HashMap<>();
-
-        // Store diameters if needed
-        Map<String, List<Double>> classDiams = new HashMap<>();
-
-        // Sort by class id (ascending order)
-        List<Map.Entry<String, Integer>> sortedClasses = new ArrayList<>(classIdMap.entrySet());
-        sortedClasses.sort(Map.Entry.comparingByValue());
-        // Prepare detection results table
-        String rtTableName = "Detr detection Results";
-        ResultsTable rt = ResultsTable.getResultsTable(rtTableName);
-        if (rt == null) {
-            rt = new ResultsTable();
-            rt.setPrecision(5);
-        }
-        rt.showRowIndexes(true);
-        int count = rt.getCounter();
-        int roiIncrement = 1;
-        for(ProcessedDetection detection:processedDetections){
-            rt.incrementCounter(); // Adds a new row
-            if(imp.hasImageStack()){
-                rt.setValue("stack", count, imp.getTitle());
-                rt.setValue("image name", count, imp.getStack().getShortSliceLabel(sliceNb));
-            } else {
-                rt.setValue("stack", count, "");
-                rt.setValue("image name", count, imp.getTitle());
-            }
-            rt.setValue("slice", count, sliceNb);
-            String detClassName = detection.getClassName();
-            Double detScore = detection.getProbability();
-            rt.setValue("class", count,detClassName);
-            rt.setValue("score", count, detScore);
-            if(detection.hasAllScore()){
-                List<Float> allScore = detection.getAllScore();
-                for (Map.Entry<String, Integer> entry : sortedClasses){
-                    String className = entry.getKey();
-                    int index = entry.getValue();
-                    rt.setValue("score " + className, count, allScore.get(index-1));
-                }
-            }
-            // Add ROI ID
-            if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
-                rt.setValue("ROI ID", count, roiManager.getName(lastRoiIndex));
-                lastRoiIndex++;
-            }
-
-            // Add object to classCounts (and if needed classDiam
-            String className = detection.getClassName();
-
-            //noinspection SwitchStatementWithTooFewBranches
-            switch (mode) {
-                case 1:
-                    double diameter = estimateMeanDiameter(detection.getBoundingBoxRoi(), options);
-                    rt.setValue("diam (nm)", count, diameter);
-                    classDiams.computeIfAbsent(className, k -> new ArrayList<>()).add(diameter);
-                    break;
-            }
-
-            classCounts.put(className, classCounts.getOrDefault(className, 0) + 1);
-            count++;
-        }
-
-        String rtAllTableName = "Results";
-        ResultsTable rtAll = ResultsTable.getResultsTable(rtAllTableName);
-        if (rtAll == null) {
-            rtAll = new ResultsTable();
-        }
-        int countAll = rtAll.getCounter();
-        rtAll.incrementCounter();
-        if(imp.hasImageStack()){
-            rtAll.setValue("stack", countAll, imp.getTitle());
-            rtAll.setValue("image name", countAll, imp.getStack().getShortSliceLabel(sliceNb));
-        } else {
-            rtAll.setValue("stack", countAll, "");
-            rtAll.setValue("image name", countAll, imp.getTitle());
-        }
-        rtAll.setValue("slice", countAll, sliceNb);
-
-        // Add class counts to the summary table
-        for (Map.Entry<String, Integer> entry : sortedClasses) {
-            String className = entry.getKey();
-            // Get count from classCounts, default to 0 if not present
-            int classNb = classCounts.getOrDefault(className, 0);
-            rtAll.setValue("Nb " + className, countAll, classNb);
-
-        }
-        rtAll.setValue("Total objects", countAll, processedDetections.size());
-
-        //noinspection SwitchStatementWithTooFewBranches
-        switch (mode) {
-            case 1:
-//                // For now only save the "round" mean diameter!
-//                if (classIdMap.containsKey("round") && classCounts.getOrDefault("round", 0) > 0){
-//                    int totalRound = classCounts.getOrDefault("round", 0);
-//                    rtAll.setValue("Round mean diam (nm)", countAll, classDiam.getOrDefault("round", 0.)/ totalRound);
-//                }
-//                break;
-
-                // Save both mean and standard deviation for "round" diameters
-                if (classIdMap.containsKey("round") && classCounts.getOrDefault("round", 0) > 0) {
-                    List<Double> roundDiameters = classDiams.get("round");
-                    if (roundDiameters != null && !roundDiameters.isEmpty()) {
-                        int totalRound = roundDiameters.size();
-
-                        // Compute mean
-                        double sum = roundDiameters.stream().mapToDouble(Double::doubleValue).sum();
-                        double mean = sum / totalRound;
-
-                        // Compute standard deviation
-                        double variance = 0.0;
-                        double sum_of_squared = 0.0;
-                        for (double d : roundDiameters) {
-                            sum_of_squared += Math.pow(d, 2);
-                            variance += Math.pow(d - mean, 2);
-                        }
-                        double stdDev = Math.sqrt(variance / totalRound);
-
-                        // Save results
-                        rtAll.setValue("Round mean diam (nm)", countAll, mean);
-                        rtAll.setValue("Round diam std (nm)", countAll, stdDev);
-                        rtAll.setValue("Round : sum of diam squared", countAll, sum_of_squared);
-                    }
-                }
-                break;
-
-        }
-
-        // Display the result tables according to user setting
-        if(options.showDetectionResultTables){
-            rt.show(rtTableName);
-            rtAll.show(rtAllTableName);
+        if (options.showDetectionResultTables){
+            // not implemented for now
         }
 
         // Create Stack Mask
         if (options.createStackMask) {
-            ImagePlus stackMask = SegmentationUtils.createStackMask(imp, processedDetections);
+            ImagePlus stackMask = DetectionUtils.createStackMask(imp, processedDetections);
             if (stackMask != null) stackMask.show();
         }
 
         // Create Instance Mask
         if (options.createInstanceMask) {
-            ImagePlus instanceMask = SegmentationUtils.createInstanceMask(imp, processedDetections);
+            ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp, processedDetections);
             if (instanceMask != null) instanceMask.show();
         }
 
         // Create Semantic Mask
         if (options.createSemanticMask) {
-            ImagePlus semanticMask = SegmentationUtils.createSemanticMask(imp, processedDetections);
+            ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp, processedDetections);
             if (semanticMask != null) semanticMask.show();
         }
 
         // Create Instance Mask Per Class
         if (options.createInstanceMaskPerClass) {
-            ImagePlus instanceMaskPerClass = SegmentationUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
+            ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClass(imp, processedDetections, classIdMap);
             if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }
@@ -1324,5 +1185,40 @@ public class SegmentationUtils {
             return null;
         }
     }
+
+    public static Map<String, Integer> getClassIdMap(ModelConfig modelConfig, ZooModel<ImagePlus, DetectedObjects> model) {
+        Map<String, Integer> classIdMap = null;
+        // Try with provided info
+        if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
+            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() );
+            } else {
+                IJ.log("Successfully loaded class IDs from: "+ modelConfig.getSynsetFilePath().getFileName().toString());
+            }
+        } else if (modelConfig.getSynsetFileName() != null) {
+            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFileName());
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName());
+            } else {
+                IJ.log("Successfully loaded class IDs using name: " + modelConfig.getSynsetFileName());
+            }
+        } else {
+            IJ.log("No synset/labels file specified in serving.properties.");
+        }
+
+        // if no info or loading failed -> try with default name = synset.txt
+        if (classIdMap == null){
+            //try with default name = synset.txt
+            classIdMap = loadClassIDsFromModel(model, "synset.txt");
+            if (classIdMap == null) {
+                IJ.log("Failed to load class IDs from : synset.txt. Using default numeration.");
+            } else {
+                IJ.log("Successfully loaded class IDs using default file name : synset.txt");
+            }
+        }
+        return classIdMap;
+    }
+
 
 }

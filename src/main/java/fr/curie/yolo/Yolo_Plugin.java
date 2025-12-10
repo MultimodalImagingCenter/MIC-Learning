@@ -1,7 +1,7 @@
 package fr.curie.yolo;
 
 import ai.djl.inference.Predictor;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.translate.TranslateException;
 import fr.curie.modelloading.DjlModelLoader;
@@ -10,7 +10,8 @@ import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.configurators.YoloConfigurator;
 import fr.curie.modelloading.configurators.YoloSegmentationConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
-import fr.curie.tools.DetectionUtils;
+import fr.curie.tools.detection.DetectionUtils;
+import fr.curie.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -27,7 +28,7 @@ import java.util.Map;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
-import static fr.curie.tools.DetectionUtils.*;
+import static fr.curie.tools.detection.DetectionUtils.*;
 
 /**
  * Plugin to execute Yolo models

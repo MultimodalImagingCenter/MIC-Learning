@@ -1,7 +1,7 @@
 package fr.curie.yolo.translators;
 
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.types.DataType;
@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * A translator for YoloV5 models. This was tested with ONNX exported Yolo models. For details check
  * <a href="https://github.com/ultralytics/yolov5">here</a>
- * Directly copied from <a href="https://github.com/deepjavalibrary/djl/blob/9d720beeac2935da352369c6b2c45486ed3b1996/api/src/main/java/ai/djl/modality/cv/translator/YoloV5Translator.java">...</a>
+ * Directly adapted from <a href="https://github.com/deepjavalibrary/djl/blob/9d720beeac2935da352369c6b2c45486ed3b1996/api/src/main/java/ai/djl/modality/cv/translator/YoloV5Translator.java">...</a>
  */
 
 public class ImpYoloV5Translator extends ImpObjectDetectionTranslator {

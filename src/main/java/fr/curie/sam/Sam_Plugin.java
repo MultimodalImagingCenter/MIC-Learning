@@ -2,7 +2,7 @@ package fr.curie.sam;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.repository.zoo.ZooModel;
@@ -11,8 +11,8 @@ import fr.curie.modelloading.ModelConfig;
 import fr.curie.modelloading.configurators.Sam2Configurator;
 import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
-import fr.curie.tools.DetectionUtils;
-import fr.curie.yolo.ProcessedDetection;
+import fr.curie.tools.detection.DetectionUtils;
+import fr.curie.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -30,7 +30,7 @@ import java.util.List;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
-import static fr.curie.tools.DetectionUtils.generateOutputs;
+import static fr.curie.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Sam_Plugin implements PlugInFilter {

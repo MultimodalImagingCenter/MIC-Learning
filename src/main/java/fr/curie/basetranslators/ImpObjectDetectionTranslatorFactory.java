@@ -1,6 +1,6 @@
 package fr.curie.basetranslators;
 
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 
 /**
  * An abstract {@link BaseImagePlusTranslatorFactory} that creates a {@link ImpObjectDetectionTranslator} instance.

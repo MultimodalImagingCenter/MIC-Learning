@@ -1,11 +1,7 @@
 package fr.curie.sam;
 
 import ai.djl.MalformedModelException;
-import ai.djl.ModelException;
-import ai.djl.engine.Engine;
-import ai.djl.inference.Predictor;
-import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
@@ -13,7 +9,6 @@ import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ModelNotFoundException;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.training.util.ProgressBar;
-import fr.curie.modelloading.dialogs.ModelDialogs;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.Prefs;
@@ -25,9 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 import static fr.curie.tools.ImageJUtils.NDArray2ImageStack;
 

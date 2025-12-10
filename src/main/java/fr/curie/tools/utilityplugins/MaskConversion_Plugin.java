@@ -1,7 +1,7 @@
 package fr.curie.tools.utilityplugins;
 
-import fr.curie.tools.DetectionUtils;
-import fr.curie.yolo.ProcessedDetection;
+import fr.curie.tools.detection.DetectionUtils;
+import fr.curie.tools.detection.ProcessedDetection;
 import ij.*;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import static fr.curie.tools.DetectionUtils.loadClassIDsFromFile;
+import static fr.curie.tools.detection.DetectionUtils.loadClassIDsFromFile;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**

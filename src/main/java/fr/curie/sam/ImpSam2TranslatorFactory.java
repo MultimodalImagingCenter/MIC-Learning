@@ -3,7 +3,7 @@ package fr.curie.sam;
 import ai.djl.Model;
 import ai.djl.modality.Input;
 import ai.djl.modality.Output;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.translate.Translator;
 import ai.djl.translate.TranslatorFactory;
 import ai.djl.util.Pair;

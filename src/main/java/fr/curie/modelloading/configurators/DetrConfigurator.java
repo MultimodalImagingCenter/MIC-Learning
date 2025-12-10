@@ -1,11 +1,11 @@
-package fr.curie.detr.configurators;
+package fr.curie.modelloading.configurators;
 
-import ai.djl.translate.TranslatorFactory;
 import fr.curie.detr.DetrTranslatorFactory;
-import fr.curie.detr.ModelConfig;
+import ai.djl.translate.TranslatorFactory;
+import fr.curie.modelloading.ModelConfig;
 import ij.gui.GenericDialog;
 
-import static fr.curie.detr.DjlModelLoaderNew.checkSynsetFile;
+import static fr.curie.modelloading.DjlModelLoader.checkSynsetFile;
 
 public class DetrConfigurator implements TranslatorConfigurator {
 

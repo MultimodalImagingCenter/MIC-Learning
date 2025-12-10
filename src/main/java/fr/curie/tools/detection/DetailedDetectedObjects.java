@@ -1,11 +1,9 @@
-package fr.curie.detr;
+package fr.curie.tools.detection;
 
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 
 import java.util.List;
-
 
 public class DetailedDetectedObjects extends DetectedObjects {
     private static final long serialVersionUID = 1L;
@@ -19,38 +17,43 @@ public class DetailedDetectedObjects extends DetectedObjects {
         this.allScores = allScores;
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
     public <T extends Classification> T item(int index) {
-        return (T) (new DetailedDetectedObject(
+        return (T) (new DetailedDetectedObjects.DetailedDetectedObject(
                 (DetectedObject) super.item(index),
                 (List) allScores.get(index)));
     }
 
+    boolean isDetailed() {
+        return allScores != null && !allScores.isEmpty();
+    }
 
-    public static class DetailedDetectedObject extends Classification {
-        private BoundingBox boundingBox;
+
+    public static class DetailedDetectedObject extends DetectedObjects.DetectedObject {
         private List<Float> allScore;
 
         public DetailedDetectedObject(String className, double probability, BoundingBox boundingBox,
                                       List<Float> allScore) {
-            super(className, probability);
-            this.boundingBox = boundingBox;
+            super(className, probability, boundingBox);
             this.allScore = allScore;
         }
 
         public DetailedDetectedObject(String className, double probability, BoundingBox boundingBox) {
-            super(className, probability);
-            this.boundingBox = boundingBox;
+            super(className, probability, boundingBox);
             this.allScore = null;
         }
 
         public DetailedDetectedObject(DetectedObject detectedObject, List<Float> allScore) {
-            super(detectedObject.getClassName(), detectedObject.getProbability());
-            this.boundingBox = detectedObject.getBoundingBox();
+            super(detectedObject.getClassName(), detectedObject.getProbability(), detectedObject.getBoundingBox());
             this.allScore = allScore;
         }
 
-        public BoundingBox getBoundingBox() {return this.boundingBox;}
         public List<Float> getAllScore() {return this.allScore;}
+
+        boolean isDetailed() {
+            return allScore != null && !allScore.isEmpty();
+        }
 
         public String toString() {
             double probability = this.getProbability();
@@ -63,13 +66,13 @@ public class DetailedDetectedObjects extends DetectedObjects {
                 sb.append(String.format("%.5f", probability));
             }
 
-            if (this.boundingBox != null) {
-                sb.append(", \"boundingBox\": x: ").append(this.boundingBox.getBounds().getX())
-                        .append(" y: ").append(this.boundingBox.getBounds().getY())
-                        .append(" width: ").append(this.boundingBox.getBounds().getHeight())
-                        .append(" height: ").append(this.boundingBox.getBounds().getHeight());
+            if (this.getBoundingBox() != null) {
+                sb.append(", \"boundingBox\": x: ").append(this.getBoundingBox().getBounds().getX())
+                        .append(" y: ").append(this.getBoundingBox().getBounds().getY())
+                        .append(" width: ").append(this.getBoundingBox().getBounds().getHeight())
+                        .append(" height: ").append(this.getBoundingBox().getBounds().getHeight());
 
-                sb.append(", \"mask?\": ").append((this.boundingBox instanceof Mask));
+                sb.append(", \"mask?\": ").append((this.getBoundingBox() instanceof Mask));
             }
 
             if (this.allScore != null){

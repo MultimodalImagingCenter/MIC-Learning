@@ -22,6 +22,7 @@ import fr.curie.sam.ImpSam2Translator.ImpSam2Input;
 import ij.IJ;
 import ij.ImagePlus;
 import org.apache.commons.io.IOUtils;
+import fr.curie.tools.detection.DetectedObjects;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

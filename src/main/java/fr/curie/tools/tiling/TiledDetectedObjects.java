@@ -1,7 +1,7 @@
 package fr.curie.tools.tiling;
 
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 
 import java.util.List;
@@ -18,6 +18,8 @@ public class TiledDetectedObjects extends DetectedObjects {
         this.tileParameters = tileParameters;
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
     public <T extends Classification> T item(int index) {
         return (T) (new TiledDetectedObject(
                 (DetectedObject) super.item(index),
@@ -25,39 +27,35 @@ public class TiledDetectedObjects extends DetectedObjects {
     }
 
 
-    public static class TiledDetectedObject extends Classification {
-        private BoundingBox boundingBox;
+
+
+    public static class TiledDetectedObject extends DetectedObjects.DetectedObject {
         private TileParameter tileParameter;
 
         public TiledDetectedObject(String className, double probability, BoundingBox boundingBox,
                                    TileParameter tileParameter) {
-            super(className, probability);
-            this.boundingBox = boundingBox;
+            super(className, probability, boundingBox);
             this.tileParameter = tileParameter;
         }
 
         public TiledDetectedObject(String className, double probability, BoundingBox boundingBox,
                                    int x_offset, int y_offset,
                                    int tile_width, int tile_height) {
-            super(className, probability);
-            this.boundingBox = boundingBox;
+            super(className, probability, boundingBox);
             this.tileParameter = new TileParameter(x_offset, y_offset, tile_width, tile_height);
         }
 
         public TiledDetectedObject(String className, double probability, BoundingBox boundingBox) {
-            super(className, probability);
-            this.boundingBox = boundingBox;
+            super(className, probability, boundingBox);
             this.tileParameter = null;
         }
 
         public TiledDetectedObject(DetectedObject detectedObject,
                                    TileParameter tileParameter) {
-            super(detectedObject.getClassName(), detectedObject.getProbability());
-            this.boundingBox = detectedObject.getBoundingBox();
+            super(detectedObject.getClassName(), detectedObject.getProbability(), detectedObject.getBoundingBox());
             this.tileParameter = tileParameter;
         }
 
-        public BoundingBox getBoundingBox() {return this.boundingBox;}
         public TileParameter getTileParameter() {return this.tileParameter;}
         public int getXOffset() {return this.tileParameter.x_offset;}
         public int getYOffset() {return this.tileParameter.y_offset;}
@@ -75,13 +73,13 @@ public class TiledDetectedObjects extends DetectedObjects {
                 sb.append(String.format("%.5f", probability));
             }
 
-            if (this.boundingBox != null) {
-                sb.append(", \"boundingBox\": x: ").append(this.boundingBox.getBounds().getX())
-                        .append(" y: ").append(this.boundingBox.getBounds().getY())
-                        .append(" width: ").append(this.boundingBox.getBounds().getHeight())
-                        .append(" height: ").append(this.boundingBox.getBounds().getHeight());
+            if (this.getBoundingBox() != null) {
+                sb.append(", \"boundingBox\": x: ").append(this.getBoundingBox().getBounds().getX())
+                        .append(" y: ").append(this.getBoundingBox().getBounds().getY())
+                        .append(" width: ").append(this.getBoundingBox().getBounds().getHeight())
+                        .append(" height: ").append(this.getBoundingBox().getBounds().getHeight());
 
-                sb.append(", \"mask?\": ").append((this.boundingBox instanceof Mask));
+                sb.append(", \"mask?\": ").append((this.getBoundingBox() instanceof Mask));
             }
 
             if (this.tileParameter != null){

@@ -1,9 +1,6 @@
 package fr.curie.bioimage;
 
 import ai.djl.inference.Predictor;
-import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
-import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.translate.TranslateException;
 import fr.curie.modelloading.DjlModelLoader;
@@ -11,8 +8,6 @@ import fr.curie.modelloading.ModelConfig;
 import fr.curie.modelloading.configurators.BioImageConfigurator;
 import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
-import fr.curie.tools.tiling.TileParameter;
-import fr.curie.tools.tiling.TiledDetectedObjects;
 import fr.curie.tools.tiling.TilingDialogs;
 import fr.curie.tools.tiling.TilingOptions;
 import ij.IJ;
@@ -27,7 +22,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;

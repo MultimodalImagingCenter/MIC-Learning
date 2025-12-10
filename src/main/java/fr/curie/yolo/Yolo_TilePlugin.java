@@ -2,7 +2,7 @@ package fr.curie.yolo;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 import ai.djl.modality.cv.output.Rectangle;
 import ai.djl.repository.zoo.ZooModel;
@@ -13,11 +13,12 @@ import fr.curie.modelloading.configurators.TranslatorConfigurator;
 import fr.curie.modelloading.configurators.YoloConfigurator;
 import fr.curie.modelloading.configurators.YoloSegmentationConfigurator;
 import fr.curie.modelloading.dialogs.ModelDialogs;
+import fr.curie.tools.detection.ProcessedDetection;
 import fr.curie.tools.tiling.TileParameter;
 import fr.curie.tools.tiling.TiledDetectedObjects;
 import fr.curie.tools.tiling.TilingOptions;
 import fr.curie.tools.tiling.TilingDialogs;
-import fr.curie.tools.DetectionUtils;
+import fr.curie.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -33,7 +34,7 @@ import java.util.stream.Collectors;
 
 import static fr.curie.modelloading.ModelConfigManager.saveConfigToFile;
 import static fr.curie.modelloading.dialogs.ModelDialogs.addInitialDialogFields;
-import static fr.curie.tools.DetectionUtils.*;
+import static fr.curie.tools.detection.DetectionUtils.*;
 
 /**
  * Plugin to execute Yolo models with tiling option
@@ -181,7 +182,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
     }
 
-    private static Map<String, Integer> getClassIdMap(ModelConfig modelConfig, ZooModel<ImagePlus, DetectedObjects> model) {
+    static Map<String, Integer> getClassIdMap(ModelConfig modelConfig, ZooModel<ImagePlus, DetectedObjects> model) {
         Map<String, Integer> classIdMap = null;
         // Try with provided info
         if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {

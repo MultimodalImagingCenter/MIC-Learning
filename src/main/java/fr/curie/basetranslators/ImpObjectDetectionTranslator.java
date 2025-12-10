@@ -1,6 +1,6 @@
 package fr.curie.basetranslators;
 
-import ai.djl.modality.cv.output.DetectedObjects;
+import fr.curie.tools.detection.DetectedObjects;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.translate.ArgumentsUtil;
