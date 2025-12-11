@@ -6,7 +6,7 @@ import ij.gui.GenericDialog;
 
 public class BioImageConfigurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "fr.curie.bioimage.translators.BioImageTranslatorFactory";
+    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.unet.BioImageTranslatorFactory";
 
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {

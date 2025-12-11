@@ -9,7 +9,7 @@ import static fr.curie.miclearning.prediction.model.DjlModelLoader.checkSynsetFi
 
 public class DetrConfigurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "fr.curie.detr.DetrTranslatorFactory";
+    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.detr.DetrTranslatorFactory";
 
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {

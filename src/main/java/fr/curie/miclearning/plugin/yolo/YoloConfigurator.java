@@ -10,7 +10,7 @@ import static fr.curie.miclearning.prediction.model.DjlModelLoader.checkSynsetFi
 
 public class YoloConfigurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "fr.curie.yolo.translators.ImpYoloV8TranslatorFactory";
+    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.yolo.translator.ImpYoloV8TranslatorFactory";
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {
         // Return the actual factory class
