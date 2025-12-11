@@ -1,0 +1,124 @@
+package fr.curie.miclearning.prediction.model;
+
+import ai.djl.translate.TranslatorFactory;
+import ij.IJ;
+
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Properties;
+
+/**
+ * Utility class to manages the creation and persistence of ModelConfig objects
+ * to and from .properties files.
+ */
+public final class ModelConfigManager {
+
+    private static final String OPTION_PREFIX = "option.";
+
+    private ModelConfigManager() {}
+
+    /**
+     * Loads configuration from a given properties file into a new ModelConfig object.
+     *
+     * @param propertiesPath The path to the .properties file.
+     * @return A new ModelConfig instance populated with data from the file.
+     * @throws IOException if there is an error reading the file.
+     */
+    public static ModelConfig loadConfigFromFile(Path propertiesPath) throws IOException {
+        ModelConfig config = new ModelConfig();
+        Properties prop = new Properties();
+
+        // read file
+        try (Reader reader = Files.newBufferedReader(propertiesPath, StandardCharsets.UTF_8)) {
+            prop.load(reader);
+        }
+
+        // collect options and arguments
+        for (String key : prop.stringPropertyNames()) {
+            String value = prop.getProperty(key);
+            // add the options (for model loading)
+            if (key.startsWith(OPTION_PREFIX)) {
+                config.getOptions().put(key.substring(OPTION_PREFIX.length()), value);
+            } else {
+                // add the arguments (for translator)
+                config.getArguments().put(key, value);
+            }
+        }
+
+        // set some specific options/arguments
+        config.setEngine(config.getArguments().get("engine"));
+        config.setModelName(config.getOptions().get("modelName"));
+
+        // Instantiate Translator Factory + blockFactory
+        String translatorFactoryClassName = (config.arguments.get("translatorFactory") != null ? config.arguments.get("translatorFactory") : null);
+        boolean hasFactoryClass = translatorFactoryClassName != null;
+
+
+        config.setTranslatorFactory(null);
+        config.autoDetectTranslator = false;
+
+        // Instantiate TranslatorFactory
+        try {
+            if (hasFactoryClass) {
+                @SuppressWarnings("unchecked")
+                Class<? extends TranslatorFactory> factoryClass = (Class<? extends TranslatorFactory>) Class.forName(translatorFactoryClassName);
+                Constructor<? extends TranslatorFactory> constructor = factoryClass.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                config.translatorFactory = constructor.newInstance();
+                config.setAutoDetectTranslator(false);
+
+            } else {
+                //IJ.log("No explicit 'translatorFactory' key found in serving.properties.");
+                //IJ.log("Will proceed assuming a bundled translator might exist in the 'libs' folder or rely on DJL defaults.");
+                config.setAutoDetectTranslator(true); // Mark that we are relying on auto-detection
+            }
+        } catch (Exception e) {
+            IJ.handleException(e);
+            IJ.log("Failed to instantiate TranslatorFactory specified in properties: " + translatorFactoryClassName);
+            return null;
+        }
+
+        return config;
+    }
+
+    /**
+     * Saves a ModelConfig object to a specified .properties file path.
+     *
+     * @param config The configuration to save.
+     * @param propertiesPath The path where the file will be saved.
+     * @throws IOException if there is an error writing the file.
+     */
+    public static void saveConfigToFile(ModelConfig config, Path propertiesPath) throws IOException {
+        Properties props = new Properties();
+
+        // Populate Properties from Config
+        // arguments
+        if (config.getArguments() != null) {
+            for (Map.Entry<String, String> entry : config.getArguments().entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().trim().isEmpty()) {
+                    props.setProperty(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        // options
+        if (config.getOptions() != null) {
+            for (Map.Entry<String, String> entry : config.getOptions().entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().trim().isEmpty()) {
+                    props.setProperty(OPTION_PREFIX + entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        // Write the properties file
+        try (OutputStream output = Files.newOutputStream(propertiesPath);
+             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8))) {
+            String comments = "DJL Model Configuration generated by ImageJ Plugin";
+            props.store(writer, comments); // add the comment + a comment line with current date and time
+        }
+    }
+}
