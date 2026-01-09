@@ -8,6 +8,7 @@ import fr.curie.miclearning.prediction.model.ModelConfig;
 import fr.curie.miclearning.prediction.translator.configurator.TranslatorConfigurator;
 
 import fr.curie.miclearning.prediction.model.ModelDialogs;
+import fr.curie.miclearning.tools.ImageJUtils;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.ProcessedDetection;
@@ -55,10 +56,15 @@ public class Detr_Plugin implements PlugInFilter {
         GenericDialog gd = new GenericDialog("Model Directory + Outputs");
         // Prompt user for model repository + config info
         addInitialDialogFields(gd,PREF_LAST_MODEL_KEY);
-        gd.addMessage("__________");
+
         // ask for detr outputs
+        gd.addMessage("__________");
         DetrDialogs.addOutputDialog(gd);
 
+        //ask if result tables and rois need to be reset
+        ModelDialogs.askIfResetResult(gd);
+
+        // Show dialo
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
@@ -67,6 +73,12 @@ public class Detr_Plugin implements PlugInFilter {
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY);
         DetectionUtils.OutputOptions segmentOptions = DetrDialogs.getOutputAnswer(gd);
+        boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
+
+        if (initialChoice == null){
+            IJ.error("Error with initial dialog", "No InitialChoice was created");
+            return;
+        }
 
         // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
@@ -142,6 +154,7 @@ public class Detr_Plugin implements PlugInFilter {
 
             // --- 6. Generate Outputs, based on user choices
             IJ.log(" --- Generating output... ");
+            if (resetPreviousResults) ImageJUtils.resetRMandRT();
             generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
             IJ.log(" --- DETR detection complete.");

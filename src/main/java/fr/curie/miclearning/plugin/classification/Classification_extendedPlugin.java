@@ -44,7 +44,7 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.classif";
 
     private static ImagePlus currentImp;
-    private static ZooModel<Image, Classifications> loadedModel;
+    private static ZooModel<ImagePlus, Classifications> loadedModel;
     private static ModelConfig modelConfig;
     private static boolean needToRewriteServing;
     private static Path newPropertiesFilePath;
@@ -52,6 +52,7 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
     private int errors_count = 0;
     //maximum number of error before stop
     //avoid having 1 error per slice on big stacks
+    //but allow 1 punctual error
     private final int MAX_ERROR = 1;
 
     private static ResultsTable rt;
@@ -73,12 +74,24 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
         // --- 1. Prompt user for model repository ---
         GenericDialog gd = new GenericDialog("Model Directory");
         addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
+        //ask if result tables and rois need to be reset
+        ModelDialogs.askIfResetResult(gd);
+
+        // Show dialog
         gd.showDialog();
         if (gd.wasCanceled()) {
             return DONE; // User canceled
         }
 
+        // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY);
+        boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
+
+        if (initialChoice == null){
+            IJ.error("Error with initial dialog", "No InitialChoice was created");
+            return DONE;
+        }
+
         if (!Files.isDirectory(initialChoice.modelPath)) {
             IJ.error("Invalid Path", "The selected path is not a valid directory.");
             return DONE;
@@ -88,9 +101,9 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
 
         // --- 2. Try to Load Model ---
         IJ.log("loading model from path " + modelPath);
-        DjlModelLoader<Image, Classifications> modelLoader =
-                new DjlModelLoader<>(Image.class, Classifications.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
-        DjlModelLoader.LoadedModel<Image, Classifications> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
+        DjlModelLoader<ImagePlus, Classifications> modelLoader =
+                new DjlModelLoader<>(ImagePlus.class, Classifications.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
+        DjlModelLoader.LoadedModel<ImagePlus, Classifications> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
 
 
         if (loadedResult.isFail()) {
@@ -111,12 +124,13 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
         needToRewriteServing = loadedResult.needToRewriteServing();
         if (needToRewriteServing) {newPropertiesFilePath = loadedResult.getNewPropertiesFilePath();}
 
-
         // Initialize ResultsTable
         rt = ResultsTable.getResultsTable();
         if (rt == null) {
             rt = new ResultsTable();
         }
+
+        if (resetPreviousResults) ImageJUtils.resetRMandRT();
 
         return flags;
     }
@@ -144,18 +158,9 @@ public class Classification_extendedPlugin implements ExtendedPlugInFilter {
         IJ.showStatus("Processing slice " + passCounter + "/" + nPasses);
 
 
-        // --- 1. Convert current slice (ImageProcessor) to DJLImage ---
-        String engine = modelConfig.getEngine();
-        NDManager manager = NDManager.newBaseManager(engine);
-        Image djlImage = ImageJUtils.imageProcessorToDjlImage(ip, manager);
-        if (djlImage == null) {
-            IJ.log(" --- Failed to convert ImageProcessor of slice " + passCounter + " to DJL Image.");
-            return;
-        }
-
         // --- 2. Make prediction (using the already loaded model) ---
-        try (Predictor<Image, Classifications> predictor = loadedModel.newPredictor()) {
-            Classifications classifications = predictor.predict(djlImage);
+        try (Predictor<ImagePlus, Classifications> predictor = loadedModel.newPredictor()) {
+            Classifications classifications = predictor.predict(new ImagePlus("title", ip));
 
             if (rt == null) {IJ.log("WARNING : result table null before prediction");}
 

@@ -121,6 +121,20 @@ public class ModelDialogs {
         return getInitialChoice(gd, PREF_LAST_MODEL_DIR);
     }
 
+
+    public static void askIfResetResult(GenericDialog gd){
+        askIfResetResult(gd, false);
+    }
+
+    public static void askIfResetResult(GenericDialog gd, boolean defaultReset){
+        gd.addCheckbox("Reset_previous_results (Results tables and ROIs)", defaultReset);
+    }
+
+    public static boolean getIfResetResult(GenericDialog gd){
+        return gd.getNextBoolean();
+    }
+
+
     /**
      * Prompts the user with a detailed, two-step configuration dialog.
      *
@@ -130,6 +144,8 @@ public class ModelDialogs {
      * @param knownConfigurators The map of available translator configurators.
      * @return An Optional containing the final configuration, or empty if the user cancels.
      */
+
+
     public Optional<UserConfigurationResult> promptForFullConfiguration(
             ModelConfig config,
             Path modelPath,
@@ -255,6 +271,10 @@ public class ModelDialogs {
         String defaultRange = config.getArguments().getOrDefault("range", rangeChoices[0]);
         gdDetails.addChoice("Pixel_Value_Range:", rangeChoices, defaultRange);
 
+        // Normalize
+        String defaultPreProcessMacro = config.getArguments().getOrDefault("preProcessingMacro", "");
+        gdDetails.addStringField("Preprocessing macro:", defaultPreProcessMacro);
+
         // 2.1.2 Add translator fields using the selected configurator + the default values from initial config
         if (selectedConfigurator != null) {
             selectedConfigurator.addDialogFields(gdDetails, config);
@@ -287,6 +307,11 @@ public class ModelDialogs {
         if(!normalize.trim().isEmpty()) config.getArguments().put("normalize", normalize);
         String range = gdDetails.getNextChoice();
         if (!range.equals(rangeChoices[0])) config.getArguments().put("range", range);
+        String preMacroName = gdDetails.getNextString();
+        if (preMacroName != null && !preMacroName.trim().isEmpty()) {
+            if (!preMacroName.endsWith(".ijm")) preMacroName += ".ijm"; // enforce the extension for the user
+            config.getArguments().put("preProcessingMacro", preMacroName);
+        }
 
         // Retrieve translator-specific results
         if (selectedConfigurator != null) {

@@ -15,6 +15,7 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.Roi;
+import ij.measure.ResultsTable;
 import ij.plugin.filter.ThresholdToSelection;
 import ij.plugin.frame.RoiManager;
 import ij.process.*;
@@ -516,6 +517,19 @@ public class ImageJUtils {
             IJ.log("ROIs created for " + roiName);
         }
         return shapeRois;
+    }
+
+    public static void resetRMandRT(){
+        ResultsTable rt = ResultsTable.getResultsTable();
+        if (rt != null) {
+            rt.reset();
+        }
+
+        RoiManager rm = RoiManager.getRoiManager();
+        if (rm != null) {
+            rm.reset();
+        }
+
     }
 
     public static ImagePlus stackMaskFromRoi(ImagePlus imp, List<Roi> shapeRois){

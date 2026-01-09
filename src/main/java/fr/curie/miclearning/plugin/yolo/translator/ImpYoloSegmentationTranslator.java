@@ -30,7 +30,7 @@ public class ImpYoloSegmentationTranslator extends ImpYoloV5Translator{
         super(builder);
         this.threshold = builder.threshold;
         this.nmsThreshold = builder.nmsThreshold;
-        System.out.println("Translator initialized with threshold: " + this.threshold + ", nmsThreshold: " + this.nmsThreshold);
+        //System.out.println("Translator initialized with threshold: " + this.threshold + ", nmsThreshold: " + this.nmsThreshold);
     }
 
     @Override

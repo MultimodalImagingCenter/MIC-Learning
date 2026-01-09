@@ -42,7 +42,7 @@ public class BioImage_Plugin implements PlugInFilter {
     }
     // List of engine available
     private static final String[] ENGINE_CHOICES = {"", "TensorFlow",  "PyTorch", "OnnxRuntime"};
-    private static final String PREF_LAST_MODEL_DIR = "myplugin.lastmodeldir.bioimage";
+    private static final String PREF_LAST_MODEL_KEY = "myplugin.lastmodeldir.unet";
 
     @Override
     public int setup(String s, ImagePlus imagePlus) {
@@ -55,12 +55,19 @@ public class BioImage_Plugin implements PlugInFilter {
         // --- 1. Initial dialog box ---
         // ask for model repository + config info
         GenericDialog gd = new GenericDialog("Model Directory");
-        addInitialDialogFields(gd,PREF_LAST_MODEL_DIR);
+        addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
+
+        // Show dialog
         gd.showDialog();
         if (gd.wasCanceled()) return; // User canceled
 
         // retrieve choices
-        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd);
+        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY);
+
+        if (initialChoice == null){
+            IJ.error("Error with initial dialog", "No InitialChoice was created");
+            return;
+        }
 
         // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {

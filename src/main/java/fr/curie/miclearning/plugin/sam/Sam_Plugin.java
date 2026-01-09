@@ -2,6 +2,7 @@ package fr.curie.miclearning.plugin.sam;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
+import fr.curie.miclearning.tools.ImageJUtils;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
@@ -65,9 +66,16 @@ public class Sam_Plugin implements PlugInFilter {
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
         addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
-        gd.addMessage("__________");
+
         // ask for SAM outputs
+        gd.addMessage("__________");
         SamDialogs.addOutputDialog(gd);
+
+        //ask if result tables and rois need to be reset
+        gd.addMessage("__________");
+        ModelDialogs.askIfResetResult(gd);
+
+        // Show dialog
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
@@ -76,8 +84,10 @@ public class Sam_Plugin implements PlugInFilter {
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY );
         DetectionUtils.OutputOptions segmentOptions = SamDialogs.getOutputAnswer(gd);
+        boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
+
         if (initialChoice == null){
-            IJ.error("initial choice error", "initial choice is null");
+            IJ.error("Error with initial dialog", "No InitialChoice was created");
             return;
         }
 
@@ -189,6 +199,7 @@ public class Sam_Plugin implements PlugInFilter {
 
                 // --- 6. Generate Outputs, based on user choices
                 IJ.log(" --- Generating output... ");
+                if (resetPreviousResults) ImageJUtils.resetRMandRT();
                 generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
 

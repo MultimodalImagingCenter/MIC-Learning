@@ -163,7 +163,7 @@ public class DetectionUtils {
             String roiName = String.format("%s_%d_%.5f", className, countForClass, probability);
 
             // --- Create Bounding Box ROI ---
-            Roi boundingBoxRoi = createRoiFromBB(box, imageWidth, imageHeight);
+            Roi boundingBoxRoi = createRoiFromBBRect(box, imageWidth, imageHeight);
             if (boundingBoxRoi == null) {
                 IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
                 continue;
@@ -269,7 +269,7 @@ public class DetectionUtils {
             String roiName = String.format("%s_%d_%.5f", className, countForClass, probability);
 
             // --- Create Bounding Box ROI ---
-            Roi boundingBoxRoi = createRoiFromBB(box, imageWidth, imageHeight, tileParameter);
+            Roi boundingBoxRoi = createRoiFromBBRect(box, imageWidth, imageHeight, tileParameter);
             if (boundingBoxRoi == null) {
                 IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
                 continue;
@@ -304,11 +304,11 @@ public class DetectionUtils {
 
 
     // --- ROI Creation Helpers ---
-    private static Roi createRoiFromBB(BoundingBox box, int imageWidth, int imageHeight) {
-        return createRoiFromBB(box, imageWidth, imageHeight, null);
+    private static Roi createRoiFromBBRect(BoundingBox box, int imageWidth, int imageHeight) {
+        return createRoiFromBBRect(box, imageWidth, imageHeight, null);
     }
 
-    private static Roi createRoiFromBB(BoundingBox box, int imageWidth, int imageHeight, TileParameter tileParameter) {
+    private static Roi createRoiFromBBRect(BoundingBox box, int imageWidth, int imageHeight, TileParameter tileParameter) {
         Rectangle rectangle = box.getBounds();
         int x_offset = 0;
         int y_offset = 0;
@@ -382,33 +382,31 @@ public class DetectionUtils {
             }
         }
 
-        //IJ.log("image width=" + imageWidth + ", height=" + imageHeight);
-        //IJ.log("mask width=" + maskWidth +", height=" + maskHeight);
-        //IJ.log("tile coordinates: x=" + x_offset + ", y=" + y_offset + ", width=" + tile_width + ", height=" + tile_height);
-
         // Calculate pixel coordinates within the tile for the bounding box
         int boxX = (int) (rect.getX() * tile_width);
         int boxY = (int) (rect.getY() * tile_height);
         int boxWidth = (int) (rect.getWidth() * tile_width);
         int boxHeight = (int) (rect.getHeight() * tile_height);
 
-        //IJ.log("box within the tile coordinates: x=" + boxX + ", y=" + boxY + ", width=" + boxWidth + ", height=" + boxHeight);
-
-        // Create a temporary mask processor covering the entire image
-        ByteProcessor processor = new ByteProcessor(imageWidth, imageHeight); // Initialized to 0
+        // Create a temporary mask processor covering the bounding box
+        // (same scale as the total image)
+        ByteProcessor boxProcessor = new ByteProcessor(boxWidth, boxHeight); // Initialized to 0
 
         // Scaling factors
+        // (tile is same scale as image and mask cover the hole tile)
         final float scaleX = (float) maskWidth / tile_width;
         final float scaleY = (float) maskHeight / tile_height;
 
-        //IJ.log("scaling factor: scaleX=" + scaleX + ", scaleY=" + scaleY);
 
         boolean pixelSet = false; // Track if any pixel passes the threshold
 
-        // Iterate through target pixels within the bounding box (within the tile)
-        for (int tileTargetY = boxY; tileTargetY < boxY + boxHeight; tileTargetY++) {
-            for (int tileTargetX = boxX; tileTargetX < boxX + boxWidth; tileTargetX++) {
+        // Iterate through target pixels within the bounding box
+        for (int boxTargetY = 0; boxTargetY < boxY + boxHeight; boxTargetY++) {
+            for (int boxTargetX = 0; boxTargetX < boxX + boxWidth; boxTargetX++) {
 
+                // map to target tile coordinates
+                int tileTargetY = boxTargetY + boxY;
+                int tileTargetX = boxTargetX + boxX;
                 // Map target tiles coordinates back to the mask's coordinates
                 int maskJ = (int) Math.floor(tileTargetX * scaleX);
                 int maskK = (int) Math.floor(tileTargetY * scaleY);
@@ -417,10 +415,8 @@ public class DetectionUtils {
                 if (maskJ >= 0 && maskJ < maskWidth && maskK >= 0 && maskK < maskHeight) {
                     // Check probability threshold
                     if (probDist[maskK][maskJ] > MASK_THRESHOLD) {
-                        //find coordinate in full image
-                        int imageTargetX = x_offset + tileTargetX;
-                        int imageTargetY = y_offset + tileTargetY;
-                        processor.putPixel(imageTargetX, imageTargetY, MASK_FOREGROUND_COLOR);
+                        // make the pixel white
+                        boxProcessor.putPixel(boxTargetX, boxTargetY, MASK_FOREGROUND_COLOR);
                         pixelSet = true;
                     }
                 }
@@ -428,14 +424,19 @@ public class DetectionUtils {
         }
 
         if (!pixelSet) {
-            IJ.log("Info: No pixels passed the threshold" + MASK_THRESHOLD);
+            IJ.log("Info: No pixels passed the threshold " + MASK_THRESHOLD);
             return null;
         }
 
-        // Create ROI from the thresholded mask
-        processor.setThreshold(128, 255, ImageProcessor.BLACK_AND_WHITE_LUT);
+        // Create ROI from the thresholded mask (inside the box coordinates)
+        boxProcessor.setThreshold(128, 255, ImageProcessor.BLACK_AND_WHITE_LUT);
         ThresholdToSelection t2s = new ThresholdToSelection();
-        Roi roi = t2s.convert(processor);
+        Roi roi = t2s.convert(boxProcessor);
+
+        // Translation : put the roi in the total image coordinates
+        if (roi != null) {
+            roi.setLocation(x_offset + boxX, y_offset + boxY);
+        }
 
         return roi;
     }
@@ -1096,7 +1097,6 @@ public class DetectionUtils {
         // Add to ROI Manager
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            roiManager.reset();
             DetectionUtils.addRoisToManager(roiManager, processedDetections, options.addToRoiManagerBB, options.addToRoiManagerShapes);
             roiManager.setVisible(true);
         }

@@ -10,12 +10,12 @@ import static fr.curie.miclearning.prediction.model.DjlModelLoader.checkSynsetFi
 
 public class ImageClassificationConfigurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "ai.djl.modality.cv.translator.ImageClassificationTranslatorFactory";
+    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.classification.ImpClassificationTranslatorFactory";
 
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {
         // Return the actual factory class
-        return ImageClassificationTranslatorFactory.class;
+        return ImpClassificationTranslatorFactory.class;
     }
 
     @Override

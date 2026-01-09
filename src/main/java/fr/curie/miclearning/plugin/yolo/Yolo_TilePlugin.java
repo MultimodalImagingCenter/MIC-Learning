@@ -2,6 +2,7 @@ package fr.curie.miclearning.plugin.yolo;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
+import fr.curie.miclearning.tools.ImageJUtils;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
 import ai.djl.modality.cv.output.Mask;
 import ai.djl.modality.cv.output.Rectangle;
@@ -32,8 +33,7 @@ import java.util.stream.Collectors;
 
 import static fr.curie.miclearning.prediction.model.ModelConfigManager.saveConfigToFile;
 import static fr.curie.miclearning.prediction.model.ModelDialogs.addInitialDialogFields;
-import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
-import static fr.curie.miclearning.tools.detection.DetectionUtils.loadClassIDsFromModel;
+import static fr.curie.miclearning.tools.detection.DetectionUtils.*;
 
 /**
  * Plugin to execute Yolo models with tiling option
@@ -58,7 +58,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
     @Override
     public int setup(String s, ImagePlus imagePlus) {
         imp = imagePlus;
-        return DOES_RGB + DOES_8G;
+        return DOES_RGB + DOES_8G + DOES_16;
     }
 
     @Override
@@ -68,12 +68,20 @@ public class Yolo_TilePlugin implements PlugInFilter {
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
         addInitialDialogFields(gd,PREF_LAST_MODEL_KEY);
-        gd.addMessage("__________");
+
         // ask for yolo outputs
-        YoloDialogs.addOutputDialog(gd);
         gd.addMessage("__________");
+        YoloDialogs.addOutputDialog(gd);
+
         // ask for Tiling preferences
+        gd.addMessage("__________");
         TilingDialogs.addTilingDialog(gd);
+
+        //ask if result tables and rois need to be reset
+        gd.addMessage("__________");
+        ModelDialogs.askIfResetResult(gd, true);
+
+        // Show dialog
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
@@ -83,6 +91,12 @@ public class Yolo_TilePlugin implements PlugInFilter {
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY);
         DetectionUtils.OutputOptions segmentOptions = YoloDialogs.getOutputAnswer(gd);
         TilingOptions tileOptions = TilingDialogs.getTilingAnswer(gd);
+        boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
+
+        if (initialChoice == null){
+            IJ.error("Error with initial dialog", "No InitialChoice was created");
+            return;
+        }
 
         // check that model path is valid
         if (!Files.isDirectory(initialChoice.modelPath)) {
@@ -93,6 +107,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
         // --- 2. Try to Load Model ---
         IJ.log("\n --- Starting YOLO prediction");
+        IJ.log("loading model from path " + modelPath);
         DjlModelLoader<ImagePlus, DetectedObjects> modelLoader =
                 new DjlModelLoader<>(ImagePlus.class, DetectedObjects.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<ImagePlus, DetectedObjects> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
@@ -169,6 +184,7 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
             // --- 6. Generate Outputs, based on user choices
             IJ.log(" --- Generating output... ");
+            if (resetPreviousResults)ImageJUtils.resetRMandRT();
             generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
 
             IJ.log(" --- YOLO detection complete.");
@@ -181,39 +197,6 @@ public class Yolo_TilePlugin implements PlugInFilter {
 
     }
 
-    static Map<String, Integer> getClassIdMap(ModelConfig modelConfig, ZooModel<ImagePlus, DetectedObjects> model) {
-        Map<String, Integer> classIdMap = null;
-        // Try with provided info
-        if (modelConfig.getSynsetFilePath() != null && Files.exists(modelConfig.getSynsetFilePath())) {
-            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFilePath().getFileName().toString());
-            if (classIdMap == null) {
-                IJ.log("Failed to load class IDs from: " + modelConfig.getSynsetFilePath() );
-            } else {
-                IJ.log("Successfully loaded class IDs from: "+ modelConfig.getSynsetFilePath().getFileName().toString());
-            }
-        } else if (modelConfig.getSynsetFileName() != null) {
-            classIdMap = loadClassIDsFromModel(model, modelConfig.getSynsetFileName());
-            if (classIdMap == null) {
-                IJ.log("Failed to load class IDs using name: " + modelConfig.getSynsetFileName());
-            } else {
-                IJ.log("Successfully loaded class IDs using name: " + modelConfig.getSynsetFileName());
-            }
-        } else {
-            IJ.log("No synset/labels file specified in serving.properties.");
-        }
-
-        // if no info or loading failed -> try with default name = synset.txt
-        if (classIdMap == null){
-            //try with default name = synset.txt
-            classIdMap = loadClassIDsFromModel(model, "synset.txt");
-            if (classIdMap == null) {
-                IJ.log("Failed to load class IDs from : synset.txt. Using default numeration.");
-            } else {
-                IJ.log("Successfully loaded class IDs using default file name : synset.txt");
-            }
-        }
-        return classIdMap;
-    }
 
     private TiledDetectedObjects runTiledDetection(ZooModel<ImagePlus, DetectedObjects> model, TilingOptions tileOptions, ModelConfig config){
 
