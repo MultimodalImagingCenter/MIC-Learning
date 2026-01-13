@@ -6,7 +6,7 @@
 
     <groupId>fr.curie</groupId>
     <artifactId>MicLearning</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0-SNAPSHOT</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -138,6 +138,20 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>2.23.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apposed</groupId>
+            <artifactId>appose</artifactId>
+            <version>0.9.0</version>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/net.imglib2/imglib2-appose -->
+        <dependency>
+            <groupId>net.imglib2</groupId>
+            <artifactId>imglib2-appose</artifactId>
+            <version>0.4.0</version>
+            <scope>compile</scope>
         </dependency>
 
     </dependencies>
