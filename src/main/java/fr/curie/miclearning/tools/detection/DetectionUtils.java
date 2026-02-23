@@ -31,7 +31,6 @@ public class DetectionUtils {
     
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
-    private static final int MAX_BYTE_VALUE = 255; 
 
     // --- User Output Selection ---
     public static class OutputOptions {
@@ -168,6 +167,7 @@ public class DetectionUtils {
                 IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
                 continue;
             }
+
             boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);
             boundingBoxRoi.setGroup(groupId);
             //imp.setRoi(boundingBoxRoi); // Optional: for visual feedback during processing (+ fun to watch)
@@ -177,6 +177,7 @@ public class DetectionUtils {
             if (box instanceof Mask) {
                 Mask mask = (Mask) box;
                 shapeRoi = createRoiFromBBMask(mask, imageWidth, imageHeight);
+
                 if (shapeRoi != null) {
                     shapeRoi.setName(ROI_MASK_PREFIX + roiName);
                     shapeRoi.setGroup(groupId);
@@ -369,6 +370,7 @@ public class DetectionUtils {
         int maskHeight = probDist.length;
         int maskWidth = probDist[0].length;
         Rectangle rect = mask.getBounds();
+
         int x_offset = 0;
         int y_offset = 0;
         int tile_width = imageWidth;
@@ -393,7 +395,7 @@ public class DetectionUtils {
         ByteProcessor boxProcessor = new ByteProcessor(boxWidth, boxHeight); // Initialized to 0
 
         // Scaling factors
-        // (tile is same scale as image and mask cover the hole tile)
+        // (tile is same scale as image, and mask cover the hole tile)
         final float scaleX = (float) maskWidth / tile_width;
         final float scaleY = (float) maskHeight / tile_height;
 
@@ -433,9 +435,9 @@ public class DetectionUtils {
         ThresholdToSelection t2s = new ThresholdToSelection();
         Roi roi = t2s.convert(boxProcessor);
 
-        // Translation : put the roi in the total image coordinates
+        // put the roi in the total image coordinates
         if (roi != null) {
-            roi.setLocation(x_offset + boxX, y_offset + boxY);
+            roi.setLocation(x_offset + boxX + roi.getBounds().getX()-1, y_offset + boxY + roi.getBounds().getY()-1);
         }
 
         return roi;
@@ -836,7 +838,7 @@ public class DetectionUtils {
         ImageStack maskStack = new ImageStack(imageWidth, imageHeight);
 
         for (ProcessedDetection result : shapeDetections) {
-            ByteProcessor processor = new ByteProcessor(imageWidth, imageHeight);
+            ShortProcessor processor = new ShortProcessor(imageWidth, imageHeight); // even if max_group can only be 255, using shortProcessor for uniformity
             Roi roi = result.getShapeRoi();
             int groupId = result.getGroupId();
             processor.setColor(groupId);
@@ -906,14 +908,7 @@ public class DetectionUtils {
 
         // Check if we exceed 255 classes and need a ShortProcessor
         ImageProcessor processor;
-        if (maxGroupId > MAX_BYTE_VALUE) {
-            IJ.log("Warning: Maximum class ID (" + maxGroupId + ") exceeds 255. Using ShortProcessor for semantic mask.");
-            processor = new ShortProcessor(imageWidth, imageHeight);
-            //processor = imp.getProcessor().createProcessor(imageWidth, imageHeight); // Creates ShortProcessor if needed
-        // Else use Byte processor
-        } else {
-            processor = new ByteProcessor(imageWidth, imageHeight);
-        }
+        processor = new ShortProcessor(imageWidth, imageHeight);
 
         // order detections to have all detection of the same class painted at the same level
         shapeDetections.sort(Comparator.comparingInt(ProcessedDetection::getGroupId));
@@ -1066,13 +1061,7 @@ public class DetectionUtils {
             return new ByteProcessor(width, height);
         }
 
-        // Determine processor type based on instance count
-        if (numInstances > MAX_BYTE_VALUE) {
-            IJ.log("Warning: More than 255 instances detected (" + numInstances + "). Using ShortProcessor for instance mask.");
-            processor = new ShortProcessor(width, height);
-        } else {
-            processor = new ByteProcessor(width, height);
-        }
+        processor = new ShortProcessor(width, height);
 
         // Fill the processor with instance IDs
         int instanceId = 0;
