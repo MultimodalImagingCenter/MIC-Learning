@@ -529,6 +529,30 @@ public class ImageJUtils {
         if (rm != null) {
             rm.reset();
         }
+    }
+
+    public static void deleteRois(Roi[] roiList, RoiManager rm) {
+        if (rm == null || roiList == null) return;
+        Roi[] allRois = rm.getRoisAsArray();
+        ArrayList<Integer> indicesList = new ArrayList<>();
+
+        // 1. Find the indices of the ROIs provided in the roiList
+        for (Roi target : roiList) {
+            for (int i = 0; i < allRois.length; i++) {
+                if (allRois[i].equals(target)) {
+                    indicesList.add(i);
+                    break;
+                }
+            }
+        }
+        // 2. Convert to primitive array for RoiManager
+        if (!indicesList.isEmpty()) {
+            int[] indicesArray = indicesList.stream().mapToInt(i -> i).toArray();
+
+            // 3. Select the ROIs and execute the delete command
+            rm.setSelectedIndexes(indicesArray);
+            rm.runCommand("Delete");
+        }
 
     }
 

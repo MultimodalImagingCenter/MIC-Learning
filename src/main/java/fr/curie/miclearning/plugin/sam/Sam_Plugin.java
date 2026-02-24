@@ -2,30 +2,32 @@ package fr.curie.miclearning.plugin.sam;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
-import fr.curie.miclearning.tools.ImageJUtils;
-import fr.curie.miclearning.tools.detection.DetectedObjects;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.repository.zoo.ZooModel;
 import fr.curie.miclearning.prediction.model.DjlModelLoader;
 import fr.curie.miclearning.prediction.model.ModelConfig;
-import fr.curie.miclearning.prediction.translator.configurator.TranslatorConfigurator;
 import fr.curie.miclearning.prediction.model.ModelDialogs;
+import fr.curie.miclearning.prediction.translator.configurator.TranslatorConfigurator;
+import fr.curie.miclearning.tools.ImageJUtils;
+import fr.curie.miclearning.tools.detection.DetectedObjects;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
+import ij.Macro;
+import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
-import ij.plugin.filter.PlugInFilter;
+import ij.plugin.PlugIn;
+import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
-import ij.process.ImageProcessor;
-import ij.process.ShortProcessor;
 
 import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 
@@ -34,8 +36,22 @@ import static fr.curie.miclearning.prediction.model.ModelDialogs.addInitialDialo
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class Sam_Plugin implements PlugInFilter {
+public class Sam_Plugin implements PlugIn, DialogListener {
+
     protected static ImagePlus imp;
+    private int groupNumber; // Number of ROI groups
+
+    // parameters
+    private String[] negativeGroupSelection; // list of group to display to select a negative group
+    private ModelDialogs.InitialChoice initialChoice;
+    private DetectionUtils.OutputOptions outputOptions;
+    private int negativeGroup;
+    private boolean onlyPositiveGroups;
+
+    // dialog components
+    Checkbox addToRoiManagerCheckbox;
+    Checkbox resetPreviousRoi;
+
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam";
     private final int MAX_GROUP_VALUE = 255;
     private final String ONLY_POSITIVE_TXT = "no negative group";
@@ -51,33 +67,38 @@ public class Sam_Plugin implements PlugInFilter {
     private final String[] ENGINE_CHOICES = {"", "PyTorch"};
 
     @Override
-    public int setup(String s, ImagePlus imagePlus) {
-        imp = imagePlus;
-        return DOES_RGB + DOES_8G;
-    }
+    public void run(String s) {
+        // --- 1. set up ---
+        // 1.1 get selected image
+        imp = IJ.getImage(); // select active image
+        // TODO : check that image has correct format
+        if (imp == null) {
+            IJ.error("no image opened");
+            return;
+        }
 
-    @Override
-    public void run(ImageProcessor imageProcessor) {
-        // get ROIs list
+        // 1.2 get ROIs list
         RoiManager roiManager = getRoiManager();
         Roi[] roiList = roiManager.getSelectedRoisAsArray();
         if (roiList.length == 0) {
             IJ.error("at least one roi in the ROI manager is required to run a sam segmentation");
             return;
         }
+
+        // 1.3 link Roi ID to names
         // get ROI groups IDs list
         Set<Integer> uniqueGroups = new TreeSet<>();
         for (Roi roi : roiList) {
             uniqueGroups.add(roi.getGroup());
         }
-
-        int groupNumber = uniqueGroups.size();
+        groupNumber = uniqueGroups.size();
 
         // create id-name map list + prepare generic dialog
         Map<String, Integer> classIdMap = new HashMap<>(); // list to map class name (string) to roi group id (must be integer)
         //usefull if roi result from a previous yolo/detr detection
 
-        String[] negativeGroupSelection = new String[uniqueGroups.size() + 1]; // names that will be displayed in generic dialog
+        // create list of group that will be displayed
+        negativeGroupSelection = new String[uniqueGroups.size() + 1]; // names that will be displayed in generic dialog
         negativeGroupSelection[0] = ONLY_POSITIVE_TXT;
         int i = 1;
         for (int groupId :  uniqueGroups) {
@@ -94,39 +115,16 @@ public class Sam_Plugin implements PlugInFilter {
             i++;
         }
 
-
-        // --- 1. initial dialog box ---
-        GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
-        // Prompt user for model repository + config info
-        addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
-
-        // ask for SAM outputs
-        gd.addMessage("__________");
-        SamDialogs.addOutputDialog(gd);
-
-        //ask if result tables and rois need to be reset
-        gd.addMessage("__________");
-        ModelDialogs.askIfResetResult(gd);
-
-        //if multiple ROI groups, ask if one of them corresponds to negative prompts
-        SamDialogs.addNegativeGroupDialog(gd, groupNumber, negativeGroupSelection);
-
-        // Show dialog
-        gd.showDialog();
-        if (gd.wasCanceled()) {
-            return; // User canceled
+        // -- 2. retrieve parameters --
+        if (Macro.getOptions() != null) {
+            //IJ.log("macro options");
+            parseMacro();
+        } else {
+            askUser();
         }
 
-        // retrieve choices
-        ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY );
-        DetectionUtils.OutputOptions segmentOptions = SamDialogs.getOutputAnswer(gd);
-        boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
-
-        int negativeGroup = SamDialogs.getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
-        boolean onlyPositiveGroups = negativeGroup == -1;
-
         if (initialChoice == null){
-            IJ.error("Error with initial dialog", "No InitialChoice was created");
+            //IJ.log("No InitialChoice was created");
             return;
         }
 
@@ -135,12 +133,13 @@ public class Sam_Plugin implements PlugInFilter {
             IJ.error("Invalid Path", "The selected path is not a valid directory.");
             return;
         }
+
         Path modelPath = initialChoice.modelPath;
 
+        recordInMacro();
 
-
-        // --- 2. Try to Load Model ---
-        IJ.log("\n --- Starting SAM prediction");
+        // -- 3. Try to Load Model ---
+        IJ.log("--- Starting SAM prediction");
         DjlModelLoader<ImpSam2Translator.ImpSam2Input, DetectedObjects> modelLoader =
                 new DjlModelLoader<>(ImpSam2Translator.ImpSam2Input.class, DetectedObjects.class, KNOWN_CONFIGURATORS, ENGINE_CHOICES);
         DjlModelLoader.LoadedModel<ImpSam2Translator.ImpSam2Input, DetectedObjects> loadedResult = modelLoader.loadModel(modelPath, initialChoice);
@@ -155,13 +154,13 @@ public class Sam_Plugin implements PlugInFilter {
             return;
         }
 
-        // --- 3. Get model + config ---
+        // --- 4. Get model + config ---
         try (ZooModel<ImpSam2Translator.ImpSam2Input, DetectedObjects> model = loadedResult.getModel();
              Predictor<ImpSam2Translator.ImpSam2Input, DetectedObjects> predictor = model.newPredictor()) {
             ModelConfig modelConfig = loadedResult.getConfig();
 
-            // --- 4. Prepare prediction ---
-            // Identify all positive and negative ROIs
+            // --- 5. Prepare prediction ---
+            // 5.1 Identify all positive and negative ROIs
             List<Roi> positiveRois = new ArrayList<>();
             List<Roi> negativeRois = new ArrayList<>();
 
@@ -183,7 +182,7 @@ public class Sam_Plugin implements PlugInFilter {
                 return;
             }
 
-            // prepare results list
+            // 5.2  prepare results list
             List<String> classNames = new ArrayList<>();
             List<Double> probabilities = new ArrayList<>();
             List<BoundingBox> boundingBoxes = new ArrayList<>();
@@ -191,13 +190,13 @@ public class Sam_Plugin implements PlugInFilter {
             // create a Session Manager for the image features
             try (NDManager sessionManager = model.getNDManager().newSubManager()) {
 
-                // encode image
+                // 5.3 encode image
                 IJ.log("Encoding image...");
                 ImpSam2Translator translator = (ImpSam2Translator) model.getTranslator();
                 NDList encodedImage = translator.encode(model, imp, sessionManager);
                 IJ.log("image encoded");
 
-                // --- 5. for each object, 1 prediction ---
+                // --- 6. for each object, 1 prediction ---
                 for (Roi roi : positiveRois){
                     // create input
                     // one input per box/point/group of point
@@ -257,8 +256,8 @@ public class Sam_Plugin implements PlugInFilter {
 
                 // --- 8. generate Outputs, based on user choices
                 IJ.log(" --- Generating output... ");
-                if (resetPreviousResults) ImageJUtils.resetRMandRT();
-                generateOutputs(imp, processedDetections, segmentOptions, classIdMap);
+                if (outputOptions.deletePreviousRoi) ImageJUtils.deleteRois(roiList, roiManager);
+                generateOutputs(imp, processedDetections, outputOptions, classIdMap);
 
 
                 IJ.log(" --- SAM detection complete.");
@@ -266,8 +265,109 @@ public class Sam_Plugin implements PlugInFilter {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+
+        }
+    }
+
+
+    private void parseMacro() {
+        IJ.log("\nSAM segmentation on macro");
+        String options = Macro.getOptions();
+
+        String dirPath = Macro.getValue(options, "model_directory", null);
+        if (dirPath == null){
+            IJ.error("No model directory specified.");
+            return;
+        }
+        String propsFileName = Macro.getValue(options, "properties_file_name", "serving.properties");
+        boolean forceManual = false;
+
+        Path modelPath = Paths.get(dirPath);
+
+        initialChoice = new ModelDialogs.InitialChoice(modelPath, propsFileName, forceManual);
+
+        outputOptions = new DetectionUtils.OutputOptions();
+        outputOptions.addToRoiManagerBB = false; // bounding boxes are not an output of SAM
+        outputOptions.addToRoiManagerShapes = Boolean.parseBoolean(Macro.getValue(options, "add_shape_rois", "false"));
+        outputOptions.deletePreviousRoi = Boolean.parseBoolean(Macro.getValue(options, "replace_roi", "false"));
+        outputOptions.createStackMask = Boolean.parseBoolean(Macro.getValue(options, "create_stack_mask", "false"));
+        outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false"));
+        outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false"));
+        outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"));
+
+        negativeGroup = Integer.parseInt(Macro.getValue(options, "negative_group_id", "-1"));
+        onlyPositiveGroups = negativeGroup == -1;
+    }
+
+    private void recordInMacro() {
+        Recorder.setCommand("SAM segmentation");
+        Recorder.recordOption("model_directory", String.valueOf(initialChoice.modelPath));
+        Recorder.recordOption("properties_file_name", String.valueOf(initialChoice.propertiesFileName));
+        if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois", String.valueOf(true));
+        if (outputOptions.deletePreviousRoi) Recorder.recordOption("replace_roi", String.valueOf(true));
+        if (outputOptions.createStackMask) Recorder.recordOption("create_stack_mask", String.valueOf(true));
+        if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
+        if (outputOptions.createSemanticMask) Recorder.recordOption("create_semantic_mask", String.valueOf(true));
+        if (outputOptions.createInstanceMaskPerClass) Recorder.recordOption("create_instance_mask_per_class", String.valueOf(true));
+
+        if (!onlyPositiveGroups){
+            Recorder.recordOption("negative_group_id", String.valueOf(negativeGroup));
+        }
+    }
+
+    private void askUser() {
+        GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
+        // Prompt user for model repository + config info
+        addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
+
+        // ask for SAM outputs
+        gd.addMessage("__________");
+        SamDialogs.addOutputDialog(gd);
+
+        //if multiple ROI groups, ask if one of them corresponds to negative prompts
+        SamDialogs.addNegativeGroupDialog(gd, groupNumber, negativeGroupSelection);
+
+        gd.addDialogListener(this);
+
+        Vector<?> checkboxesVector = gd.getCheckboxes();
+        if (checkboxesVector != null && checkboxesVector.size() > 1) {
+            addToRoiManagerCheckbox = (Checkbox) checkboxesVector.get(1);
+            resetPreviousRoi = (Checkbox) checkboxesVector.get(2);
         }
 
+        // Show dialog
+        gd.showDialog();
+        if (gd.wasCanceled()) {
+            return; // User canceled
+        }
+
+        // retrieve choices
+        initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY );
+        outputOptions = SamDialogs.getOutputAnswer(gd);
+
+        negativeGroup = SamDialogs.getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
+        onlyPositiveGroups = negativeGroup == -1;
+
+        IJ.log("\n");
+    }
+    @Override
+    public boolean dialogItemChanged(GenericDialog genericDialog, AWTEvent e) {
+        if (e == null || addToRoiManagerCheckbox == null || resetPreviousRoi == null) {
+            return true;
+        }
+        Object source = e.getSource();
+        if (source == addToRoiManagerCheckbox) {
+            boolean state = addToRoiManagerCheckbox.getState();
+            updateResetRoiBoxVisibility(state);
+            return true;
+        }
+        return true;
+    }
+
+    private void updateResetRoiBoxVisibility(boolean roiAddedState){
+        if ( addToRoiManagerCheckbox == null || resetPreviousRoi == null) return;
+        if (!roiAddedState) resetPreviousRoi.setState(false);
+        resetPreviousRoi.setEnabled(roiAddedState);
     }
 
     /**
@@ -295,5 +395,4 @@ public class Sam_Plugin implements PlugInFilter {
             builder.addBox(x, y, right, bottom);
         }
     }
-
 }

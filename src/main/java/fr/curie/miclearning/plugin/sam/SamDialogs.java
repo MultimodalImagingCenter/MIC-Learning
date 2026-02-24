@@ -22,19 +22,22 @@ public class SamDialogs {
     public static void addOutputDialog(GenericDialog gd) {
         gd.addMessage("Select the outputs to generate:");
 
-        gd.addCheckbox("Add_Shape_ROIs to ROI Manager", false);
-
-        gd.addMessage("Warning : class is deducted from ROI group. If ROI has no group, group will be assigned 255.");
+        gd.addCheckbox("Add_Shape_ROIs to ROI Manager", true);
+        gd.addCheckbox("    Replace input ROIs by results ROIs", false);
         gd.addCheckbox("Create_Stack_Mask (one slice per instance, unique value per class)", false);
         gd.addCheckbox("Create_Instance_Mask (unique value per instance)", false);
         gd.addCheckbox("Create_Semantic_Mask (unique value per class)", false);
         gd.addCheckbox("Create_Instance_Mask_per_Class (one slice per stack)", false);
+
+        // TODO : add this message only if one ROI group is 0
+        gd.addMessage("Warning : class is deducted from ROI group. If ROI has no group, group will be assigned 255.");
     }
 
     public static DetectionUtils.OutputOptions getOutputAnswer(GenericDialog gd) {
         DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
-        options.addToRoiManagerBB = false; // bouding boxes are not an output of SAM
+        options.addToRoiManagerBB = false; // bounding boxes are not an output of SAM
         options.addToRoiManagerShapes = gd.getNextBoolean();
+        options.deletePreviousRoi = gd.getNextBoolean();
         options.createStackMask = gd.getNextBoolean();
         options.createInstanceMask = gd.getNextBoolean();
         options.createSemanticMask = gd.getNextBoolean();

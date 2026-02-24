@@ -41,6 +41,8 @@ public class DetectionUtils {
         public boolean createSemanticMask = false;
         public boolean createInstanceMaskPerClass = false;
         public boolean showDetectionResultTables = false;
+        public boolean deletePreviousRoi = false;
+        public boolean deletePreviousRT = false; // delete previous result table
     }
 
     // --- ROI names prefix ---
@@ -111,7 +113,7 @@ public class DetectionUtils {
 
         if (useExternalMap) {
             nextGroupId = null;
-            IJ.log("Using provided external class ID map for ROI groups.");
+            //IJ.log("Using provided external class ID map for ROI groups.");
         } else {
             IJ.log("No external class ID map used.");
             dynamicClassIdMap = new HashMap<>();
@@ -225,7 +227,7 @@ public class DetectionUtils {
 
         if (useExternalMap) {
             nextGroupId = null;
-            IJ.log("Using provided external class ID map for ROI groups.");
+            //IJ.log("Using provided external class ID map for ROI groups.");
         } else {
             IJ.log("No external class ID map used.");
             dynamicClassIdMap = new HashMap<>();
