@@ -66,7 +66,7 @@ public class DjlModelLoader<I, O> {
             IJ.log("Attempting to load model directly....");
             try {
                 ZooModel<I, O> model = tryLoadWithConfig(modelPath, baseConfig);
-                IJ.log(" --- Model loaded successfully: " + baseConfig.getModelName() + " ---");
+                IJ.log(" --- Model successfully loaded: " + baseConfig.getModelName() + " ---");
                 return new LoadedModel<>(model, baseConfig, false); // Success, no rewrite needed
             } catch (Exception e) {
                 IJ.log("Could not load model: " + e.getMessage());
