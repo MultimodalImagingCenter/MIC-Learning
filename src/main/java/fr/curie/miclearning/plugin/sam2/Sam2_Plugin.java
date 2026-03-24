@@ -52,7 +52,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
     Checkbox addToRoiManagerCheckbox;
     Checkbox resetPreviousRoi;
 
-    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam";
+    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam2";
     private final int MAX_GROUP_VALUE = 255;
     private final String ONLY_POSITIVE_TXT = "no negative group";
     private final String GROUP_ZERO_TXT = "0 (ROI without group)";
@@ -81,7 +81,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
         RoiManager roiManager = getRoiManager();
         Roi[] roiList = roiManager.getSelectedRoisAsArray();
         if (roiList.length == 0) {
-            IJ.error("at least one roi in the ROI manager is required to run a sam segmentation");
+            IJ.error("at least one roi in the ROI manager is required to run a sam2 segmentation");
             return;
         }
 
@@ -271,7 +271,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
 
 
     private void parseMacro() {
-        IJ.log("\nSAM segmentation on macro");
+        IJ.log("\nSAM2 segmentation on macro");
         String options = Macro.getOptions();
 
         String dirPath = Macro.getValue(options, "model_directory", null);
@@ -350,6 +350,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
 
         IJ.log("\n");
     }
+
     @Override
     public boolean dialogItemChanged(GenericDialog genericDialog, AWTEvent e) {
         if (e == null || addToRoiManagerCheckbox == null || resetPreviousRoi == null) {
