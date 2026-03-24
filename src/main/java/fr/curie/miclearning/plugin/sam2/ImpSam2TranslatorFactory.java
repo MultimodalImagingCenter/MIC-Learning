@@ -1,4 +1,4 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import ai.djl.Model;
 import ai.djl.modality.Input;
