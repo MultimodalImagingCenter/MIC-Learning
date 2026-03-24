@@ -26,6 +26,13 @@
         </dependencies>
     </dependencyManagement>
 
+    <repositories>
+        <repository>
+            <id>scijava.public</id>
+            <url>https://maven.scijava.org/content/repositories/public/</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <!-- ImageJ -->
         <dependency>
@@ -144,7 +151,7 @@
         <dependency>
             <groupId>org.apposed</groupId>
             <artifactId>appose</artifactId>
-            <version>0.9.0</version>
+            <version>0.11.0</version>
         </dependency>
 
         <!-- Source: https://mvnrepository.com/artifact/net.imglib2/imglib2-appose -->
@@ -153,6 +160,12 @@
             <artifactId>imglib2-appose</artifactId>
             <version>0.4.0</version>
             <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>net.imglib2</groupId>
+            <artifactId>imglib2-ij</artifactId>
+            <version>2.0.2</version>
         </dependency>
 
     </dependencies>

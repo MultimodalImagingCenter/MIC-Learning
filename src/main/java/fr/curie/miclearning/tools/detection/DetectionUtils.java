@@ -28,7 +28,7 @@ import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class DetectionUtils {
-    
+
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
 
@@ -176,9 +176,8 @@ public class DetectionUtils {
 
             // --- Create Shape ROI (if mask available) ---
             Roi shapeRoi = null;
-            if (box instanceof Mask) {
-                Mask mask = (Mask) box;
-                shapeRoi = createRoiFromBBMask(mask, imageWidth, imageHeight);
+            if (box instanceof Mask || box instanceof MaskByte) {
+                shapeRoi = box instanceof Mask ? createRoiFromBBMask((Mask) box, imageWidth, imageHeight) : createRoiFromBBMask((MaskByte) box, imageWidth, imageHeight);
 
                 if (shapeRoi != null) {
                     shapeRoi.setName(ROI_MASK_PREFIX + roiName);
@@ -197,9 +196,9 @@ public class DetectionUtils {
 
             if (returnAllScores) {
                 DetailedDetectedObjects.DetailedDetectedObject detailedItem = (DetailedDetectedObjects.DetailedDetectedObject) item;
-                 if(detailedItem.getAllScore()!=null) {
-                     processedDetection.setAllScore(detailedItem.getAllScore());
-                 }
+                if(detailedItem.getAllScore()!=null) {
+                    processedDetection.setAllScore(detailedItem.getAllScore());
+                }
             }
 
             processedResults.add(processedDetection);
@@ -283,9 +282,8 @@ public class DetectionUtils {
 
             // --- Create Shape ROI (if mask available) ---
             Roi shapeRoi = null;
-            if (box instanceof Mask) {
-                Mask mask = (Mask) box;
-                shapeRoi = createRoiFromBBMask(mask, imageWidth, imageHeight, tileParameter);
+            if (box instanceof Mask || box instanceof MaskByte) {
+                shapeRoi = box instanceof Mask ? createRoiFromBBMask((Mask) box, imageWidth, imageHeight) : createRoiFromBBMask((MaskByte) box, imageWidth, imageHeight);
                 if (shapeRoi != null) {
                     shapeRoi.setName(ROI_MASK_PREFIX + roiName);
                     shapeRoi.setGroup(groupId);
@@ -334,7 +332,7 @@ public class DetectionUtils {
 
         // Ensure coordinates/dimensions are within image bounds
         if (x <0 || y<0 || x+width >imageWidth || y+height>imageHeight){
-            IJ.log("Warning: Bounding box ROI outside of image bounds. The bounding box will be cropped.");
+            //IJ.log("Warning: Bounding box ROI outside of image bounds. The bounding box will be cropped.");
             // if not inside image bounds, crop bounding box
             if (x <0) x=0;
             if (y<0) y=0;
@@ -353,11 +351,15 @@ public class DetectionUtils {
         return createRoiFromBBMask(mask, imageWidth, imageHeight, null);
     }
 
+    private static Roi createRoiFromBBMask(MaskByte mask, int imageWidth, int imageHeight) {
+        return createRoiFromBBMask(mask, imageWidth, imageHeight, null);
+    }
+
     /**
      * Create a shape ROI from a DJL Mask (= class of DJL Bounding box)
      * Only keep the inside of the bounding box
      *
-     * @param mask          The mask object (has the same dimensions as the tile)
+     * @param mask          The mask object (mask has the same dimensions as the tile)
      * @param imageWidth    Width of the source ImagePlus
      * @param imageHeight   Height of the source ImagePlus
      * @return A ShapeRoi or null if probability distribution is missing
@@ -371,7 +373,7 @@ public class DetectionUtils {
 
         int maskHeight = probDist.length;
         int maskWidth = probDist[0].length;
-        Rectangle rect = mask.getBounds();
+        Rectangle rect =  mask.getBounds();
 
         int x_offset = 0;
         int y_offset = 0;
@@ -429,6 +431,98 @@ public class DetectionUtils {
 
         if (!pixelSet) {
             IJ.log("Info: No pixels passed the threshold " + MASK_THRESHOLD);
+            return null;
+        }
+
+        // Create ROI from the thresholded mask (inside the box coordinates)
+        boxProcessor.setThreshold(128, 255, ImageProcessor.BLACK_AND_WHITE_LUT);
+        ThresholdToSelection t2s = new ThresholdToSelection();
+        Roi roi = t2s.convert(boxProcessor);
+
+        // put the roi in the total image coordinates
+        if (roi != null) {
+            roi.setLocation(x_offset + boxX + roi.getBounds().getX(), y_offset + boxY + roi.getBounds().getY());
+        }
+
+        return roi;
+    }
+
+    /**
+     * Create a shape ROI from a DJL Mask (= class of DJL Bounding box)
+     * Only keep the inside of the bounding box
+     *
+     * @param mask          The mask object (mask has the same dimensions as the tile)
+     * @param imageWidth    Width of the source ImagePlus
+     * @param imageHeight   Height of the source ImagePlus
+     * @return A ShapeRoi or null if probability distribution is missing
+     */
+    private static Roi createRoiFromBBMask(MaskByte mask, int imageWidth, int imageHeight, TileParameter tileParameter) {
+        byte[][] probDist = mask.getMask(); // initial mask
+        if (probDist == null || probDist.length == 0 || probDist[0].length == 0) {
+            IJ.log("Warning: Mask probability distribution is null or empty.");
+            return null;
+        }
+
+        int maskHeight = probDist.length;
+        int maskWidth = probDist[0].length;
+        Rectangle rect =  mask.getBounds();
+
+        int x_offset = 0;
+        int y_offset = 0;
+        int tile_width = imageWidth;
+        int tile_height = imageHeight;
+        if (tileParameter != null) {
+            if (tileParameter.validTile()) {
+                x_offset = tileParameter.x_offset;
+                y_offset = tileParameter.y_offset;
+                tile_width = tileParameter.tile_width;
+                tile_height = tileParameter.tile_height;
+            }
+        }
+
+        // Calculate pixel coordinates within the tile for the bounding box
+        int boxX = (int) (rect.getX() * tile_width);
+        int boxY = (int) (rect.getY() * tile_height);
+        int boxWidth = (int) (rect.getWidth() * tile_width);
+        int boxHeight = (int) (rect.getHeight() * tile_height);
+
+        // Create a temporary mask processor covering the bounding box
+        // (same scale as the total image)
+        ByteProcessor boxProcessor = new ByteProcessor(boxWidth, boxHeight); // Initialized to 0
+
+        // Scaling factors
+        // (tile is same scale as image, and mask cover the hole tile)
+        final float scaleX = (float) maskWidth / tile_width;
+        final float scaleY = (float) maskHeight / tile_height;
+
+
+        boolean pixelSet = false; // Track if any pixel passes the threshold
+
+        // Iterate through target pixels within the bounding box
+        for (int boxTargetY = 0; boxTargetY < boxY + boxHeight; boxTargetY++) {
+            for (int boxTargetX = 0; boxTargetX < boxX + boxWidth; boxTargetX++) {
+
+                // map to target tile coordinates
+                int tileTargetY = boxTargetY + boxY;
+                int tileTargetX = boxTargetX + boxX;
+                // Map target tiles coordinates back to the mask's coordinates
+                int maskJ = (int) Math.floor(tileTargetX * scaleX);
+                int maskK = (int) Math.floor(tileTargetY * scaleY);
+
+                // Boundary check for the mask indices
+                if (maskJ >= 0 && maskJ < maskWidth && maskK >= 0 && maskK < maskHeight) {
+                    // Check probability threshold
+                    if (probDist[maskK][maskJ] == 1) {
+                        // make the pixel white
+                        boxProcessor.putPixel(boxTargetX, boxTargetY, MASK_FOREGROUND_COLOR);
+                        pixelSet = true;
+                    }
+                }
+            }
+        }
+
+        if (!pixelSet) {
+            IJ.log("Info: All masks pixel were 0");
             return null;
         }
 
@@ -850,6 +944,7 @@ public class DetectionUtils {
 
         ImagePlus impMask = new ImagePlus("Stack Mask", maskStack);
         IJ.log("Stack of binary masks created.");
+        impMask.setDisplayRange(0, 255);
         setGlasbeyLut(impMask);
         return impMask;
     }
@@ -881,6 +976,7 @@ public class DetectionUtils {
 
         ImagePlus instanceImage = new ImagePlus("Instance Mask", processor);
         IJ.log("Instance mask created.");
+        instanceImage.setDisplayRange(0, 255);
         setGlasbeyLut(instanceImage);
         return instanceImage;
     }
@@ -924,6 +1020,7 @@ public class DetectionUtils {
 
         ImagePlus semanticImage = new ImagePlus("Semantic Mask", processor);
         IJ.log("Semantic mask created.");
+        semanticImage.setDisplayRange(0, 255);
         setGlasbeyLut(semanticImage);
         return semanticImage;
     }
@@ -1040,6 +1137,7 @@ public class DetectionUtils {
 
         ImagePlus classStackImage = new ImagePlus("Instance Mask per Class", classStack);
         IJ.log("Instance mask per class stack created");
+        classStackImage.setDisplayRange(0, 255);
         setGlasbeyLut(classStackImage); // Apply LUT
         return classStackImage;
     }
@@ -1076,6 +1174,7 @@ public class DetectionUtils {
                 IJ.log("Warning: Found detection without a Shape ROI during processor filling. Skipping this instance.");
             }
         }
+        processor.setThreshold(0, 0, ImageProcessor.NONE);
         return processor;
     }
 
