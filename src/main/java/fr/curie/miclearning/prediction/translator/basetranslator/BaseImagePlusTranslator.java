@@ -149,7 +149,6 @@ public abstract class BaseImagePlusTranslator<T> implements Translator<ImagePlus
         ctx.setAttachment("processedWidth", shape.get(shape.dimension() - 1));
         ctx.setAttachment("processedHeight", shape.get(shape.dimension() - 2));
 
-        IJ.log("input shape at the end of pre-processing: " + shape);
         return list;
     }
 

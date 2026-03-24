@@ -99,7 +99,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
         } else {
             Prefs.set(PREF_CLASS_FILE_PATH, "");
         }
-        IJ.log("imp1" + imp1);
+        IJ.log("imp1: " + imp1);
         //Input Validation
         if (imp1 == null) {
             IJ.error("Mask Conversion", "Invalid image selection or missing Image.");

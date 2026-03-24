@@ -1,4 +1,4 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.output.BoundingBox;
@@ -33,7 +33,7 @@ import static fr.curie.miclearning.prediction.model.ModelDialogs.addInitialDialo
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class Sam_Plugin implements PlugInFilter {
+public class Sam2_Plugin implements PlugInFilter {
     protected static ImagePlus imp;
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam";
 
@@ -69,7 +69,7 @@ public class Sam_Plugin implements PlugInFilter {
 
         // ask for SAM outputs
         gd.addMessage("__________");
-        SamDialogs.addOutputDialog(gd);
+        Sam2Dialogs.addOutputDialog(gd);
 
         //ask if result tables and rois need to be reset
         gd.addMessage("__________");
@@ -83,7 +83,7 @@ public class Sam_Plugin implements PlugInFilter {
 
         // retrieve choices
         ModelDialogs.InitialChoice initialChoice = ModelDialogs.getInitialChoice(gd, PREF_LAST_MODEL_KEY );
-        DetectionUtils.OutputOptions segmentOptions = SamDialogs.getOutputAnswer(gd);
+        DetectionUtils.OutputOptions segmentOptions = Sam2Dialogs.getOutputAnswer(gd);
         boolean resetPreviousResults = ModelDialogs.getIfResetResult(gd);
 
         if (initialChoice == null){

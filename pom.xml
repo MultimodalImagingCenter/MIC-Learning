@@ -32,6 +32,7 @@
             <groupId>net.imagej</groupId>
             <artifactId>ij</artifactId>
             <version>1.53t</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- DJL main API-->
