@@ -5,6 +5,8 @@
 - plugin SAM3 - detection on 1 image - with multi text prompts
 - type of BoundingBox for DetectedObjects : MaskByte (mask stored as Byte array instead of double array)
 - license
+- readme and changelog
+- instruction files to add models, run detection and utility plug-ins
 
 ### Change
 - methods to generate Roi from DetectedObject accept MaskByte

@@ -64,7 +64,7 @@ public class ModelDialogs {
 
         gd.addDirectoryField("Model_Directory:", defaultDir, 60);
         gd.addStringField("Properties_File_Name:", DEFAULT_PROPERTIES_FILENAME, 30);
-        gd.addCheckbox("Show_manual_configuration_dialog", false);
+        gd.addCheckbox("Manual_configuration (write properties file)", false);
     }
     public static void addInitialDialogFields(GenericDialog gd){
         addInitialDialogFields(gd, PREF_LAST_MODEL_DIR);
