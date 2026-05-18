@@ -1,14 +1,11 @@
 import appose
 import torch
 from PIL import Image
-import matplotlib.pyplot as plt
 import numpy as np
 from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
 from sam3.model.box_ops import box_xywh_to_cxcywh
-from sam3.visualization_utils import draw_box_on_image, normalize_bbox, plot_results
-import logging
-from PIL import Image
+
 
 # send messages to Java via appose
 appose_mode = 'task' in globals()

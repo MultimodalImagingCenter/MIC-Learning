@@ -17,6 +17,9 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Sam3Dialogs {
 
+    public static final String ONLY_POSITIVE_TXT = "no negative group";
+    public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
+
     public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
         String defaultDir = null;
         String lastDir = Prefs.get(lastModelPrefKey, defaultDir);
@@ -24,6 +27,18 @@ public class Sam3Dialogs {
             defaultDir = lastDir;
         } else {
             defaultDir = getDefaultSam3ModelsDir();
+        }
+
+        gd.addDirectoryField("Model_Path:", defaultDir, 60);
+    }
+
+    public static void addModelPathDialogHg(GenericDialog gd, String lastModelPrefKey) {
+        String defaultDir = null;
+        String lastDir = Prefs.get(lastModelPrefKey, defaultDir);
+        if (lastDir != null && Files.isDirectory(Paths.get(lastDir))) {
+            defaultDir = lastDir;
+        } else {
+            defaultDir = getDefaultSam3ModelsDirHg();
         }
 
         gd.addDirectoryField("Model_Path:", defaultDir, 60);
@@ -230,6 +245,29 @@ public class Sam3Dialogs {
         }
     }
 
+    private static String getDefaultSam3ModelsDirHg() {
+        String imagejRoot = IJ.getDirectory("imagej");
+
+        if (imagejRoot != null) {
+            Path modelPath = Paths.get(imagejRoot, "models", "sam3","model.safetensors");
+            // Check if the file 'sam3/model.safetensors' exist in the 'models' folder
+            if (Files.exists(modelPath)) {
+                return modelPath.getParent().toString();
+            } else {
+                // check in the MiclearningModels folder
+                modelPath = Paths.get(imagejRoot, "models", "MicLearningModels", "sam3","model.safetensors");
+                if (Files.exists(modelPath)) {
+                    return modelPath.getParent().toString();
+                } else {
+                    return IJ.getDirectory("home"); // Fallback to user's home directory
+                }
+            }
+        } else {
+            //IJ.log("Warning: Could not determine ImageJ installation directory. Defaulting to user home.");
+            return IJ.getDirectory("home"); // Fallback to user's home directory
+        }
+    }
+
     public static void addDownloadInstruction() {
         GenericDialog gd = new GenericDialog("instructions to download SAM3 model");
         gd.addMessage("The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
@@ -240,7 +278,37 @@ public class Sam3Dialogs {
                 "Once your access request is approved, you can download the \"sam3.pt\" file and place it in the \"models\" subfolder of ImageJ.");
         gd.hideCancelButton();
         gd.showDialog();
-
     }
 
+    public static void addBoxGroupInstructions(GenericDialog gd ,int roiNumber, int groupNumber){
+        gd.addMessage("Only rectangle ROIs, selected in the ROI manager, will be processed.");
+        gd.addMessage("   number of selected ROI(s): " + roiNumber);
+        gd.addMessage("   number of group(s): " + groupNumber);
+        gd.addMessage("Assign the same group ID to ROIs that belong to the same semantic category. \n" +
+                "The system will launch a separate detection for each group, using all ROIs within that group as input.\n " +
+                "Note: Group \"0\" will be internally remapped to \"255\" for processing.\n");
+    }
+
+    public static void addNegativeGroupDialog(GenericDialog gd, int groupNumber, String[] negativeGroupSelection) {
+        //if multiple ROI groups, ask if one of them corresponds to negative prompts
+        if (groupNumber > 1) {
+            gd.addMessage("One group can be labeled as \"negative\" to exclude specific areas.");
+            gd.addMessage("All ROIs in this group will act as negative prompts across all detection, ensuring they are ignored by the model.");
+            gd.addChoice("negative group ID: ", negativeGroupSelection, negativeGroupSelection[0]);
+        }
+    }
+
+    public static int getNegativeGroup(GenericDialog gd, int groupNumber, String ONLY_POSITIVE_TXT, String GROUP_ZERO_TXT){
+        if (groupNumber > 1) {
+            String negativeGroupName = gd.getNextChoice();
+            if (!Objects.equals(negativeGroupName, ONLY_POSITIVE_TXT)) {
+                if (Objects.equals(negativeGroupName, GROUP_ZERO_TXT)){
+                    return  0;
+                } else {
+                    return Integer.parseInt(negativeGroupName);
+                }
+            }
+        }
+        return -1; // no negative group
+    }
 }
