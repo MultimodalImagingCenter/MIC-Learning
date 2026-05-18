@@ -1,4 +1,4 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import ai.djl.Model;
 import ai.djl.ModelException;
@@ -16,7 +16,7 @@ import ai.djl.ndarray.types.DataType;
 import ai.djl.ndarray.types.Shape;
 import ai.djl.translate.*;
 import com.google.gson.annotations.SerializedName;
-import fr.curie.miclearning.plugin.sam.ImpSam2Translator.ImpSam2Input;
+import fr.curie.miclearning.plugin.sam2.ImpSam2Translator.ImpSam2Input;
 import ij.IJ;
 import ij.ImagePlus;
 import org.apache.commons.io.IOUtils;

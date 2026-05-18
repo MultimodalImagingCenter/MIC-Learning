@@ -1,4 +1,4 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import ai.djl.MalformedModelException;
 import fr.curie.miclearning.tools.detection.DetectedObjects;

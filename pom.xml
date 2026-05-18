@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>fr.curie</groupId>
-    <artifactId>MIC-Learning</artifactId>
-    <version>1.0</version>
+    <artifactId>MicLearning</artifactId>
+    <version>1.1.0</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -25,6 +25,13 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <repositories>
+        <repository>
+            <id>scijava.public</id>
+            <url>https://maven.scijava.org/content/repositories/public/</url>
+        </repository>
+    </repositories>
 
     <dependencies>
         <!-- ImageJ -->
@@ -128,17 +135,24 @@
             <artifactId>commons-lang3</artifactId>
             <version>3.18.0</version>
         </dependency>
-
         <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>2.23.1</version>
+            <groupId>org.apposed</groupId>
+            <artifactId>appose</artifactId>
+            <version>0.11.0</version>
+        </dependency>
+
+        <!-- Source: https://mvnrepository.com/artifact/net.imglib2/imglib2-appose -->
+        <dependency>
+            <groupId>net.imglib2</groupId>
+            <artifactId>imglib2-appose</artifactId>
+            <version>0.4.0</version>
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>2.23.1</version>
+            <groupId>net.imglib2</groupId>
+            <artifactId>imglib2-ij</artifactId>
+            <version>2.0.2</version>
         </dependency>
 
     </dependencies>
@@ -218,7 +232,6 @@
                 </configuration>
             </plugin>
 
-            
         </plugins>
     </build>
 

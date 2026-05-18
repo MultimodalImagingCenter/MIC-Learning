@@ -1,11 +1,11 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.gui.GenericDialog;
 
 import java.util.Objects;
 
-public class SamDialogs {
+public class Sam2Dialogs {
 
     // --- SAM Dialog methods ---
     public static DetectionUtils.OutputOptions askUserForOutputs() {

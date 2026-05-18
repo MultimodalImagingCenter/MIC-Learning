@@ -1,4 +1,4 @@
-package fr.curie.miclearning.plugin.sam;
+package fr.curie.miclearning.plugin.sam2;
 
 import ai.djl.translate.TranslatorFactory;
 import fr.curie.miclearning.prediction.translator.configurator.TranslatorConfigurator;
@@ -7,7 +7,7 @@ import ij.gui.GenericDialog;
 
 public class Sam2Configurator implements TranslatorConfigurator {
 
-    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.sam.ImpSam2TranslatorFactory";
+    public static final String FACTORY_CLASS_NAME = "fr.curie.miclearning.plugin.sam2.ImpSam2TranslatorFactory";
 
     @Override
     public Class<? extends TranslatorFactory> getFactoryClass() {
@@ -22,7 +22,7 @@ public class Sam2Configurator implements TranslatorConfigurator {
 
     @Override
     public void addDialogFields(GenericDialog gd, ModelConfig currentConfig) {
-        gd.addMessage("--- SAM segmentation Options ---");
+        //gd.addMessage("--- SAM segmentation Options ---");
 
         // Retrieve defaults from config, with hardcoded fallbacks
         String defaultMethod = currentConfig.getArguments().getOrDefault("encode_method", "encode");
@@ -30,7 +30,6 @@ public class Sam2Configurator implements TranslatorConfigurator {
         //gd.addStringField("encode method:", defaultMethod, 30);
         //gd.addStringField("encoder path:", defaultPath, 30);
 
-        //
     }
 
     @Override
