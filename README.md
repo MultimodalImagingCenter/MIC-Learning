@@ -12,7 +12,7 @@ Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/ur
 ### Installation
 1. **Download and Build:** Clone the repository and compile the plugin using Maven:
    ```bash
-   mvn package -Dfile.encoding=UTF-8 -f pom.xml
+   mvn package -f pom.xml
    ```
 2. **Install the JAR:** Locate the `target` folder. Copy the **shaded** JAR file (`MIC-Learning-x.x.x-shaded.jar`) into the `plugins` folder of your ImageJ/Fiji directory.
 3. **Launch:** Restart ImageJ/Fiji. You will find the plugin under `Plugins > MIC-Learning`.
