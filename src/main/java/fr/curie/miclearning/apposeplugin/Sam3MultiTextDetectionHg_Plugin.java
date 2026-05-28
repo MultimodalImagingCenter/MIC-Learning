@@ -32,10 +32,10 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
 
     private DetectionUtils.OutputOptions outputOptions;
     private String modelPath;
-    private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer <256)
     private double confidenceThreshold;
-    private List<String> textPrompts;
 
+    private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer <256)
+    private List<String> textPrompts;
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3.hg";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-hg.toml";
@@ -90,6 +90,7 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
             IJ.error("Unable to load environment file");
             return;
         }
+
         // build env
         try {
             Environment env = Appose.pixi()
@@ -100,7 +101,6 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
             IJ.log("Python environment built");
 
             // --- 3. prediction ---
-
             // 3.1 copy image in shared memory
             try (ShmImg<?> sharedImg = imp2ShmImg(imp)) {
                 //IJ.log("Image copied to shared memory");
@@ -193,7 +193,6 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
                         buf_boxes.get(boxesArray[i]);
                     }
 
-
                     // 5.2 Extract masks
                     long[] shape = output_masks.shape().toLongArray();
                     int height;
@@ -208,8 +207,6 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
 
                     byte[][][] masksArray = new byte[numResults][height][width];
 
-                    // Get the direct ByteBuffer from Appose
-                    // For uint8, Appose provides a java.nio.ByteBuffer
                     ByteBuffer buf_masks = output_masks.buffer();
                     buf_masks.rewind();
                     for (int i = 0; i < numResults; i++) {
@@ -248,17 +245,15 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
                     DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
                     IJ.log(" --- Prediction done - total number of detection= " + numResults);
 
-                    // --- 7. process detections ---
+                    // --- 6. process detections ---
                     List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
                     if (processedDetections.isEmpty()) {
                         IJ.log(" --- No valid detections were processed.");
                     }
 
-                    // --- 8. generate Outputs, based on user choices
+                    // --- 7. generate Outputs, based on user choices
                     IJ.log(" --- Generating output... ");
                     generateOutputs(imp, processedDetections, outputOptions, classIdMap);
-
-
 
                 } catch (TaskException | InterruptedException e) {
                     throw new RuntimeException(e);
@@ -289,7 +284,6 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
         if (confidenceThreshold < 0 || confidenceThreshold >1) confidenceThreshold = 0.5;
 
         String prompts = Macro.getValue(options, "text_prompts", null);
-        IJ.log("prompts = " + textPrompts);
         if (prompts == null ||prompts.trim().isEmpty()) {
             IJ.log("Prompt empty. Closing plug-in.\n");
             IJ.error("Please enter a valid prompt.");
@@ -298,7 +292,6 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
         String[] promptArray = prompts.split(",");
 
         String roiIDs = Macro.getValue(options, "roi_ids", "1");
-        IJ.log("roiIDs = " + roiIDs);
         if (roiIDs.trim().isEmpty()) {
             roiIDs = String.join("", Collections.nCopies(promptArray.length, "0,"));
         }
@@ -341,19 +334,19 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
     }
 
     private void askUser() {
-        GenericDialog gd = new GenericDialog("SAM3 detection with text prompt");
+        GenericDialog gd = new GenericDialog("SAM3 detection with text prompts");
         if (!imp.isRGB()) gd.addMessage("Warning : Image is not RGB. This model works better with RGB images.");
 
+        // instructions to download model
         ActionListener modelInstructionAction = e -> {
             Sam3Dialogs.addDownloadInstruction();
         };
-
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);
         gd.addMessage("");
 
-        // ask for model file
-        Sam3Dialogs.addModelPathDialogHg(gd, PREF_LAST_MODEL_KEY);
+        // ask for model folder + threshold
+        Sam3Dialogs.addModelDirDialogHg(gd, PREF_LAST_MODEL_KEY);
         Sam3Dialogs.addThresholdDialog(gd);
 
         // ask for text prompt
@@ -362,7 +355,7 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
 
         // ask for SAM outputs
         gd.addMessage("__________");
-        Sam3Dialogs.addOutputDialogDetectionImage(gd);
+        Sam3Dialogs.addOutputDialogImage(gd);
 
         // Show dialog
         gd.showDialog();
@@ -374,7 +367,7 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
         modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
         confidenceThreshold = Sam3Dialogs.getThreshold(gd);
         classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        outputOptions = Sam3Dialogs.getOutputAnswerDetectionImage(gd);
+        outputOptions = Sam3Dialogs.getOutputAnswerImage(gd);
     }
 
     private void printParameters(){

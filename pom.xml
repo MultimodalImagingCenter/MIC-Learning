@@ -201,7 +201,7 @@
                                     <shadedPattern>fr.curie.shaded.com.google.protobuf</shadedPattern>
                                 </relocation>
                             </relocations>
-
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>

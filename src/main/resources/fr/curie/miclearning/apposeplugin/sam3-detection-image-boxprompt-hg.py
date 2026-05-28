@@ -1,12 +1,4 @@
 import appose
-import torch
-from PIL import Image
-import numpy as np
-from sam3.model_builder import build_sam3_image_model
-from sam3.model.sam3_image_processor import Sam3Processor
-from sam3.model.box_ops import box_xywh_to_cxcywh
-
-
 # send messages to Java via appose
 appose_mode = 'task' in globals()
 def log_to_java(msg):
@@ -16,15 +8,26 @@ def log_to_java(msg):
     else:
         print(msg)
 
+log_to_java("importing packages...")
+
+import torch
+from PIL import Image
+import numpy as np
+from transformers import Sam3Processor, Sam3Model
+import requests
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+log_to_java(f"using device: {device}")
+
 # 1. build sam3 model
-#log_to_java("building model...")
-model = build_sam3_image_model(checkpoint_path=model_path)
-log_to_java("model built")
-processor = Sam3Processor(model, confidence_threshold=confidence_threshold)
+log_to_java("building model...")
+model = Sam3Model.from_pretrained(model_path).to(device)
+processor = Sam3Processor.from_pretrained(model_path)
 
 # 2. pre process input image
 # input image is saved in shared memory as appose.NDArray
 # wrap the input image from appose.NDArray to numpy.ndarray
+log_to_java("pre processing image...")
 narr = image_input.ndarray()
 
 # fix dimension order (narr has dimension (C,H,W), pil expect (H,W,C))
@@ -42,22 +45,63 @@ pil_img = Image.fromarray(working_arr)
 h_img, w_img = working_arr.shape[:2]
 
 # 3. prepare prediction
-inference_state = processor.set_image(pil_img)
+# Pre-process image and compute vision embeddings once
+img_inputs = processor(images=pil_img , return_tensors="pt").to(device)
+with torch.no_grad():
+    vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
+
 # store results in arrays
 total_detection =0
 all_masks = []
 all_boxes = []
 all_scores = []
-all_prompt_ids = []  # To track which prompt produced which detection
+all_group_ids = []  # To track which prompt produced which detection
 
 # 4. make predictions
 log_to_java("running prediction...")
-for i, prompt in enumerate(text_prompts):
-    processor.reset_all_prompts(inference_state)
-    # text_prompt passed as input
-    output = processor.set_text_prompt(state=inference_state, prompt=prompt)
-    masks, boxes, scores = output["masks"], output["boxes"], output["scores"]
-    log_to_java("   prompt: {}, number of objects detected: {}".format(prompt, len(boxes)))
+neg_group_inputs = []
+neg_inputs_label = []
+if (len(negative_rois) > 0) :
+    log_to_java(f"({len(negative_rois)} negative prompt(s) added to every detection)")
+    for box in negative_rois :
+           x, y, w, h = box
+           box_xyxy = [x,y,x+w,y+h]
+           neg_group_inputs.append(box_xyxy)
+           neg_inputs_label.append(0)
+
+# positive_rois structure: { '1': [[x,y,w,h], ...], '2': [[x,y,w,h], ...] }
+for group_id, boxes in positive_rois.items():
+    log_to_java(f"  group {group_id} - {len(boxes)} prompt(s)...")
+    group_inputs = []
+    inputs_label = []
+    for box in boxes:
+        x, y, w, h = box
+        box_xyxy = [x,y,x+w,y+h]
+        group_inputs.append(box_xyxy)
+        inputs_label.append(1)
+
+    group_inputs = group_inputs + neg_group_inputs
+    inputs_label = inputs_label + neg_inputs_label
+
+    boxes_inputs = processor(
+        original_sizes = [[h_img, w_img]],
+        input_boxes=[group_inputs],
+        input_boxes_labels=[inputs_label],
+        return_tensors="pt"
+    ).to(device)
+
+    with torch.no_grad():
+            outputs = model(vision_embeds=vision_embeds, **boxes_inputs)
+
+    results = processor.post_process_instance_segmentation(
+        outputs,
+        threshold=confidence_threshold,
+        mask_threshold=0.5,
+        target_sizes=boxes_inputs.get("original_sizes").tolist()
+    )[0]
+
+    masks, boxes, scores = results["masks"], results["boxes"], results["scores"]
+    log_to_java(f"    number of object(s) detected: {len(boxes)} ")
 
     total_detection += len(boxes)
 
@@ -85,8 +129,8 @@ for i, prompt in enumerate(text_prompts):
         all_scores.append(scores.detach().cpu())
 
         # Create an ID array for this prompt
-        prompt_ids = torch.full((boxes.shape[0],), i, dtype=torch.int32)
-        all_prompt_ids.append(prompt_ids)
+        group_ids = torch.full((boxes.shape[0],), int(group_id), dtype=torch.int32)
+        all_group_ids.append(group_ids)
 
 
  # 6. Concatenate and Share
@@ -95,7 +139,7 @@ if len(all_boxes) > 0:
     final_masks = torch.cat(all_masks, dim=0).numpy().astype('uint8').squeeze()
     final_boxes = torch.cat(all_boxes, dim=0).numpy().astype('float64')
     final_scores = torch.cat(all_scores, dim=0).numpy().astype('float64')
-    final_ids = torch.cat(all_prompt_ids, dim=0).numpy().astype('int32')
+    final_ids = torch.cat(all_group_ids, dim=0).numpy().astype('int32')
     task.outputs['results_number'] = int(final_boxes.shape[0])
 
     # Create the NDArrays for sharing
@@ -114,6 +158,6 @@ if len(all_boxes) > 0:
     task.outputs['masks'] = shared_masks
     task.outputs['boxes'] = shared_boxes
     task.outputs['scores'] = shared_scores
-    task.outputs['prompt_ids'] = shared_ids
+    task.outputs['group_ids'] = shared_ids
 else:
     task.outputs['results_number'] = 0

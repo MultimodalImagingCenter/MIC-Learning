@@ -69,5 +69,14 @@ public class Sam2Dialogs {
         return -1; // no negativ group
     }
 
+    public static void addGroupsMessage(GenericDialog gd, int roiNumber, int groupNumber){
+        gd.addMessage("Only rectangle and point ROIs, selected in the ROI manager, will be processed."+
+                "   number of selected ROI(s): " + roiNumber +
+                "   number of group(s): " + groupNumber);
+        gd.addMessage("You can assign a group ID (int between 1 and 255) to ROIs. Each group will be interpreted as a different class.\n" +
+                "Groups won't interfere with segmentation, but modify the color in which results will be displayed + allow semantic mask creation.\n" +
+                "You can also define one group as negative. All ROIs from this group will be added as negative prompt to all segmentations.\n" +
+                "Note: Group \"0\" will be internally remapped to \"255\" for processing.\n");
+    }
 
 }
