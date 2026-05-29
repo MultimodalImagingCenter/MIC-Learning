@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static fr.curie.miclearning.tools.detection.ProcessedDetection.ROI_MASK_PREFIX;
 import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
@@ -44,11 +45,6 @@ public class DetectionUtils {
         public boolean deletePreviousRoi = false;
         public boolean deletePreviousRT = false; // delete previous result table
     }
-
-    // --- ROI names prefix ---
-    private static final String ROI_MASK_PREFIX = "mask_";
-    private static final String ROI_BB_PREFIX = "box_";
-
 
     // --- DetectedObject processing ---
 
@@ -83,7 +79,7 @@ public class DetectionUtils {
             return Collections.emptyList();
         }
 
-        IJ.log("Processing detections...");
+        // IJ.log("Processing detections...");
 
         if (detection instanceof TiledDetectedObjects){
             return processFromTiledDetection(imp, detection, externalClassIdMap);
@@ -161,16 +157,13 @@ public class DetectionUtils {
                 groupId = dynamicClassIdMap.computeIfAbsent(className, k -> nextGroupId.getAndIncrement());
             }
 
-            String roiName = String.format("%s_%d_%.5f", className, countForClass, probability);
-
             // --- Create Bounding Box ROI ---
             Roi boundingBoxRoi = createRoiFromBBRect(box, imageWidth, imageHeight);
             if (boundingBoxRoi == null) {
-                IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
+                IJ.log("Warning: Could not create Bounding Box ROI for " + String.format("%s_%d_%.5f", className, countForClass, probability) + ". Skipping detection.");
                 continue;
             }
 
-            boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);
             boundingBoxRoi.setGroup(groupId);
             //imp.setRoi(boundingBoxRoi); // Optional: for visual feedback during processing (+ fun to watch)
 
@@ -180,7 +173,6 @@ public class DetectionUtils {
                 shapeRoi = box instanceof Mask ? createRoiFromBBMask((Mask) box, imageWidth, imageHeight) : createRoiFromBBMask((MaskByte) box, imageWidth, imageHeight);
 
                 if (shapeRoi != null) {
-                    shapeRoi.setName(ROI_MASK_PREFIX + roiName);
                     shapeRoi.setGroup(groupId);
                     //imp.setRoi(shapeRoi); // Optional: for visual feedback
                     //IJ.log("    " + roiName + " (Group " + groupId + ")");
@@ -192,7 +184,7 @@ public class DetectionUtils {
             }
 
             ProcessedDetection processedDetection = new ProcessedDetection(
-                    className, probability, groupId, roiName, boundingBoxRoi, shapeRoi);
+                    className, probability, groupId, boundingBoxRoi, shapeRoi, countForClass);
 
             if (returnAllScores) {
                 DetailedDetectedObjects.DetailedDetectedObject detailedItem = (DetailedDetectedObjects.DetailedDetectedObject) item;
@@ -268,15 +260,13 @@ public class DetectionUtils {
                 groupId = dynamicClassIdMap.computeIfAbsent(className, k -> nextGroupId.getAndIncrement());
             }
 
-            String roiName = String.format("%s_%d_%.5f", className, countForClass, probability);
 
             // --- Create Bounding Box ROI ---
             Roi boundingBoxRoi = createRoiFromBBRect(box, imageWidth, imageHeight, tileParameter);
             if (boundingBoxRoi == null) {
-                IJ.log("Warning: Could not create Bounding Box ROI for " + roiName + ". Skipping detection.");
+                IJ.log("Warning: Could not create Bounding Box ROI for " + String.format("%s_%d_%.5f", className, countForClass, probability) + ". Skipping detection.");
                 continue;
             }
-            boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);
             boundingBoxRoi.setGroup(groupId);
             //imp.setRoi(boundingBoxRoi); // Optional: for visual feedback during processing (+ fun to watch)
 
@@ -285,7 +275,6 @@ public class DetectionUtils {
             if (box instanceof Mask || box instanceof MaskByte) {
                 shapeRoi = box instanceof Mask ? createRoiFromBBMask((Mask) box, imageWidth, imageHeight) : createRoiFromBBMask((MaskByte) box, imageWidth, imageHeight);
                 if (shapeRoi != null) {
-                    shapeRoi.setName(ROI_MASK_PREFIX + roiName);
                     shapeRoi.setGroup(groupId);
                     //imp.setRoi(shapeRoi); // Optional: for visual feedback
                     //IJ.log("    " + roiName + " (Group " + groupId + ")");
@@ -297,7 +286,7 @@ public class DetectionUtils {
             }
 
             processedResults.add(new ProcessedDetection(
-                    className, probability, groupId, roiName, boundingBoxRoi, shapeRoi
+                    className, probability, groupId, boundingBoxRoi, shapeRoi, countForClass
             ));
         }
         return processedResults;
@@ -389,10 +378,10 @@ public class DetectionUtils {
         }
 
         // Calculate pixel coordinates within the tile for the bounding box
-        int boxX = (int) (rect.getX() * tile_width);
-        int boxY = (int) (rect.getY() * tile_height);
-        int boxWidth = (int) (rect.getWidth() * tile_width);
-        int boxHeight = (int) (rect.getHeight() * tile_height);
+        int boxX = (int) Math.floor(rect.getX() * tile_width);
+        int boxY = (int) Math.floor(rect.getY() * tile_height);
+        int boxWidth = (int) Math.ceil(rect.getWidth() * tile_width);
+        int boxHeight = (int) Math.ceil(rect.getHeight() * tile_height);
 
         // Create a temporary mask processor covering the bounding box
         // (same scale as the total image)
@@ -407,8 +396,8 @@ public class DetectionUtils {
         boolean pixelSet = false; // Track if any pixel passes the threshold
 
         // Iterate through target pixels within the bounding box
-        for (int boxTargetY = 0; boxTargetY < boxY + boxHeight; boxTargetY++) {
-            for (int boxTargetX = 0; boxTargetX < boxX + boxWidth; boxTargetX++) {
+        for (int boxTargetY = 0; boxTargetY < boxHeight; boxTargetY++) {
+            for (int boxTargetX = 0; boxTargetX < boxHeight; boxTargetX++) {
 
                 // map to target tile coordinates
                 int tileTargetY = boxTargetY + boxY;
@@ -481,10 +470,10 @@ public class DetectionUtils {
         }
 
         // Calculate pixel coordinates within the tile for the bounding box
-        int boxX = (int) (rect.getX() * tile_width);
-        int boxY = (int) (rect.getY() * tile_height);
-        int boxWidth = (int) (rect.getWidth() * tile_width);
-        int boxHeight = (int) (rect.getHeight() * tile_height);
+        int boxX = (int) Math.floor(rect.getX() * tile_width);
+        int boxY = (int) Math.floor(rect.getY() * tile_height);
+        int boxWidth = (int) Math.ceil(rect.getWidth() * tile_width);
+        int boxHeight = (int) Math.ceil(rect.getHeight() * tile_height);
 
         // Create a temporary mask processor covering the bounding box
         // (same scale as the total image)
@@ -495,12 +484,11 @@ public class DetectionUtils {
         final float scaleX = (float) maskWidth / tile_width;
         final float scaleY = (float) maskHeight / tile_height;
 
-
         boolean pixelSet = false; // Track if any pixel passes the threshold
 
         // Iterate through target pixels within the bounding box
-        for (int boxTargetY = 0; boxTargetY < boxY + boxHeight; boxTargetY++) {
-            for (int boxTargetX = 0; boxTargetX < boxX + boxWidth; boxTargetX++) {
+        for (int boxTargetY = 0; boxTargetY < boxHeight; boxTargetY++) {
+            for (int boxTargetX = 0; boxTargetX < boxWidth; boxTargetX++) {
 
                 // map to target tile coordinates
                 int tileTargetY = boxTargetY + boxY;
@@ -533,7 +521,7 @@ public class DetectionUtils {
 
         // put the roi in the total image coordinates
         if (roi != null) {
-            roi.setLocation(x_offset + boxX + roi.getBounds().getX()-1, y_offset + boxY + roi.getBounds().getY()-1);
+            roi.setLocation(x_offset + boxX + roi.getBounds().getX(), y_offset + boxY + roi.getBounds().getY());
         }
 
         return roi;
@@ -603,7 +591,6 @@ public class DetectionUtils {
 
             // Use className in the name if available, otherwise just use groupId
             String baseName = (className != null) ? className : "ID" + groupId;
-            String roiName = String.format("%s_%d", baseName, countForGroup);
 
             // Create Shape ROI
             processor.setThreshold(groupId, groupId, ImageProcessor.NO_LUT_UPDATE);
@@ -615,12 +602,11 @@ public class DetectionUtils {
                 continue;
             }
 
-            roi.setName(ROI_MASK_PREFIX + roiName);
             roi.setGroup(groupId);
             //imp.setRoi(roi); // Optional: for visual feedback (+ fun to watch)
-            IJ.log("Shape ROI created for " + roiName + " (Group " + groupId + ")");
+            IJ.log("Shape ROI created for " + String.format("%s_%d", baseName, countForGroup) + " (Group " + groupId + ")");
             processedResults.add(new ProcessedDetection(
-                    className, null, groupId, roiName, null, roi
+                    className, null, groupId, null, roi, countForGroup
             ));
         }
 
@@ -684,7 +670,6 @@ public class DetectionUtils {
 
             // iterate through all instances of the class
             for (int instanceId = 1; instanceId <= instanceMax; instanceId++){
-                String roiName = String.format("%s_%d", baseName, instanceId);
 
                 // Set Threshold to keep only one instance
                 processor.setThreshold(instanceId, instanceId, ImageProcessor.NO_LUT_UPDATE);
@@ -698,14 +683,13 @@ public class DetectionUtils {
                 }
                 processor.resetThreshold();
 
-                roi.setName(ROI_MASK_PREFIX + roiName);
                 roi.setGroup(groupId);
                 //imp.setRoi(roi); // Optional: for visual feedback
-                IJ.log("Shape ROI created for " + roiName + " (Group " + groupId + ")");
+                IJ.log("Shape ROI created for " + String.format("%s_%d", className, instanceId) + " (Group " + groupId + ")");
 
                 // add detection to list
                 processedResults.add(new ProcessedDetection(
-                        className, null, groupId, roiName, null, roi
+                        className, null, groupId, null, roi, instanceId
                 ));
             }
         }
@@ -811,16 +795,14 @@ public class DetectionUtils {
 
             // Use className in the name if available, otherwise just use groupId
             String baseName = (className != null) ? className : "ID" + groupId;
-            String roiName = String.format("%s_%d", baseName, countForGroup);
 
-            roi.setName(ROI_MASK_PREFIX + roiName);
             roi.setGroup(groupId);
             //semanticImp.setRoi(roi); // Optional: for visual feedback
-            IJ.log("Shape ROI created for " + roiName + " (Group " + groupId + ")");
+            IJ.log("Shape ROI created for " + String.format("%s_%d", baseName, countForGroup) + " (Group " + groupId + ")");
 
             // add detection to list
             processedResults.add(new ProcessedDetection(
-                    className, null, groupId, roiName, null, roi
+                    className, null, groupId, null, roi, countForGroup
             ));
 
         }
@@ -840,13 +822,13 @@ public class DetectionUtils {
      * @param classIdMap Original map (ClassName -> GroupID).
      * @return A map from GroupID to ClassName, or null if the input map is null/empty or unusable.
      */
-    private static Map<Integer, String> createReverseClassIdMap(Map<String, Integer> classIdMap) {
+    public static Map<Integer, String> createReverseClassIdMap(Map<String, Integer> classIdMap) {
         if (classIdMap == null || classIdMap.isEmpty()) {
             IJ.log("No class ID map used");
             return null;
         }
 
-        IJ.log("Using provided class ID map to determine class names.");
+        //IJ.log("Using provided class ID map to determine class names.");
         Map<Integer, String> reverseMap = new HashMap<>();
 
         for (Map.Entry<String, Integer> entry : classIdMap.entrySet()) {
@@ -1220,7 +1202,7 @@ public class DetectionUtils {
         }
     }
 
-    private static void setGlasbeyLut(ImagePlus imp){
+    public static void setGlasbeyLut(ImagePlus imp){
         // Set glasbey LUT
         Path pathLut = Paths.get(IJ.getDirectory("imagej"),"luts","glasbey_on_dark.lut");
         if (Files.notExists(pathLut)){

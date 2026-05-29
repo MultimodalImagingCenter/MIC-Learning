@@ -12,32 +12,39 @@ public class ProcessedDetection {
     private final String className; // Can be null if no data
     private final Double probability; // Can be null if no data
     private final int groupId; // Roi group
-    private final String roiName;
-    private final Roi boundingBoxRoi;
+    private final Roi boundingBoxRoi; // can be null if no data
     private final Roi shapeRoi; // Can be null if no mask data
+    private int id; // one id per object of the same class - can be modified
+    private String roiName; // can be changed if id is changed
     private List<Float> allScore; // Can be null if not set
 
-    public ProcessedDetection(String className, Double probability, int groupId, String roiName, Roi boundingBoxRoi, Roi shapeRoi) {
+
+    public static final String ROI_MASK_PREFIX = "mask_";
+    public static final String ROI_BB_PREFIX = "box_";
+
+
+    public ProcessedDetection(String className, Double probability, int groupId, Roi boundingBoxRoi, Roi shapeRoi, int id) {
         this.className = className;
         this.probability = probability;
         this.groupId = groupId;
-        this.roiName = roiName;
         this.boundingBoxRoi = boundingBoxRoi;
         this.shapeRoi = shapeRoi;
+        this.id = id;
+        updateName();
     }
 
-    public ProcessedDetection(String className, Double probability, int groupId, String roiName, Roi boundingBoxRoi, Roi shapeRoi, List<Float> allScore) {
-        this.className = className;
-        this.probability = probability;
-        this.groupId = groupId;
-        this.roiName = roiName;
-        this.boundingBoxRoi = boundingBoxRoi;
-        this.shapeRoi = shapeRoi;
-        this.allScore = allScore;
-    }
 
     public void setAllScore(List<Float> allScores) {
         this.allScore = allScores;
+    }
+
+    private void updateName() {
+        if (probability != null){
+            this.roiName = String.format("%s_%d_%.5f", className, id, probability);
+        } else {this.roiName = String.format("%s_%d", className, id);}
+
+        if (boundingBoxRoi != null){this.boundingBoxRoi.setName(ROI_BB_PREFIX + roiName);}
+        if  (shapeRoi != null){this.shapeRoi.setName(ROI_MASK_PREFIX + roiName);}
     }
 
     // --- Getters ---
@@ -51,4 +58,9 @@ public class ProcessedDetection {
     public List<Float> getAllScore() { return allScore; } // May return null if not set
     public boolean hasAllScore() { return allScore != null; }
 
+    public int getId() {return id;}
+    public void setId(int id) {
+        this.id = id;
+        updateName(); //if id is changed later, need to update name with correct id
+    }
 }

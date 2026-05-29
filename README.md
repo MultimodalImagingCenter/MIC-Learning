@@ -1,7 +1,7 @@
 # Mic learning
-**MIC-Learning** is an ImageJ/Fiji plugin designed to run deep learning models on microscopy images. Developed by the **Multimodal Imaging Center (MIC) at Curie Institute**, it provides a user-friendly interface to apply AI architectures directly within your image analysis workflow.
+**MIC-Learning** is an ImageJ/Fiji plugin designed to run deep learning models on microscopy images. Developed by the **Multimodal Imaging Center (MIC) at Curie Institute**, it provides a user-friendly interface to apply AI architectures directly within your image analysis workflow.
 
-Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fdjl.ai%2F) and [Appose (v0.11.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fappose%2Fappose), it supports a wide range of model formats and architectures.
+Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fdjl.ai%2F) and [Appose (v0.11.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fappose%2Fappose), it supports a wide range of model formats and architectures.
 
 ## Getting started
 ### Prerequisites

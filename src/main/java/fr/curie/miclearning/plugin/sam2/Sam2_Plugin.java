@@ -31,6 +31,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 
+import static fr.curie.miclearning.plugin.sam2.Sam2Dialogs.addGroupsMessage;
 import static fr.curie.miclearning.prediction.model.ModelConfigManager.saveConfigToFile;
 import static fr.curie.miclearning.prediction.model.ModelDialogs.addInitialDialogFields;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
@@ -40,6 +41,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
 
     protected static ImagePlus imp;
     private int groupNumber; // Number of ROI groups
+    private int roiNumber;
 
     // parameters
     private String[] negativeGroupSelection; // list of group to display to select a negative group
@@ -84,6 +86,7 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
             IJ.error("at least one roi in the ROI manager is required to run a sam2 segmentation");
             return;
         }
+        roiNumber = roiList.length;
 
         // 1.3 link Roi ID to names
         // get ROI groups IDs list
@@ -319,6 +322,10 @@ public class Sam2_Plugin implements PlugIn, DialogListener {
         GenericDialog gd = new GenericDialog("Model Directory + Segmentation Outputs");
         // Prompt user for model repository + config info
         addInitialDialogFields(gd, PREF_LAST_MODEL_KEY);
+
+
+        gd.addMessage("__________");
+        addGroupsMessage(gd, roiNumber, groupNumber);
 
         // ask for SAM outputs
         gd.addMessage("__________");
