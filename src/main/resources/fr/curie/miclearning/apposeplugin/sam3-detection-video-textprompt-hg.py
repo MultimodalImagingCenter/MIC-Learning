@@ -80,7 +80,7 @@ for model_outputs in model.propagate_in_video_iterator(
     N = len(ids)
     # Select buffer index using modulo to wrap around the pool
 
-    log_to_java("   frame: {} - number of objects detected: {}".format(frame_idx, N))
+    #log_to_java("   frame: {} - number of objects detected: {}".format(frame_idx, N))
 
     # 5. process and store results for the frame
     if boxes is not None and len(boxes) > 0:
@@ -119,7 +119,7 @@ for model_outputs in model.propagate_in_video_iterator(
 
         # 6. send results to java via task update
         task.update(
-            message=f"sending results for frame {frame_idx}",
+            message=f"   frame {frame_idx} - number of objects detected: {N}",
             current=frame_idx,
             maximum=max_frame_number,
             info={
@@ -132,5 +132,5 @@ for model_outputs in model.propagate_in_video_iterator(
             }
         )
 
-log_to_java("python segmentation complete\n")
+log_to_java("python segmentation complete")
 

@@ -177,7 +177,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                                 // Check if this is the "End of Stream" signal
                                 // meaning that all results have been sent
                                 if (info == END_SIGNAL) {
-                                    IJ.log("All frames processed by consumer thread.");
+                                    IJ.log("All frames processed.");
                                     break; // Break the infinite loop
                                 }
 
@@ -255,13 +255,13 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                                 }
 
                                 DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-                                IJ.log(" --- Prediction received for frame "+ nFrames +"- total number of detection= " + numResults);
+                                //IJ.log(" --- Prediction received for frame "+ nFrames +"- total number of detection= " + numResults);
 
                                 // --- 6. process detections ---
                                 // 6.1 create Roi from bounding boxes and masks
                                 List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
                                 if (processedDetections.isEmpty()) {
-                                    IJ.log(" --- No valid detections were processed.");
+                                    IJ.log(" --- No valid detections were processed for frame " + frameIdx);
                                     return;
                                 }
 
@@ -273,6 +273,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
 
                             // once all results have been processed (and end_signal received)
                             // --- 7. generate Outputs, based on user choices
+                            IJ.log(" --- Generating outputs... ");
                             generate3dOutputs(imp, mfdManager, outputOptions);
 
                         } catch (InterruptedException e) {
@@ -281,7 +282,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                         } finally {
                             long endTime = System.nanoTime();
                             double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-                            IJ.log(" --- SAM3 segmentation  complete. Total time= "+ totalTimeInSeconds + " sec ---");
+                            IJ.log(" --- SAM3 segmentation complete. Total time= "+ totalTimeInSeconds + " sec ---");
                         }
                     }).start();
 
@@ -375,7 +376,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
     }
 
     private void recordInMacro() {
-        Recorder.setCommand("SAM3 Detection with Text Prompts");
+        Recorder.setCommand("SAM3 Video segmentation");
         Recorder.recordOption("model_path", modelPath);
         Recorder.recordOption("confidence", String.valueOf(confidenceThreshold));
         Recorder.recordOption("number_of_frame", String.valueOf(maxFrameNumber));

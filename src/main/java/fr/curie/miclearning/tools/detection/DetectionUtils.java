@@ -82,7 +82,7 @@ public class DetectionUtils {
             return Collections.emptyList();
         }
 
-        IJ.log("Processing detections...");
+        //IJ.log("Processing detections...");
 
         if (detection instanceof TiledDetectedObjects){
             return processFromTiledDetection(imp, detection, externalClassIdMap);
