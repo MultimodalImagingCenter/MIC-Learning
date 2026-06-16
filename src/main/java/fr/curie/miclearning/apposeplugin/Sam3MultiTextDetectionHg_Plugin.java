@@ -26,7 +26,7 @@ import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArr
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
-
+@Deprecated
 public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
@@ -339,7 +339,7 @@ public class Sam3MultiTextDetectionHg_Plugin implements PlugIn {
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            Sam3Dialogs.addDownloadInstructionHg();
         };
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);

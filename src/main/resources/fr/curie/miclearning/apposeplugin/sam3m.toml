@@ -1,0 +1,14 @@
+[workspace]
+channels = ["conda-forge"]
+name = "SAM_muggled"
+platforms = ["linux-64"]
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+appose = "*"
+
+
+[pypi-dependencies]
+muggled_sam = { git = "https://github.com/heyoeyo/muggled_sam.git"}

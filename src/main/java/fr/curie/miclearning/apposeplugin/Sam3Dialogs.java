@@ -16,6 +16,7 @@ import java.util.*;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Sam3Dialogs {
+    public enum DetectionMode { IMAGE, VIDEO }
 
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
@@ -26,22 +27,33 @@ public class Sam3Dialogs {
         if (lastDir != null && Files.isDirectory(Paths.get(lastDir))) {
             defaultDir = lastDir;
         } else {
-            defaultDir = getDefaultSam3ModelsDirHg();
+            defaultDir = getDefaultSam3ModelDirHg();
+        }
+        gd.addDirectoryField("Model_Directory:", defaultDir, 60);
+    }
+
+    public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
+        String defaultPath = null;
+        String lastPath = Prefs.get(lastModelPrefKey, defaultPath);
+        if (lastPath != null && Files.exists(Paths.get(lastPath))) {
+            defaultPath = lastPath;
+        } else {
+            defaultPath = getDefaultSam3ModelPath();
         }
 
-        gd.addDirectoryField("Model_Directory:", defaultDir, 60);
+        gd.addFileField("Model_Path:", defaultPath, 60);
     }
 
     public static String getModelPath(GenericDialog gd, String lastModelPrefKey) {
         String modelPathString = gd.getNextString();
         Path modelPath = Paths.get(modelPathString);
         if (Files.exists(modelPath)) {
-            // Save the selected directory for next time
+            // Save the selected path for next time
             Prefs.set(lastModelPrefKey, modelPathString);
             Prefs.savePreferences();
             return modelPathString;
         } else {
-            IJ.error("Selection Error", "The selected path is not a valid directory:\n" + modelPathString);
+            IJ.error("Selection Error", "The selected path is not valid:\n" + modelPathString);
             return null;
         }
     }
@@ -141,6 +153,41 @@ public class Sam3Dialogs {
         return Math.min(maxFrameUser, nFrames);
     }
 
+    public static void addParameterDialog(GenericDialog gd, Sam3Parameters params, DetectionMode mode) {
+        gd.addMessage("Detection Settings");
+        gd.addNumericField("Confidence Threshold:", params.getConfidenceThreshold(), 2);
+        gd.addNumericField("Mask Threshold:", params.getMaskScoreThreshold(), 2);
+
+        if (mode == DetectionMode.VIDEO) {
+            gd.addMessage("Tracking Settings");
+            gd.addNumericField("Frames Between Detections:", params.getNFrameBtwDetections(), 0);
+            // ajouter ici d'autres paramètres si besoin
+        }
+    }
+
+    public static void getParameters(GenericDialog gd, Sam3Parameters params, DetectionMode mode) {
+        double confThreshold = gd.getNextNumber();
+        if (confThreshold < 0 || confThreshold > 1) {
+            IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
+            confThreshold = params.getConfidenceThreshold();
+        }
+        params.setConfidenceThreshold(confThreshold);
+
+        double maskThreshold = gd.getNextNumber(); // no check ?
+        params.setMaskScoreThreshold(maskThreshold);
+
+        if (mode == DetectionMode.VIDEO) {
+            int nFramesBtwDetec = (int) gd.getNextNumber();
+            if (nFramesBtwDetec < 0) {
+                IJ.log("Number of frames between each detection must be >0. using default value: " + params.getNFrameBtwDetections());
+                nFramesBtwDetec = params.getNFrameBtwDetections();
+            }
+            params.setNFrameBtwDetections(nFramesBtwDetec);
+
+            // récupérer d'autres paramètres si besoin
+        }
+    }
+
     public static void addOutputDialogImage(GenericDialog gd) {
         gd.addMessage("Select the outputs to generate:");
         gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", false);
@@ -207,7 +254,7 @@ public class Sam3Dialogs {
         return -1; // no negative group
     }
 
-    private static String getDefaultSam3ModelsDirHg() {
+    private static String getDefaultSam3ModelDirHg() {
         String imagejRoot = IJ.getDirectory("imagej");
 
         if (imagejRoot != null) {
@@ -230,11 +277,34 @@ public class Sam3Dialogs {
         }
     }
 
+    private static String getDefaultSam3ModelPath() {
+        String imagejRoot = IJ.getDirectory("imagej");
+
+        if (imagejRoot != null) {
+            Path modelPath = Paths.get(imagejRoot, "models", "sam3.pt");
+            // Check if the file 'sam3.pt' exist in the 'models' directory
+            if (Files.exists(modelPath)) {
+                return modelPath.toString();
+            } else {
+                // check in the MiclearningModels folder
+                modelPath = Paths.get(imagejRoot, "models", "MicLearningModels", "sam3.pt");
+                if (Files.exists(modelPath)) {
+                    return modelPath.toString();
+                } else {
+                    return IJ.getDirectory("home"); // Fallback to user's home directory
+                }
+            }
+        } else {
+            //IJ.log("Warning: Could not determine ImageJ installation directory. Defaulting to user home.");
+            return IJ.getDirectory("home"); // Fallback to user's home directory
+        }
+    }
+
     public static Map<String, Integer> getClassIdMapFromArrays(String[] promptArray, String[] roiIDArray) {
         int nPrompts = promptArray.length;
         int[] roiIds = new int[nPrompts];
 
-        if (roiIDArray.length ==0) {
+        if (roiIDArray.length == 0) {
             Arrays.fill(roiIds, 0);
         } else if (!((nPrompts == roiIDArray.length) || roiIDArray.length == 1)) {
             IJ.log("Invalid number of ROI IDs ("+ roiIDArray.length +" ROI-ID and "+ nPrompts +" prompts). Closing plug-in.\n");
@@ -272,7 +342,6 @@ public class Sam3Dialogs {
         }
 
         Map<String, Integer> classIdMap = new LinkedHashMap<>();
-
         for (int i = 0; i < nPrompts; i++) {
             String prompt = promptArray[i];
             if (!prompt.trim().isEmpty()) {
@@ -304,7 +373,7 @@ public class Sam3Dialogs {
         return 0; // if no value available, no group
     }
 
-    public static void addDownloadInstruction() {
+    public static void addDownloadInstructionHg() {
         GenericDialog gd = new GenericDialog("instructions to download SAM3 model");
         gd.addMessage("The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
                 "To download them, you need to:\n" +
@@ -313,6 +382,18 @@ public class Sam3Dialogs {
                 "     The authorization process usually takes no more than an hour.\n" +
                 "   3/ Once your access request is approved, you can download the \"model.safetensors\" file.\n" +
                 "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and place the model file in it.");
+        gd.hideCancelButton();
+        gd.showDialog();
+    }
+    public static void addDownloadInstruction() {
+        GenericDialog gd = new GenericDialog("instructions to download SAM3 model");
+        gd.addMessage("The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
+                "To download them, you need to:\n" +
+                "   1/ Create a Hugging Face account\n" +
+                "   2/ Request access\n" +
+                "     The authorization process usually takes no more than an hour.\n" +
+                "   3/ Once your access request is approved, you can download the \"sam3.pt\" file.\n" +
+                "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and place the model file inside it.");
         gd.hideCancelButton();
         gd.showDialog();
     }

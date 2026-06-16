@@ -416,7 +416,7 @@ public class Sam3BoxDetectionHg_Plugin implements PlugIn {
         if (!imp.isRGB()) gd.addMessage("Warning : Image is not RGB. This model works better with RGB images.");
 
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            Sam3Dialogs.addDownloadInstructionHg();
         };
 
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);

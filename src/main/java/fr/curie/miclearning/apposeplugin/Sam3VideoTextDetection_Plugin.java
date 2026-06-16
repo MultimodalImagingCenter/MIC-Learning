@@ -19,9 +19,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.Detection3dUtils.*;
@@ -305,7 +303,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            Sam3Dialogs.addDownloadInstructionHg();
         };
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);

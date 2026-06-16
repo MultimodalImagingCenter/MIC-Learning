@@ -4,6 +4,15 @@
 - new SAM3 plugin: video detection, tracking and segmentation with single-text prompt
 - Detection in 3d : introduce `Detection3dUtils`, `TrackedDetection` and `MultiFrameDataManager` to manage and process detection across multiple frames
 - Appose utilities: add shared memory transfer for ImagePlus with multiple frames
+- SAM3: introduce `Sam3Parameters` class to handle inference configuration
+- Appose environment: add `sam3m.toml` Pixi environment file for `muggled_sam`
+
+### Changed
+- SAM3 inference: migrate from Hugging Face `transformers` to `muggled_sam` for increased flexibility and broader prediction support
+- SAM3 plugin: new implementation for single-image text-prompt detection using `muggled_sam` library
+
+### Deprecated
+- `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` (replaced by `muggled_sam` implementation)
 
 ## [1.1.0] - 2026-03-24
 ### Added
