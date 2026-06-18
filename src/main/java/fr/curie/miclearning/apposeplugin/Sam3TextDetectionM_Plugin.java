@@ -100,7 +100,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         try {
             Environment env = Appose.pixi()
                     .content(envTomlContent)
-                    .logDebug()
+                    //.logDebug()
                     .build();
 
             IJ.log("Python environment built");

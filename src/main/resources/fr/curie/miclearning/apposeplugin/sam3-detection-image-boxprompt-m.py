@@ -33,7 +33,7 @@ def xywh_to_norm_x1y1x2y2(boxes, img_height, img_width):
 device, dtype = "cpu", torch.float32
 if torch.cuda.is_available():
     device, dtype = "cuda", torch.bfloat16
-log_to_java(f"building model, using device: {device}...")
+log_to_java(f"building model, using device: {device}")
 sam_core = make_sam_from_state_dict(model_path)
 detect_model = sam_core.get_detector_context()
 detect_model.to(device=device, dtype=dtype)
@@ -63,7 +63,7 @@ total_detection =0
 all_masks = []
 all_boxes = []
 all_scores = []
-all_prompt_ids = []  # To track which prompt produced which detection
+all_group_ids = []  # To track which prompt produced which detection
 
 # 4. make predictions for each input
 log_to_java("running prediction...")
@@ -86,7 +86,6 @@ neg_point_xy_norm_list = []
 for group_id, boxes in positive_rois.items():
     log_to_java(f"  group {group_id} - {len(boxes)} prompt(s)...")
     pos_box_xy1xy2_norm_list = xywh_to_norm_x1y1x2y2(boxes, h_img, w_img)
-
     # encode inputs
     enc_exm = detect_model.encode_exemplars(
         enc_img,
@@ -103,7 +102,7 @@ for group_id, boxes in positive_rois.items():
         mask_preds, box_preds, det_scores, pres_score, confidence_threshold
     )
     n_det = filtered_masks.shape[0]
-    log_to_java("   prompt: {} - number of objects detected: {} - presence score: {}".format(prompt, n_det, *presence_score.tolist()))
+    log_to_java("   number of object(s) detected: {} - presence score: {}".format(n_det, *presence_score.tolist()))
 
     # 5. process and store results for 1 prompt
     if presence_score > 0.5 and n_det>0 :
@@ -128,8 +127,8 @@ for group_id, boxes in positive_rois.items():
         all_scores.append(filtered_scores.detach().cpu().float())
 
         # Create an ID array for this prompt
-        prompt_ids = torch.full((n_det,), i, dtype=torch.int32)
-        all_prompt_ids.append(prompt_ids)
+        group_ids = torch.full((n_det,), int(group_id), dtype=torch.int32)
+        all_group_ids.append(group_ids)
 
 
  # 6. Concatenate and Share
@@ -138,7 +137,7 @@ if total_detection > 0:
     pre_final_masks = torch.cat(all_masks, dim=0).numpy().astype('uint8')
     final_boxes = torch.cat(all_boxes, dim=0).numpy().astype('float64')
     final_scores = torch.cat(all_scores, dim=0).numpy().astype('float64')
-    final_ids = torch.cat(all_prompt_ids, dim=0).numpy().astype('int32')
+    final_ids = torch.cat(all_group_ids, dim=0).numpy().astype('int32')
     task.outputs['results_number'] = int(final_boxes.shape[0])
 
     # resize masks
@@ -163,7 +162,7 @@ if total_detection > 0:
     task.outputs['masks'] = shared_masks
     task.outputs['boxes'] = shared_boxes
     task.outputs['scores'] = shared_scores
-    task.outputs['prompt_ids'] = shared_ids
+    task.outputs['group_ids'] = shared_ids
 else:
     task.outputs['results_number'] = 0
 

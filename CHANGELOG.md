@@ -9,10 +9,11 @@
 
 ### Changed
 - SAM3 inference: migrate from Hugging Face `transformers` to `muggled_sam` for increased flexibility and broader prediction support
-- SAM3 plugin: new implementation for single-image text-prompt detection using `muggled_sam` library
+- SAM3 plugin: new implementation for single-image text-prompt and box-prompt detection using `muggled_sam` library
 
 ### Deprecated
 - `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` (replaced by `muggled_sam` implementation)
+- `Sam3BoxDetectionHg_Plugin` and `sam3-detection-image-boxprompt-hg.py` (replaced by `muggled_sam` implementation)
 
 ## [1.1.0] - 2026-03-24
 ### Added

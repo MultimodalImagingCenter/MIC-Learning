@@ -18,6 +18,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 public class Sam3Dialogs {
     public enum DetectionMode { IMAGE, VIDEO }
 
+    public static final int MAX_GROUP_VALUE = 255; // max id for group in ImageJ
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
 

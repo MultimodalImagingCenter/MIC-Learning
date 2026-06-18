@@ -25,14 +25,13 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.List;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.GROUP_ZERO_TXT;
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.ONLY_POSITIVE_TXT;
+import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseClassIdMap;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
-
+@Deprecated
 public class Sam3BoxDetectionHg_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
@@ -55,8 +54,6 @@ public class Sam3BoxDetectionHg_Plugin implements PlugIn {
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3.hg";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-hg.toml";
     private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-boxprompt-hg.py";
-
-    private final int MAX_GROUP_VALUE = 255; // max id for group in Fiji
 
     @Override
     public void run(String s) {
@@ -315,7 +312,7 @@ public class Sam3BoxDetectionHg_Plugin implements PlugIn {
                     buf_scores.rewind();
                     buf_scores.get(probaArray);
 
-                    // 6.4 Extract prompt ids
+                    // 6.4 Extract group ids
                     int[] groupIds = new int[numResults];
                     IntBuffer buf_ids = output_group.buffer().asIntBuffer();
                     buf_ids.rewind();
