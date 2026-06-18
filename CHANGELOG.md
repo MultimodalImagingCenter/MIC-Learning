@@ -6,10 +6,11 @@
 - Appose utilities: add shared memory transfer for ImagePlus with multiple frames
 - SAM3: introduce `Sam3Parameters` class to handle inference configuration
 - Appose environment: add `sam3m.toml` Pixi environment file for `muggled_sam`
+- SAM3 single-image geometric-prompt detection plugin: add the possibility to use points as prompts (positive and negative)
 
 ### Changed
 - SAM3 inference: migrate from Hugging Face `transformers` to `muggled_sam` for increased flexibility and broader prediction support
-- SAM3 plugin: new implementation for single-image text-prompt and box-prompt detection using `muggled_sam` library
+- SAM3 plugin: new implementation for single-image text-prompt and geometric-prompt detection using `muggled_sam` library
 
 ### Deprecated
 - `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` (replaced by `muggled_sam` implementation)

@@ -15,19 +15,19 @@ import cv2
 import numpy as np
 from muggled_sam.make_sam import make_sam_from_state_dict
 
-def xywh_to_norm_x1y1x2y2(boxes, img_height, img_width):
-    normalized_boxes = []
-    for box in boxes:
-        x1, y1, w, h = box
-        x2, y2 = x1 + w, y1 + h
+def xywh_to_norm_x1y1x2y2(box, img_height, img_width):
+    x1, y1, w, h = box
+    x2, y2 = x1 + w, y1 + h
+    norm_x1 = x1 / img_width
+    norm_y1 = y1 / img_height
+    norm_x2 = x2 / img_width
+    norm_y2 = y2 / img_height
 
-        norm_x1 = x1 / img_width
-        norm_y1 = y1 / img_height
-        norm_x2 = x2 / img_width
-        norm_y2 = y2 / img_height
-        normalized_boxes.append([(norm_x1, norm_y1), (norm_x2, norm_y2)])
+    return [(norm_x1, norm_y1), (norm_x2, norm_y2)]
 
-    return normalized_boxes
+def norm_xy(point, img_height, img_width):
+    x1, y1 = point
+    return (x1/img_width, y1/img_height)
 
 # 1. build sam3 model
 device, dtype = "cpu", torch.float32
@@ -69,23 +69,36 @@ all_group_ids = []  # To track which prompt produced which detection
 log_to_java("running prediction...")
 text_prompt = "visual"
 # manage negative groups (if any)
-log_to_java("running prediction...")
 neg_box_xy1xy2_norm_list = []
-# negative_rois format: [[x,y,w,h], ...] (absolute values)
-# expected format: [[(x1, y1), (x2, y2)]] (normalized values)
+neg_point_xy_norm_list = []
+# negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+# expected format:
+#  one list for boxes : [[(x1, y1), (x2, y2)], ...] (normalized values)
+# one list for points : [(x, y), ... ] (normalized values)
 if len(negative_rois) > 0:
     log_to_java(f"({len(negative_rois)} negative prompt(s) added to every detection)")
-    neg_box_xy1xy2_norm_list = xywh_to_norm_x1y1x2y2(negative_rois, h_img, w_img)
+    for prompt in negative_rois :
+        if len(prompt) == 4: # box
+            neg_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
+        elif len(prompt) == 2: #point
+            neg_point_xy_norm_list.append(norm_xy(prompt,h_img, w_img))
+        else :
+            log_to_java(f"unknown prompt size: prompt {prompt}")
 
-
-#for now, no point inputs
-pos_point_xy_norm_list = []
-neg_point_xy_norm_list = []
 # make prediction for each positive roi group
-# positive_rois structure: { '1': [[x,y,w,h], ...], '2': [[x,y,w,h], ...] }
-for group_id, boxes in positive_rois.items():
-    log_to_java(f"  group {group_id} - {len(boxes)} prompt(s)...")
-    pos_box_xy1xy2_norm_list = xywh_to_norm_x1y1x2y2(boxes, h_img, w_img)
+# positive_rois structure: { '1': [[x,y,w,h], [x,y], ...], '2': [[x,y,w,h], [x,y], ...] }
+for group_id, prompts in positive_rois.items():
+    log_to_java(f"  group {group_id} - {len(prompts)} prompt(s)...")
+    pos_box_xy1xy2_norm_list = []
+    pos_point_xy_norm_list = []
+    for prompt in prompts :
+        if len(prompt) == 4: # box
+            pos_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
+        elif len(prompt) == 2: #point
+            pos_point_xy_norm_list.append(norm_xy(prompt,h_img, w_img))
+        else :
+            log_to_java(f"unknown prompt size: prompt {prompt}")
+
     # encode inputs
     enc_exm = detect_model.encode_exemplars(
         enc_img,
@@ -102,7 +115,7 @@ for group_id, boxes in positive_rois.items():
         mask_preds, box_preds, det_scores, pres_score, confidence_threshold
     )
     n_det = filtered_masks.shape[0]
-    log_to_java("   number of object(s) detected: {} - presence score: {}".format(n_det, *presence_score.tolist()))
+    log_to_java("  group {} - {} prompt(s): number of object(s) detected: {} - presence score: {}".format(group_id, len(prompts), n_det, *presence_score.tolist()))
 
     # 5. process and store results for 1 prompt
     if presence_score > 0.5 and n_det>0 :

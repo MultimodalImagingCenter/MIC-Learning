@@ -24,7 +24,6 @@ import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
@@ -33,7 +32,7 @@ import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseC
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
-public class Sam3BoxDetectionM_Plugin implements PlugIn {
+public class Sam3GeomDetectionM_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
     private DetectionUtils.OutputOptions outputOptions;
@@ -54,7 +53,7 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml"; // inside the resources folder
-    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-boxprompt-m.py"; // inside the resources folder
+    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-geomprompt-m.py"; // inside the resources folder
 
     @Override
     public void run(String s) {
@@ -73,8 +72,8 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
 
         // 1.2 get selected ROIs list
         RoiManager roiManager = getRoiManager();
-        Roi[] roiList = roiManager.getSelectedRoisAsArray();
-        if (roiList.length == 0) {
+        Roi[] selectedRoiList = roiManager.getSelectedRoisAsArray();
+        if (selectedRoiList.length == 0) {
             IJ.error("at least one roi in the ROI manager is required to run a sam3 detection with box prompt");
             return;
         }
@@ -82,21 +81,21 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
         // 1.3 link Roi ID to names
         // get ROI groups IDs list
         uniqueGroups = new TreeSet<>();
-        List<Roi> boxRoiList = new ArrayList<>();
-        for (Roi roi : roiList) {
-            // check that Roi is a box
-            if (roi.getType() == 0 ) {
+        List<Roi> promptRoiList = new ArrayList<>();
+        for (Roi roi : selectedRoiList) {
+            // check that Roi is a box or point
+            if (roi.getType() == 0 || roi.getType() == 10) {
                 if (roi.getGroup() == 0) {
                     roi.setGroup(MAX_GROUP_VALUE);
                 }
-                boxRoiList.add(roi);
+                promptRoiList.add(roi);
                 uniqueGroups.add(roi.getGroup());
             } else {
-                IJ.log("Only box Roi are used as prompts. Roi " + roi.getName() + " will be ignored");
+                IJ.log("Only box and point Roi are used as prompts. Roi " + roi.getName() + " will be ignored");
             }
         }
         groupNumber = uniqueGroups.size();
-        roiNumber = boxRoiList.size();
+        roiNumber = promptRoiList.size();
 
         if (groupNumber == 0){
             IJ.error("No box Roi were found");
@@ -143,17 +142,35 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
         long startTime = System.nanoTime();
 
         // 2.2 Prepare input - Sort positive and negative ROIs
-        positiveRois = new HashMap<>();
-        negativeRois = new ArrayList<>();
+        positiveRois = new HashMap<>(); // positive_rois structure: { '1': [[x,y,w,h], [x,y], ...], '2': [[x,y,w,h], [x,y], ...] } (absolute values)
+        negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
 
-        for (Roi roi : boxRoiList) {
+        for (Roi roi : promptRoiList) {
             int groupId = roi.getGroup() == 0 ? MAX_GROUP_VALUE : roi.getGroup();
-            Rectangle rect = roi.getBounds();
-            double[] box = {rect.x, rect.y, rect.width, rect.height};
-            if (!onlyPositiveGroups && groupId == negativeGroup) {
-                negativeRois.add(box);
+            double[] coord = null;
+            if (roi.getType() == Roi.RECTANGLE) { // if roi is box
+                Rectangle rect = roi.getBounds();
+                coord = new double[]{rect.x, rect.y, rect.width, rect.height};
+
+                if (!onlyPositiveGroups && groupId == negativeGroup) {
+                    negativeRois.add(coord);
+                } else {
+                    positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
+                }
+            } else if (roi.getType() == Roi.POINT) { // if point (or list of points)
+                roi.getContainedPoints();
+                Point[] points = roi.getContainedPoints();  // get list of points in Roi
+                // add every point of the group to the input
+                for (Point point : points){
+                    coord = new double[]{point.getX(), point.getY()};
+                    if (!onlyPositiveGroups && groupId == negativeGroup) {
+                        negativeRois.add(coord);
+                    } else {
+                        positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
+                    }
+                }
             } else {
-                positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(box);
+                IJ.log("error with Roi type : " + roi);
             }
         }
 
@@ -363,7 +380,6 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
         long endTime = System.nanoTime();
         double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
         IJ.log(" --- SAM3 PCS complete. Total time= "+ totalTimeInSeconds + " sec ---");
-
     }
 
     private void parseMacro() {
@@ -404,7 +420,6 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
             IJ.log("Warning: negative group id is not in list of selected roi.");
             onlyPositiveGroups = true;
         }
-
     }
 
     private void recordInMacro() {
@@ -431,28 +446,28 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            addDownloadInstruction();
         };
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);
         gd.addMessage("");
 
         // ask for model folder
-        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
+        addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
 
         // prompts
         gd.addMessage("__________");
-        Sam3Dialogs.addBoxGroupInstructions(gd, roiNumber, groupNumber);
+        addBoxGroupInstructions(gd, roiNumber, groupNumber);
         //if multiple ROI groups, ask if one of them corresponds to negative prompts
-        Sam3Dialogs.addNegativeGroupDialog(gd, groupNumber, negativeGroupSelection);
+        addNegativeGroupDialog(gd, groupNumber, negativeGroupSelection);
 
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3Parameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
+        addParameterDialog(gd, detectionParams, DetectionMode.IMAGE);
 
         // ask for SAM outputs
-        Sam3Dialogs.addOutputDialogImage(gd);
+        addOutputDialogImage(gd);
 
         // Show dialog
         gd.showDialog();
@@ -461,10 +476,10 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
         }
 
         // retrieve choices
-        modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
-        negativeGroup = Sam3Dialogs.getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
-        Sam3Dialogs.getParameters(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
-        outputOptions = Sam3Dialogs.getOutputAnswerImage(gd);
+        modelPath = getModelPath(gd, PREF_LAST_MODEL_KEY);
+        negativeGroup = getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
+        getParameters(gd, detectionParams, DetectionMode.IMAGE);
+        outputOptions = getOutputAnswerImage(gd);
 
         negativeGroup = negativeGroup == 0 ? MAX_GROUP_VALUE : negativeGroup;
         onlyPositiveGroups = negativeGroup == -1;
@@ -478,9 +493,8 @@ public class Sam3BoxDetectionM_Plugin implements PlugIn {
         IJ.log("mask score threshold: " + detectionParams.getMaskScoreThreshold());
 
         int total_prompts = positiveRois.values().stream()
-                .flatMap(List::stream)
-                .mapToInt(array -> array.length)
-                .sum()/4;
+                .mapToInt(List::size)
+                .sum();
         IJ.log("number of positive prompt(s): " + total_prompts + " - number of group(s): "+ positiveRois.size());
         IJ.log("number of negative prompt(s): " + negativeRois.size());
 
