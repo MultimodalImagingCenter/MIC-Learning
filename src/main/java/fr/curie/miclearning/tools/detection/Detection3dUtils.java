@@ -12,14 +12,13 @@ import ij.process.ShortProcessor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static fr.curie.miclearning.tools.detection.DetectionUtils.setGlasbeyLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Detection3dUtils {
 
-    public static void add3dRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape) {
+    public static void addTrackedRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape) {
         if (!addBb && !addShape) {return;}
         if (manager == null || mfdManager == null || mfdManager.getDetectionsByFrame().isEmpty()) {
             IJ.log("Error with manager or no detection found. Roi won't be added to roiManager");
@@ -70,6 +69,7 @@ public class Detection3dUtils {
         }
 
         ImagePlus stackImp = new ImagePlus("Instance Segmentation Stack", maskStack);
+
         IJ.log("Instance masks stack created");
         setGlasbeyLut(stackImp);
         return stackImp;
@@ -79,9 +79,9 @@ public class Detection3dUtils {
         int numInstances = detections.size();
         ImageProcessor processor;
 
-        // If no detections, return an empty ByteProcessor
+        // If no detections, return an empty Processor
         if (numInstances == 0) {
-            return new ByteProcessor(width, height);
+            return new ShortProcessor(width, height);
         }
 
         processor = new ShortProcessor(width, height);
@@ -89,7 +89,7 @@ public class Detection3dUtils {
         // Fill the processor with instance IDs
         for (ProcessedDetection det : detections) {
             if (det.getShapeRoi() != null) {
-                int colorId = det.getId() == 0 ? 255 : det.getId(); // 0 will fill processor with black... and unlikely >254 objects on 1 image
+                int colorId = det.getId() == 0 ? 255 : det.getId(); // 0 would fill processor with black...
                 processor.setColor(colorId);
                 processor.fill(det.getShapeRoi());
             } else {
@@ -105,7 +105,7 @@ public class Detection3dUtils {
         // Add to ROI Manager
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            add3dRoisToManager(roiManager, mfdManager, options.addToRoiManagerBB, options.addToRoiManagerShapes);
+            addTrackedRoisToManager(roiManager, mfdManager, options.addToRoiManagerBB, options.addToRoiManagerShapes);
             roiManager.setVisible(true);
             roiManager.runCommand("Show All"); // Make ROIs visible
         }

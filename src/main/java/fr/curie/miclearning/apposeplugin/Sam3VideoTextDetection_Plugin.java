@@ -103,7 +103,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
         try {
             Environment env = Appose.pixi()
                     .content(envTomlContent)
-                    .logDebug()
+                    //.logDebug()
                     .build();
 
             IJ.log("Python environment built");
@@ -291,7 +291,6 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                 } catch (InterruptedException | TaskException e) {
                     throw new RuntimeException(e);
                 }
-
             }
         } catch (BuildException e) {
             throw new RuntimeException(e);
