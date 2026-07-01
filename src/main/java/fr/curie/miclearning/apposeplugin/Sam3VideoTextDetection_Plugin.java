@@ -19,9 +19,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.Detection3dUtils.*;
@@ -105,7 +103,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
         try {
             Environment env = Appose.pixi()
                     .content(envTomlContent)
-                    .logDebug()
+                    //.logDebug()
                     .build();
 
             IJ.log("Python environment built");
@@ -177,7 +175,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                                 // Check if this is the "End of Stream" signal
                                 // meaning that all results have been sent
                                 if (info == END_SIGNAL) {
-                                    IJ.log("All frames processed");
+                                    IJ.log("All frames processed.");
                                     break; // Break the infinite loop
                                 }
 
@@ -255,7 +253,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                                 }
 
                                 DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-                                //IJ.log(" --- Prediction received for frame "+ frameIdx +"- total number of detection= " + numResults);
+                                //IJ.log(" --- Prediction received for frame "+ nFrames +"- total number of detection= " + numResults);
 
                                 // --- 6. process detections ---
                                 // 6.1 create Roi from bounding boxes and masks
@@ -293,7 +291,6 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                 } catch (InterruptedException | TaskException e) {
                     throw new RuntimeException(e);
                 }
-
             }
         } catch (BuildException e) {
             throw new RuntimeException(e);
@@ -305,7 +302,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            Sam3Dialogs.addDownloadInstructionHg();
         };
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);

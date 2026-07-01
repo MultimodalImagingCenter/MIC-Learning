@@ -1,5 +1,6 @@
 package fr.curie.miclearning.tools.appose;
 
+import ij.IJ;
 import ij.ImagePlus;
 import ij.process.ImageConverter;
 import net.imglib2.Cursor;
@@ -38,9 +39,6 @@ public class ApposeUtils {
 
         // wrap the ImagePlus into a RAI
         RandomAccessibleInterval<T> rai = ImageJFunctions.wrap(tempImp);
-//        System.out.println("Imp converted to rai of dimensions: " + rai.numDimensions());
-//        System.out.println("rai of size: " + rai.size());
-//        System.out.println("rai dimensions: "+ Arrays.toString(rai.dimensionsAsLongArray()));
 
         // create the shared memory copy
         return ShmImg.copyOf(rai);
@@ -50,12 +48,14 @@ public class ApposeUtils {
 
         try (InputStream is = ApposeUtils.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
+                IJ.log("ERROR : Unable to find python script");
                 throw new RuntimeException("Unable to find resource : " + resourcePath);
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                 return reader.lines().collect(Collectors.joining("\n"));
             }
         } catch (Exception e) {
+            IJ.log("ERROR : Unable to load python script");
             throw new RuntimeException("Error while reading file at " + resourcePath + ": ", e);
         }
     }
@@ -76,11 +76,10 @@ public class ApposeUtils {
         }
         // TODO : ajouter gestion slices et frames (choisir lequel des deux va être considéré comme axe temps)
         // TODO : ajouter possibilité image initiale RGBStack ou grayscale
-        // TODO : only process the real number of frames that will be segmented (maxFrameNumber)
+        // TODO : only process the actual number of frames that will be segmented (maxFrameNumber)
 
         int w = imp.getWidth();
         int h = imp.getHeight();
-        //int frames = imp.getStackSize();
         int frames = Math.max(imp.getNSlices(), imp.getNFrames());
         int channels = 3;
 

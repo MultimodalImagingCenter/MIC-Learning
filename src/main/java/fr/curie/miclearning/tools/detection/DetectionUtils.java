@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.tools.detection.ProcessedDetection.ROI_MASK_PREFIX;
 import static ij.plugin.LutLoader.openLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
@@ -32,6 +31,8 @@ public class DetectionUtils {
 
     private static final float MASK_THRESHOLD = 0.5f;
     private static final int MASK_FOREGROUND_COLOR = 255;
+
+    public enum DetectionMode {SINGLE_IMAGE, MULTI_IMAGE, VIDEO}
 
     // --- User Output Selection ---
     public static class OutputOptions {
@@ -45,6 +46,9 @@ public class DetectionUtils {
         public boolean deletePreviousRoi = false;
         public boolean deletePreviousRT = false; // delete previous result table
     }
+
+
+
 
     // --- DetectedObject processing ---
 
@@ -79,7 +83,7 @@ public class DetectionUtils {
             return Collections.emptyList();
         }
 
-        // IJ.log("Processing detections...");
+        //IJ.log("Processing detections...");
 
         if (detection instanceof TiledDetectedObjects){
             return processFromTiledDetection(imp, detection, externalClassIdMap);
@@ -854,7 +858,6 @@ public class DetectionUtils {
             IJ.log("Warning: Provided classIdMap resulted in an empty reverse map after processing. Class names will not be assigned.");
             return null;
         }
-
         return reverseMap;
     }
 
@@ -931,30 +934,51 @@ public class DetectionUtils {
         return impMask;
     }
 
+    /**
+     * Create an ImageProcessor mask where each instance (shape) has a unique pixel value.
+     * Returns an empty Processor if the list of detections is empty.
+     *
+     * @param detections List of detections for a single class group.
+     * @param width           Image width.
+     * @param height          Image height.
+     * @return ShortProcessor filled with instance masks, or an empty Processor.
+     */
+    static ImageProcessor createInstanceMaskProcessor(List<ProcessedDetection> detections, int width, int height) {
+        // If no detections, return an empty ByteProcessor
+        if (detections.isEmpty()) {
+            return new ShortProcessor(width, height); // ByteProcessor would be lighter, but if processor are used to create stack, they have to all be same type
+        }
+        // Filter for detections that actually have a shape ROI
+        List<ProcessedDetection> shapeDetections = detections.stream()
+                .filter(ProcessedDetection::hasShapeRoi)
+                .collect(Collectors.toList());
+
+        if (shapeDetections.isEmpty()) {
+            IJ.log("Warning: detections were found, but none has a shape defined");
+            return new ShortProcessor(width, height);
+        }
+
+        ImageProcessor processor = new ShortProcessor(width, height);
+        // Fill the processor with instance IDs
+        int instanceId = 0; // not using getId because id are unique inside a class, but not in case multiple classes
+        for (ProcessedDetection det : shapeDetections) {
+            instanceId++;
+            processor.setColor(instanceId);
+            processor.fill(det.getShapeRoi());
+        }
+        processor.setThreshold(0, 0, ImageProcessor.NONE);
+        return processor;
+    }
 
     /**
      * Creates a single-slice instance mask where each instance (shape) has a unique pixel value.
      *
      * @param imp              The source ImagePlus (for dimensions).
-     * @param processedResults The list of processed detections.
+     * @param detections The list of processed detections.
      * @return An ImagePlus containing the instance mask, or null if no shapes.
      */
-    public static ImagePlus createInstanceMask(ImagePlus imp, List<ProcessedDetection> processedResults) {
-        // Filter for detections that actually have a shape ROI
-        List<ProcessedDetection> shapeDetections = processedResults.stream()
-                .filter(ProcessedDetection::hasShapeRoi)
-                .collect(Collectors.toList());
-
-        if (shapeDetections.isEmpty()) {
-            IJ.log("No shape ROIs available to create an instance mask.");
-            return null;
-        }
-
-        int imageWidth = imp.getWidth();
-        int imageHeight = imp.getHeight();
-        int numInstances = shapeDetections.size();
-
-        ImageProcessor processor = createAndFillProcessor(shapeDetections, imageWidth, imageHeight);
+    public static ImagePlus createInstanceMaskImp(ImagePlus imp, List<ProcessedDetection> detections) {
+        ImageProcessor processor = createInstanceMaskProcessor(detections, imp.getWidth(), imp.getHeight());
 
         ImagePlus instanceImage = new ImagePlus("Instance Mask", processor);
         IJ.log("Instance mask created.");
@@ -963,42 +987,84 @@ public class DetectionUtils {
         return instanceImage;
     }
 
+    public static ImagePlus createInstanceMaskStack(ImagePlus imp, Map<Integer, List<ProcessedDetection>> detectionsByFrame) {
+        ImageStack impStack = imp.getStack();
+        if (impStack.getSize() < detectionsByFrame.size()) {
+            IJ.log("Error: More slices are registered in detectionsByFrame than in initial stack");
+            return null;
+        }
+
+        int width = imp.getWidth();
+        int height = imp.getHeight();
+
+        ImageStack maskStack = new ImageStack(width, height);
+        ImageStack originalStack = imp.getStack();
+        for (Map.Entry<Integer, List<ProcessedDetection>> entry : detectionsByFrame.entrySet()) {
+            List<ProcessedDetection> detections = entry.getValue();
+            ImageProcessor sliceProcessor = createInstanceMaskProcessor(detections, width, height);
+            String sliceLabel = originalStack.getSliceLabel(entry.getKey() + 1);
+            maskStack.addSlice(sliceLabel, sliceProcessor);
+        }
+
+        if (maskStack.getSize() == 0) {
+            IJ.log("Could not create any slices for the mask stack.");
+            return null;
+        }
+
+        ImagePlus finalImp = new ImagePlus("Instance Masks", maskStack);
+        IJ.log("Instance masks stack created.");
+        finalImp.setDisplayRange(0, Math.max(255.0, finalImp.getStatistics().max));
+        setGlasbeyLut(finalImp);
+        return finalImp;
+    }
 
     /**
-     * Creates a single-slice semantic mask where each pixel is colored by its class ID (group ID).
+     * Create an ImageProcessor mask where each class has a unique pixel value.
+     * Returns an empty Processor if the list of detections is empty.
      *
-     * @param imp              The source ImagePlus (for dimensions).
-     * @param processedResults The list of processed detections.
-     * @return An ImagePlus containing the semantic mask, or null if no shapes.
+     * @param detections List of detections for a single class group.
+     * @param width           Image width.
+     * @param height          Image height.
+     * @return ShortProcessor filled with instance masks, or an empty Processor.
      */
-    public static ImagePlus createSemanticMask(ImagePlus imp, List<ProcessedDetection> processedResults) {
+    static ImageProcessor createSemanticMaskProcessor(List<ProcessedDetection> detections, int width, int height) {
+        // If no detections, return an empty ByteProcessor
+        if (detections.isEmpty()) {
+            return new ShortProcessor(width, height); // ByteProcessor would be lighter, but if processor are used to create stack, they have to all be same type
+        }
         // Filter for detections that actually have a shape ROI
-        List<ProcessedDetection> shapeDetections = processedResults.stream()
+        List<ProcessedDetection> shapeDetections = detections.stream()
                 .filter(ProcessedDetection::hasShapeRoi)
                 .collect(Collectors.toList());
 
         if (shapeDetections.isEmpty()) {
-            IJ.log("No shape ROIs available to create a semantic mask.");
-            return null;
+            IJ.log("Warning: detections were found, but none has a shape defined");
+            return new ShortProcessor(width, height);
         }
 
-        int imageWidth = imp.getWidth();
-        int imageHeight = imp.getHeight();
-        int maxGroupId = processedResults.stream().mapToInt(ProcessedDetection::getGroupId).max().orElse(0);
-
-        // Check if we exceed 255 classes and need a ShortProcessor
-        ImageProcessor processor;
-        processor = new ShortProcessor(imageWidth, imageHeight);
+        ImageProcessor processor = new ShortProcessor(width, height);
 
         // order detections to have all detection of the same class painted at the same level
         shapeDetections.sort(Comparator.comparingInt(ProcessedDetection::getGroupId));
-
-        for (ProcessedDetection result : shapeDetections) {
-            Roi roi = result.getShapeRoi();
-            int groupId = result.getGroupId();
+        // Fill the processor with class IDs
+        for (ProcessedDetection det : shapeDetections) {
+            int groupId = det.getGroupId();
             processor.setColor(groupId);
-            processor.fill(roi);
+            processor.fill(det.getShapeRoi());
         }
+        processor.setThreshold(0, 0, ImageProcessor.NONE);
+        return processor;
+    }
+
+    /**
+     * Creates a single-slice semantic mask where each pixel is colored by its class ID.
+     *
+     * @param imp              The source ImagePlus (for dimensions).
+     * @param detections The list of processed detections.
+     * @return An ImagePlus containing the semantic mask, or null if no shapes.
+     */
+    public static ImagePlus createSemanticMaskImp(ImagePlus imp, List<ProcessedDetection> detections) {
+        ImageProcessor processor = createSemanticMaskProcessor(detections, imp.getWidth(), imp.getHeight());
 
         ImagePlus semanticImage = new ImagePlus("Semantic Mask", processor);
         IJ.log("Semantic mask created.");
@@ -1007,6 +1073,36 @@ public class DetectionUtils {
         return semanticImage;
     }
 
+
+    public static ImagePlus createSemanticMaskStack(ImagePlus imp, Map<Integer, List<ProcessedDetection>> detectionsByFrame) {
+        ImageStack impStack = imp.getStack();
+        if (impStack.getSize() < detectionsByFrame.size()) {
+            IJ.log("Error: More slices are registered in detectionsByFrame than in initial stack");
+            return null;
+        }
+
+        int width = imp.getWidth();
+        int height = imp.getHeight();
+
+        ImageStack maskStack = new ImageStack(width, height);
+        for (Map.Entry<Integer, List<ProcessedDetection>> entry : detectionsByFrame.entrySet()) {
+            List<ProcessedDetection> detections = entry.getValue();
+            ImageProcessor sliceProcessor = createSemanticMaskProcessor(detections, width, height);
+            String sliceLabel = impStack.getSliceLabel(entry.getKey() + 1);
+            maskStack.addSlice(sliceLabel, sliceProcessor);
+        }
+
+        if (maskStack.getSize() == 0) {
+            IJ.log("Could not create any slices for the mask stack.");
+            return null;
+        }
+
+        ImagePlus finalImp = new ImagePlus("Semantic Masks", maskStack);
+        IJ.log("Semantic masks stack created.");
+        finalImp.setDisplayRange(0, Math.max(255.0, finalImp.getStatistics().max));
+        setGlasbeyLut(finalImp);
+        return finalImp;
+    }
 
     /**
      * Creates a stack where each slice represents a class, and instances within that class
@@ -1076,7 +1172,7 @@ public class DetectionUtils {
                 int numInstancesInClass = groupDetections.size();
 
                 // Create the processor and fill it
-                ImageProcessor processor = createAndFillProcessor(groupDetections, imageWidth, imageHeight);
+                ImageProcessor processor = createInstanceMaskProcessor(groupDetections, imageWidth, imageHeight);
 
                 // Add the slice to the stack
                 classStack.addSlice(className + " (" + numInstancesInClass + " instances)", processor);
@@ -1106,7 +1202,7 @@ public class DetectionUtils {
                 int numInstancesInClass = groupDetections.size();
                 String className = groupNameMap.getOrDefault(groupId, "UnknownClass_ID" + groupId);
                 // Create the processor and fill it
-                ImageProcessor processor = createAndFillProcessor(groupDetections, imageWidth, imageHeight);
+                ImageProcessor processor = createInstanceMaskProcessor(groupDetections, imageWidth, imageHeight);
 
                 classStack.addSlice(className + " (" + numInstancesInClass + " instances)", processor);
             }
@@ -1124,44 +1220,10 @@ public class DetectionUtils {
         return classStackImage;
     }
 
-    /**
-     * Create an appropriate ImageProcessor (Byte or Short)
-     * and fill it with instance masks.
-     * Returns an empty ByteProcessor if the list of detections is empty.
-     *
-     * @param detections List of detections for a single class group.
-     * @param width           Image width.
-     * @param height          Image height.
-     * @return ImageProcessor filled with instance masks, or an empty ByteProcessor.
-     */
-    private static ImageProcessor createAndFillProcessor(List<ProcessedDetection> detections, int width, int height) {
-        int numInstances = detections.size();
-        ImageProcessor processor;
 
-        // If no detections, return an empty ByteProcessor
-        if (numInstances == 0) {
-            return new ByteProcessor(width, height);
-        }
-
-        processor = new ShortProcessor(width, height);
-
-        // Fill the processor with instance IDs
-        int instanceId = 0;
-        for (ProcessedDetection result : detections) {
-            if (result.getShapeRoi() != null) {
-                instanceId++;
-                processor.setColor(instanceId);
-                processor.fill(result.getShapeRoi());
-            } else {
-                IJ.log("Warning: Found detection without a Shape ROI during processor filling. Skipping this instance.");
-            }
-        }
-        processor.setThreshold(0, 0, ImageProcessor.NONE);
-        return processor;
-    }
 
     /**
-     * Generates the selected output visualizations (masks, ROIs).
+     * Generates the selected output visualizations (masks, ROIs) for one single image
      * @param processedDetections List of processed detections.
      * @param options User choices for output types.
      */
@@ -1185,14 +1247,14 @@ public class DetectionUtils {
 
         // Create Instance Mask
         if (options.createInstanceMask) {
-            ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp, processedDetections);
-            if (instanceMask != null) instanceMask.show();
+            ImagePlus instanceMask = DetectionUtils.createInstanceMaskImp(imp, processedDetections);
+            instanceMask.show();
         }
 
         // Create Semantic Mask
         if (options.createSemanticMask) {
-            ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp, processedDetections);
-            if (semanticMask != null) semanticMask.show();
+            ImagePlus semanticMask = DetectionUtils.createSemanticMaskImp(imp, processedDetections);
+            semanticMask.show();
         }
 
         // Create Instance Mask Per Class

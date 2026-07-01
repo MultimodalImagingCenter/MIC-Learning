@@ -6,7 +6,7 @@
 
     <groupId>fr.curie</groupId>
     <artifactId>MicLearning</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -201,7 +201,7 @@
                                     <shadedPattern>fr.curie.shaded.com.google.protobuf</shadedPattern>
                                 </relocation>
                             </relocations>
-
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>

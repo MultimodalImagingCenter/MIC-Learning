@@ -80,7 +80,7 @@ for model_outputs in model.propagate_in_video_iterator(
     N = len(ids)
     # Select buffer index using modulo to wrap around the pool
 
-    # log_to_java("   frame: {} - number of objects detected: {}".format(frame_idx, N))
+    #log_to_java("   frame: {} - number of objects detected: {}".format(frame_idx, N))
 
     # 5. process and store results for the frame
     if boxes is not None and len(boxes) > 0:
