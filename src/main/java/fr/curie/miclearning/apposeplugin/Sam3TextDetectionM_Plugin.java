@@ -21,12 +21,14 @@ import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
+import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
 
 import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 
+@Deprecated
 public class Sam3TextDetectionM_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
@@ -372,7 +374,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3Parameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
+        Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
 
         // ask for SAM outputs
         Sam3Dialogs.addOutputDialogImage(gd);
@@ -386,7 +388,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         // retrieve choices
         modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
         classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        Sam3Dialogs.getParameters(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
+        Sam3Dialogs.getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
         outputOptions = Sam3Dialogs.getOutputAnswerImage(gd);
     }
 

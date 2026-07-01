@@ -1,16 +1,14 @@
 package fr.curie.miclearning.apposeplugin;
 
 import ai.djl.modality.cv.output.BoundingBox;
-import fr.curie.miclearning.tools.detection.DetectedObjects;
-import fr.curie.miclearning.tools.detection.DetectionUtils;
-import fr.curie.miclearning.tools.detection.MaskByte;
-import fr.curie.miclearning.tools.detection.ProcessedDetection;
+import fr.curie.miclearning.tools.detection.*;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.Macro;
 import ij.gui.GenericDialog;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
+import ij.plugin.frame.RoiManager;
 import net.imglib2.appose.NDArrays;
 import net.imglib2.appose.ShmImg;
 import org.apposed.appose.*;
@@ -24,17 +22,24 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
-import static fr.curie.miclearning.tools.appose.ApposeUtils.*;
-import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
+import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.*;
+import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
+import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
+import static fr.curie.miclearning.tools.detection.DetectionUtils.*;
+import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames;
 
+    private DetectionMode stackMode = DetectionMode.MULTI_IMAGE;
+    private int current_slice = 0; //0 if all slices are processed (even if only 1 slice in original image), position of the processed frame otherwise
+
     private DetectionUtils.OutputOptions outputOptions;
     private String modelPath;
     private Sam3Parameters detectionParams;
+
+    private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
 
     private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer >0 and <256)
     private List<String> textPrompts;
@@ -63,6 +68,8 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         // 1.2 retrieve parameters (model path, prompt and output options)
         nFrames = Math.max(imp.getNSlices(), imp.getNFrames());
+        if (nFrames == 1) stackMode = DetectionMode.SINGLE_IMAGE;
+
         if (Macro.getOptions() != null) {
             //IJ.log("macro options");
             parseMacro();
@@ -70,17 +77,23 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
             askUser();
         }
 
-        if (outputOptions == null || classIdMap == null || classIdMap.isEmpty() || modelPath == null) {
+        if (outputOptions == null || classIdMap == null || classIdMap.isEmpty() || modelPath == null || stackMode == null) {
             return;
         }
 
         long startTime = System.nanoTime();
+
+        if (nFrames>0 && stackMode == DetectionMode.SINGLE_IMAGE) {
+            current_slice = imp.getCurrentSlice();
+            imp = new ImagePlus("current slice", imp.getProcessor());
+        }
+
         textPrompts = new ArrayList<>();
         textPrompts.addAll(classIdMap.keySet());
 
 
         recordInMacro();
-        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on image stack - with text prompts ---");
+        IJ.log("\n   --- SAM Promptable Concept Segmentation - on image stack - with text prompts ---");
         printParameters();
 
         // --- 2. load script and create env ---
@@ -157,7 +170,6 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
                                 IJ.log("ERROR while running python script");
                                 return;
                             case COMPLETION:
-                                IJ.log("Task completed successfully");
                                 resultsQueue.offer(END_SIGNAL); // send signal to stop processing
                                 break;
                             case CANCELATION:
@@ -184,24 +196,23 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
                                 }
 
                                 // if no end signal, extract results for the frame
-
                                 int numResults = (int) info.get("n_results");
                                 int frameIdx = (int) info.get("frame_idx");
 
-                                IJ.log("JAVA processing frame " + frameIdx + ": " + numResults + " object(s)");
-
+                                if (numResults == 0){
+                                    detectionsByFrame.put(frameIdx, Collections.emptyList());
+                                    continue;
+                                }
 
                                 NDArray output_boxes = (NDArray) info.get("boxes");
                                 NDArray output_masks = (NDArray) info.get("masks");
                                 NDArray output_scores = (NDArray) info.get("scores");
                                 NDArray output_prompt_ids = (NDArray) info.get("prompts_ids");
 
-
-
-                                //if (output_boxes == null || output_masks == null || output_scores == null || output_prompt_ids == null) {
-                                if (output_boxes == null || output_masks == null ) {
-                                    IJ.log("Missing output arrays (boxes, masks, scores or ids) from Python.");
-                                    return;
+                                if (output_boxes == null || output_masks == null || output_scores == null || output_prompt_ids == null) {
+                                    IJ.log("Warning : Missing output arrays (boxes, masks, scores or ids) from Python for frame "+ frameIdx);
+                                    detectionsByFrame.put(frameIdx, Collections.emptyList());
+                                    continue;
                                 }
 
                                 // --- 5. process results --
@@ -251,7 +262,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
                                 // 5.5 convert results to DetectedObjects
                                 List<String> classNames = new ArrayList<>();
-                               List<Double> probabilities = new ArrayList<>();
+                                List<Double> probabilities = new ArrayList<>();
                                 List<BoundingBox> boundingBoxes = new ArrayList<>();
 
                                 for (int i = 0; i < numResults; i++) {
@@ -264,27 +275,28 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
                                 }
 
                                 DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-                                IJ.log(" --- Prediction received for frame " + nFrames + "- total number of detection= " + numResults);
 
                                 // --- 6. process detections ---
                                 // 6.1 create Roi from bounding boxes and masks
                                 List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
                                 if (processedDetections.isEmpty()) {
-                                    IJ.log(" --- No valid detections were processed for frame " + frameIdx);
-                                    return;
+                                    IJ.log("No valid detections were processed for frame " + frameIdx);
                                 }
+                                detectionsByFrame.put(frameIdx, processedDetections);
 
                             }
                             // once all results have been processed (and end_signal received)
                             // --- 7. generate Outputs, based on user choices
-                            IJ.log("all results processed");
+                            IJ.log(" --- Generating output... ");
+                            generateOutputs();
+
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             IJ.log("Consumer thread stopped.");
                         } finally {
                             long endTime = System.nanoTime();
                             double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-                            IJ.log(" --- SAM3 segmentation complete. Total time= "+ totalTimeInSeconds + " sec ---");
+                            IJ.log(" --- SAM3 segmentation complete. " + detectionsByFrame.size() + " Frame processed. Total time= "+ totalTimeInSeconds + " sec ---");
                         }
                     }).start();
 
@@ -298,6 +310,43 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
             }
         } catch (BuildException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void generateOutputs() {
+        if (outputOptions.addToRoiManagerBB || outputOptions.addToRoiManagerShapes) {
+            RoiManager roiManager = getRoiManager();
+            if (current_slice != 0) detectionsByFrame.put( current_slice-1, detectionsByFrame.remove( 0) );
+            Detection3dUtils.addTrackedRoisToManager(roiManager, detectionsByFrame, outputOptions.addToRoiManagerBB, outputOptions.addToRoiManagerShapes, Detection3dUtils.GroupingMethod.BY_CLASS);
+
+            roiManager.setVisible(true);
+            roiManager.runCommand("Show All"); // Make ROIs visible
+        }
+
+        if (outputOptions.createInstanceMask) {
+            ImagePlus instanceMaskStack = createInstanceMaskStack(imp, detectionsByFrame);
+            if (instanceMaskStack != null) {
+                instanceMaskStack.show();
+            }
+        }
+
+        if (outputOptions.createSemanticMask) {
+            ImagePlus semanticMaskStack = createSemanticMaskStack(imp, detectionsByFrame);
+            if (semanticMaskStack != null) {
+                semanticMaskStack.show();
+            }
+        }
+
+        if (stackMode == DetectionMode.SINGLE_IMAGE) {
+            if (outputOptions.createStackMask) {
+                ImagePlus stackMask = createStackMask(imp, detectionsByFrame.values().iterator().next());
+                if (stackMask != null) stackMask.show();
+            }
+
+            if (outputOptions.createInstanceMaskPerClass) {
+                ImagePlus instanceMaskPerClass = createInstanceMaskPerClass(imp, detectionsByFrame.values().iterator().next(), classIdMap);
+                if (instanceMaskPerClass != null) instanceMaskPerClass.show();
+            }
         }
     }
 
@@ -322,6 +371,9 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         }
         String[] promptArray = prompts.split(",");
 
+        if (options.contains("stack ")) stackMode = DetectionMode.MULTI_IMAGE;
+        else stackMode = DetectionMode.SINGLE_IMAGE;
+
         String roiIDs = Macro.getValue(options, "roi_ids", "1");
         if (roiIDs.trim().isEmpty()) {
             roiIDs = String.join("", Collections.nCopies(promptArray.length, "0,"));
@@ -340,14 +392,13 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         // outputs
         outputOptions = new DetectionUtils.OutputOptions();
-        outputOptions.addToRoiManagerBB = Boolean.parseBoolean(Macro.getValue(options, "add_box_rois", "false"));
-        outputOptions.addToRoiManagerShapes = Boolean.parseBoolean(Macro.getValue(options, "add_shape_rois", "false"));
+        outputOptions.addToRoiManagerBB = Boolean.parseBoolean(Macro.getValue(options, "add_box_rois", "false")) || options.contains("add_box_rois ");
+        outputOptions.addToRoiManagerShapes = Boolean.parseBoolean(Macro.getValue(options, "add_shape_rois", "false")) || options.contains("add_shape_rois ");
         outputOptions.deletePreviousRoi = false;
-        outputOptions.createStackMask = Boolean.parseBoolean(Macro.getValue(options, "create_stack_mask", "false"));
-        outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false"));
-        outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false"));
-        outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"));
-
+        outputOptions.createStackMask = (Boolean.parseBoolean(Macro.getValue(options, "create_stack_mask", "false")) || options.contains("create_stack_mask "))  && stackMode == DetectionMode.SINGLE_IMAGE;
+        outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false")) || options.contains("create_instance_mask ");
+        outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false")) || options.contains("create_semantic_mask ");
+        outputOptions.createInstanceMaskPerClass = (Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"))  || options.contains("create_instance_mask_per_class "))  && stackMode == DetectionMode.SINGLE_IMAGE;
     }
 
     private void recordInMacro() {
@@ -367,15 +418,22 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
 
-        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes", String.valueOf(true));
-        if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois", String.valueOf(true));
-        if (outputOptions.createStackMask) Recorder.recordOption("create_stack_mask", String.valueOf(true));
-        if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
-        if (outputOptions.createSemanticMask) Recorder.recordOption("create_semantic_mask", String.valueOf(true));
-        if (outputOptions.createInstanceMaskPerClass) Recorder.recordOption("create_instance_mask_per_class", String.valueOf(true));
+        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes");
+        if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois");
+        if (outputOptions.createStackMask && stackMode == DetectionMode.SINGLE_IMAGE) Recorder.recordOption("create_stack_mask");
+        if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask");
+        if (outputOptions.createSemanticMask) Recorder.recordOption("create_semantic_mask");
+        if (outputOptions.createInstanceMaskPerClass && stackMode == DetectionMode.SINGLE_IMAGE) Recorder.recordOption("create_instance_mask_per_class");
+
+        if (stackMode == DetectionMode.SINGLE_IMAGE) Recorder.recordOption("slice");
+        else Recorder.recordOption("stack");
     }
 
+
+
     private void askUser() {
+        if (nFrames >1) stackMode= askStackMode(nFrames);
+        if (stackMode == null) return;
         GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation with text prompts");
 
         // instructions to download model
@@ -396,10 +454,10 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3Parameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
+        Sam3Dialogs.addParameterDialog(gd, detectionParams, stackMode);
 
         // ask for SAM outputs
-        Sam3Dialogs.addOutputDialogImage(gd);
+        Sam3Dialogs.addOutputDialog(gd, stackMode);
 
         // Show dialog
         gd.showDialog();
@@ -410,13 +468,14 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         // retrieve choices
         modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
         classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        Sam3Dialogs.getParameters(gd, detectionParams, Sam3Dialogs.DetectionMode.IMAGE);
-        outputOptions = Sam3Dialogs.getOutputAnswerImage(gd);
+        Sam3Dialogs.getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        outputOptions = Sam3Dialogs.getOutputAnswer(gd, stackMode);
     }
 
     private void printParameters(){
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
+        IJ.log("number of slice(s): " + (stackMode ==  DetectionMode.SINGLE_IMAGE ? 1 : nFrames));
         IJ.log("model: " + modelPath);
         IJ.log("confidence threshold: " + detectionParams.getConfidenceThreshold());
         IJ.log("mask score threshold: " + detectionParams.getMaskScoreThreshold());
@@ -425,7 +484,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
                 .map(String::toUpperCase)
                 .collect(Collectors.joining(", "));
 
-        IJ.log("text prompts: " + joinedPrompts);
+        IJ.log("text prompt(s): " + joinedPrompts);
 
         IJ.log("----------------------");
     }

@@ -40,7 +40,7 @@ n_frames, h_img, w_img = images_bgr.shape[:3]
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 
 # store results in arrays
-total_detection =0
+total_detection =0 # number of detections on al frames
 global_masks = []
 global_boxes = []
 global_scores = []
@@ -50,7 +50,8 @@ global_prompt_ids = []  # To track which prompt produced which detection
 log_to_java("running prediction...")
 for frame_idx, img in enumerate(images_bgr) :
     # compute vision embeddings once per image
-    log_to_java(f"   Slice {frame_idx + 1}")
+    if n_frames >1:
+        log_to_java(f"   Slice {frame_idx + 1}")
     enc_img = detect_model.encode_image(img)
 
     # store results for this slice
@@ -72,7 +73,7 @@ for frame_idx, img in enumerate(images_bgr) :
             mask_preds, box_preds, det_scores, pres_score, confidence_threshold
         )
 
-        n_det = filtered_masks.shape[0]
+        n_det = filtered_masks.shape[0] #number of detections for this frame, for this prompt
         log_to_java("      prompt: {} - number of objects detected: {} - presence score: {}".format(prompt, n_det, *presence_score.tolist()))
     
         # 4.3 process and store results for 1 prompt
@@ -100,52 +101,67 @@ for frame_idx, img in enumerate(images_bgr) :
             # Create an ID array for this prompt
             prompt_ids = torch.full((n_det,), i, dtype=torch.int32)
             slice_prompt_ids.append(prompt_ids)
-    
-    
+
+
      # 5. Concatenate and Share
     total_detection += slice_total_detection
-    # Merge all results into single tensors
-    pre_final_masks = torch.cat(slice_masks, dim=0).numpy().astype('uint8')
-    final_boxes = torch.cat(slice_boxes, dim=0).numpy().astype('float64')
-    final_scores = torch.cat(slice_scores, dim=0).numpy().astype('float64')
-    final_ids = torch.cat(slice_prompt_ids, dim=0).numpy().astype('int32')
+    if slice_total_detection > 0 :
+        # Merge all results into single tensors
+        pre_final_masks = torch.cat(slice_masks, dim=0).numpy().astype('uint8')
+        final_boxes = torch.cat(slice_boxes, dim=0).numpy().astype('float64')
+        final_scores = torch.cat(slice_scores, dim=0).numpy().astype('float64')
+        final_ids = torch.cat(slice_prompt_ids, dim=0).numpy().astype('int32')
 
-    # resize masks
-    final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8, device="cpu")
-    for i in range(slice_total_detection):
-        final_masks[i] = cv2.resize(pre_final_masks[i],(w_img, h_img),
-                                      interpolation=cv2.INTER_NEAREST)
+        # resize masks
+        final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8, device="cpu")
+        for i in range(slice_total_detection):
+            final_masks[i] = cv2.resize(pre_final_masks[i],(w_img, h_img),
+                                          interpolation=cv2.INTER_NEAREST)
 
-    # Create the NDArrays for sharing
-    shared_masks = appose.NDArray("uint8", final_masks.shape)
-    shared_boxes = appose.NDArray("float64", final_boxes.shape)
-    shared_scores = appose.NDArray("float64", final_scores.shape)
-    shared_ids = appose.NDArray("int32", final_ids.shape)
+        # Create the NDArrays for sharing
+        shared_masks = appose.NDArray("uint8", final_masks.shape)
+        shared_boxes = appose.NDArray("float64", final_boxes.shape)
+        shared_scores = appose.NDArray("float64", final_scores.shape)
+        shared_ids = appose.NDArray("int32", final_ids.shape)
 
-    # write into the shared memory
-    shared_masks.ndarray()[:] = final_masks
-    global_masks.append(shared_masks)
-    shared_boxes.ndarray()[:] = final_boxes
-    global_boxes.append(shared_boxes)
-    shared_scores.ndarray()[:] = final_scores
-    global_scores.append(shared_scores)
-    shared_ids.ndarray()[:] = final_ids
-    global_prompt_ids.append(shared_ids)
+        # write into the shared memory
+        shared_masks.ndarray()[:] = final_masks
+        global_masks.append(shared_masks)
+        shared_boxes.ndarray()[:] = final_boxes
+        global_boxes.append(shared_boxes)
+        shared_scores.ndarray()[:] = final_scores
+        global_scores.append(shared_scores)
+        shared_ids.ndarray()[:] = final_ids
+        global_prompt_ids.append(shared_ids)
 
+        # 6. send results to java via task update
+        task.update(
+            message=f"   slice {frame_idx+1} - number of objects detected: {slice_total_detection}",
+            current=frame_idx,
+            maximum=n_frames,
+            info={
+                "frame_idx": frame_idx,
+                "n_results": slice_total_detection,
+                "prompts_ids": global_prompt_ids[frame_idx],
+                "scores" : global_scores[frame_idx],
+                "boxes": global_boxes[frame_idx],
+                "masks": global_masks[frame_idx]
+            }
+        )
+    else :
+        global_masks.append(slice_masks)
+        global_boxes.append(slice_boxes)
+        global_scores.append(slice_scores)
+        global_prompt_ids.append(slice_prompt_ids)
 
-    # 6. send results to java via task update
-    task.update(
-        message=f"   slice {frame_idx+1} - number of objects detected: {slice_total_detection}",
-        current=frame_idx,
-        maximum=n_frames,
-        info={
-            "frame_idx": frame_idx,
-            "n_results": slice_total_detection,
-            "prompts_ids": global_prompt_ids[frame_idx],
-            "scores" : global_scores[frame_idx],
-            "boxes": global_boxes[frame_idx],
-            "masks": global_masks[frame_idx]
-        }
-    )
+        task.update(
+            message=f"   slice {frame_idx+1} - number of objects detected: {slice_total_detection}",
+            current=frame_idx,
+            maximum=n_frames,
+            info={
+                "frame_idx": frame_idx,
+                "n_results": slice_total_detection
+            }
+        )
 
 log_to_java("python segmentation complete")

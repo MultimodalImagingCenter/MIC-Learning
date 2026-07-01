@@ -5,7 +5,6 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Roi;
 import ij.plugin.frame.RoiManager;
-import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ShortProcessor;
 
@@ -17,22 +16,36 @@ import static fr.curie.miclearning.tools.detection.DetectionUtils.setGlasbeyLut;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 public class Detection3dUtils {
-
-    public static void addTrackedRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape) {
+    public enum GroupingMethod { BY_OBJECT, BY_CLASS } // in Roi Manager, are Roi group id defined
+    // - by object (in each class, each object is associated to 1 id) (default)
+    // - or by class (all objects of the same class have the same id)
+    public static void addTrackedRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape, GroupingMethod groupingMethod) {
         if (!addBb && !addShape) {return;}
         if (manager == null || mfdManager == null || mfdManager.getDetectionsByFrame().isEmpty()) {
             IJ.log("Error with manager or no detection found. Roi won't be added to roiManager");
             return;
         }
 
-        for (Map.Entry<Integer, List<ProcessedDetection>> entry : mfdManager.getDetectionsByFrame().entrySet()) {
+        addTrackedRoisToManager(manager, mfdManager.getDetectionsByFrame(), addBb, addShape, groupingMethod);
+        IJ.log("Rois added to RoiManger");
+    }
+
+    public static void addTrackedRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape) {
+        addTrackedRoisToManager(manager, mfdManager,  addBb, addShape, GroupingMethod.BY_OBJECT);
+    }
+
+    public static void addTrackedRoisToManager(RoiManager manager, Map<Integer, List<ProcessedDetection>> detectionsByFrame, boolean addBb, boolean addShape, GroupingMethod groupingMethod) {
+        if (!addBb && !addShape) {return;}
+
+        for (Map.Entry<Integer, List<ProcessedDetection>> entry : detectionsByFrame.entrySet()) {
             int frame = entry.getKey();
             List<ProcessedDetection> detections  = entry.getValue();
+            if (detections.isEmpty()) {continue;}
             for (ProcessedDetection det : detections) {
                 if (addBb  && det.getBoundingBoxRoi() != null) {
                     Roi roi = (Roi) det.getBoundingBoxRoi().clone();
                     roi.setPosition(frame + 1);
-                    roi.setGroup(det.getId());
+                    roi.setGroup(getGroupId(det, groupingMethod));
                     roi.setName(det.getRoiName());
                     manager.addRoi(roi);
                 }
@@ -40,17 +53,28 @@ public class Detection3dUtils {
                 if (addShape && det.getShapeRoi() != null) {
                     Roi roi = (Roi) det.getShapeRoi().clone();
                     roi.setPosition(frame + 1); // 1-based
-                    roi.setGroup(det.getId());
+                    roi.setGroup(getGroupId(det, groupingMethod));
                     roi.setName(det.getRoiName());
                     manager.addRoi(roi);
                 }
             }
         }
         IJ.log("Rois added to RoiManger");
-
     }
 
-    public static ImagePlus createInstanceMaskStack(ImagePlus imp, MultiFrameDataManager mfdManager) {
+    private static int getGroupId(ProcessedDetection detection, GroupingMethod groupingMethod){
+        switch (groupingMethod) {
+            case BY_CLASS:
+                return detection.getGroupId() % 256; // groupId has to be int between 0 and 255
+            case BY_OBJECT:
+                return detection.getId() % 256;
+            default:
+                return 0;
+        }
+    }
+
+    // ID continuity from one frame to the other (same object on multiple frames)
+    public static ImagePlus createInstanceMaskStackWithFixedIds(ImagePlus imp, MultiFrameDataManager mfdManager) {
         int totalFrames = mfdManager.getMaxFrameNumber();
         int width = imp.getWidth();
         int height = imp.getHeight();
@@ -59,7 +83,7 @@ public class Detection3dUtils {
         Map<Integer, List<ProcessedDetection>> videoDetectionsRegistry = mfdManager.getDetectionsByFrame();
         for (int f = 0; f < totalFrames; f++) {
             List<ProcessedDetection> detections = videoDetectionsRegistry.getOrDefault(f, new ArrayList<>());
-            ImageProcessor sliceProcessor = createAndFillProcessor(detections, width, height);
+            ImageProcessor sliceProcessor = createAndFillProcessorWithFixedIds(detections, width, height);
             maskStack.addSlice("Frame " + (f + 1), sliceProcessor);
         }
 
@@ -75,22 +99,24 @@ public class Detection3dUtils {
         return stackImp;
     }
 
-    private static ImageProcessor createAndFillProcessor(List<ProcessedDetection> detections, int width, int height) {
+
+    private static ImageProcessor createAndFillProcessorWithFixedIds(List<ProcessedDetection> detections, int width, int height) {
         int numInstances = detections.size();
         ImageProcessor processor;
 
-        // If no detections, return an empty Processor
+        // If no detections, return an empty ByteProcessor
         if (numInstances == 0) {
-            return new ShortProcessor(width, height);
+            return new ShortProcessor(width, height); // ByteProcessor would be lighter, but if processor are used to create stack, they have to all be same type
         }
 
         processor = new ShortProcessor(width, height);
 
         // Fill the processor with instance IDs
+        // WARNING: id are unique inside a class, but not if multiple classes
+        // TODO : find a solution if multiple classes, while conserving id continuity
         for (ProcessedDetection det : detections) {
             if (det.getShapeRoi() != null) {
-                int colorId = det.getId() == 0 ? 255 : det.getId(); // 0 would fill processor with black...
-                processor.setColor(colorId);
+                processor.setColor(det.getId()+1); // IDs start from 0 and 0 would fill with black...
                 processor.fill(det.getShapeRoi());
             } else {
                 IJ.log("Warning: Found detection without a Shape ROI during processor filling. Skipping this instance.");
@@ -99,7 +125,6 @@ public class Detection3dUtils {
         processor.setThreshold(0, 0, ImageProcessor.NONE);
         return processor;
     }
-
 
     public static void generate3dOutputs(ImagePlus imp,  MultiFrameDataManager mfdManager, DetectionUtils.OutputOptions options) {
         // Add to ROI Manager
@@ -111,7 +136,7 @@ public class Detection3dUtils {
         }
 
         if (options.createInstanceMask){
-            ImagePlus stackMask = createInstanceMaskStack(imp, mfdManager);
+            ImagePlus stackMask = createInstanceMaskStackWithFixedIds(imp, mfdManager);
             if (stackMask != null) stackMask.show();
         }
     }

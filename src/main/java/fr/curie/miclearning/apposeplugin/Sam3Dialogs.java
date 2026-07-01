@@ -5,6 +5,7 @@ import ij.IJ;
 import ij.Prefs;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
+import ij.gui.YesNoCancelDialog;
 import ij.plugin.frame.RoiManager;
 import org.apache.commons.lang3.math.NumberUtils;
 
@@ -14,13 +15,26 @@ import java.nio.file.Paths;
 import java.util.*;
 
 import static ij.plugin.frame.RoiManager.getRoiManager;
+import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
 
 public class Sam3Dialogs {
-    public enum DetectionMode { IMAGE, VIDEO }
 
     public static final int MAX_GROUP_VALUE = 255; // max id for group in ImageJ
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
+
+    public static DetectionMode askStackMode(int nFrames){
+        YesNoCancelDialog gd = new YesNoCancelDialog(IJ.getInstance(),
+                "SAM segmentation", "Include all "+nFrames+" images?");
+
+        if (gd.cancelPressed()) { // User canceled
+            return null;
+        } else if (gd.yesPressed()) { // user clicked yes
+            return DetectionMode.MULTI_IMAGE;
+        } else { // user clicked no
+            return DetectionMode.SINGLE_IMAGE;
+        }
+    }
 
     public static void addModelDirDialogHg(GenericDialog gd, String lastModelPrefKey) {
         String defaultDir = null;
@@ -189,6 +203,35 @@ public class Sam3Dialogs {
         }
     }
 
+    public static void addOutputDialog(GenericDialog gd, DetectionMode mode) {
+        gd.addMessage("Select the outputs to generate:");
+        gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", false);
+        gd.addCheckbox("Add_Shape_ROIs to ROI Manager", true);
+        gd.addCheckbox("Create_Instance_Masks (unique value per instance)", false);
+
+        if (mode != DetectionMode.VIDEO) {
+            gd.addCheckbox("Create_Semantic_Masks (unique value per class)", false);
+
+            if (mode == DetectionMode.SINGLE_IMAGE) {
+                gd.addCheckbox("Create_Stack_Mask (one slice per instance, unique value per class)", false);
+                gd.addCheckbox("Create_Instance_Mask_per_Class (one slice per class)", false);
+            }
+        }
+    }
+
+    public static DetectionUtils.OutputOptions getOutputAnswer(GenericDialog gd, DetectionMode mode) {
+        DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
+        options.deletePreviousRoi = false;
+        options.addToRoiManagerBB = gd.getNextBoolean();
+        options.addToRoiManagerShapes = gd.getNextBoolean();
+        options.createInstanceMask = gd.getNextBoolean();
+        options.createSemanticMask = mode != DetectionMode.VIDEO && gd.getNextBoolean();
+        options.createStackMask = mode == DetectionMode.SINGLE_IMAGE && gd.getNextBoolean();
+        options.createInstanceMaskPerClass = mode == DetectionMode.SINGLE_IMAGE && gd.getNextBoolean();
+
+        return options;
+    }
+
     public static void addOutputDialogImage(GenericDialog gd) {
         gd.addMessage("Select the outputs to generate:");
         gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", false);
@@ -211,6 +254,7 @@ public class Sam3Dialogs {
 
         return options;
     }
+
 
     public static void addOutputDialogVideo(GenericDialog gd) {
         gd.addMessage("Select the outputs to generate:");

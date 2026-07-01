@@ -25,6 +25,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.List;
 
+import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
 import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
@@ -464,7 +465,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3Parameters();
-        addParameterDialog(gd, detectionParams, DetectionMode.IMAGE);
+        addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
 
         // ask for SAM outputs
         addOutputDialogImage(gd);
@@ -478,7 +479,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         // retrieve choices
         modelPath = getModelPath(gd, PREF_LAST_MODEL_KEY);
         negativeGroup = getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
-        getParameters(gd, detectionParams, DetectionMode.IMAGE);
+        getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
         outputOptions = getOutputAnswerImage(gd);
 
         negativeGroup = negativeGroup == 0 ? MAX_GROUP_VALUE : negativeGroup;

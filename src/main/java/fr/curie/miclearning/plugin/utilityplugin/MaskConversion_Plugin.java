@@ -182,7 +182,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
 
             if (outputInstanceMask) {
                 IJ.log("-> Creating Instance Mask...");
-                ImagePlus instanceMask = DetectionUtils.createInstanceMask(imp1, results);
+                ImagePlus instanceMask = DetectionUtils.createInstanceMaskImp(imp1, results);
                 if (instanceMask != null) {
                     instanceMask.show();
                 } else {
@@ -192,7 +192,7 @@ public class MaskConversion_Plugin implements PlugIn, DialogListener {
 
             if (outputSemanticMask) {
                 IJ.log("-> Creating Semantic Mask...");
-                ImagePlus semanticMask = DetectionUtils.createSemanticMask(imp1, results);
+                ImagePlus semanticMask = DetectionUtils.createSemanticMaskImp(imp1, results);
                 if (semanticMask != null) {
                     semanticMask.show();
                 } else {

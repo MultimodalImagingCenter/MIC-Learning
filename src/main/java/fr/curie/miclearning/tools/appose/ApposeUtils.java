@@ -80,7 +80,6 @@ public class ApposeUtils {
 
         int w = imp.getWidth();
         int h = imp.getHeight();
-        //int frames = imp.getStackSize();
         int frames = Math.max(imp.getNSlices(), imp.getNFrames());
         int channels = 3;
 
