@@ -3,15 +3,121 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.scijava</groupId>
+        <artifactId>pom-scijava</artifactId>
+        <version>45.0.0</version>
+        <relativePath />
+    </parent>
 
-    <groupId>fr.curie</groupId>
-    <artifactId>MicLearning</artifactId>
+    <groupId>io.github.cmessaoudi</groupId>
+    <artifactId>Mic-Learning</artifactId>
     <version>1.2.0</version>
+
+    <name>MIC-Learning</name>
+    <description>
+        ImageJ/Fiji plugin for deep learning and machine learning workflows.
+    </description>
+    <url> https://github.com/MultimodalImagingCenter/MIC-Learning </url>
+    <inceptionYear>2026</inceptionYear>
+    <organization>
+        <name>Multimodal-Imaging-Center</name>
+        <url>https://institut-curie.org/platform/curiecoretech-multimodal-imaging-center-uar2016-us43</url>
+    </organization>
+    <licenses>
+        <license>
+            <name>Institut Curie Software License</name>
+            <url>https://raw.githubusercontent.com/MultimodalImagingCenter/MIC-Learning/main/LICENSE</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>cmessaoudi</id>
+            <name>Cedric Messaoudi</name>
+            <organization>Institut Curie</organization>
+            <url>https://institut-curie.org/personne/cedric-messaoudi</url>
+            <roles>
+                <role>founder</role>
+                <role>lead</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>reviewer</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
+        <developer>
+            <id>noemie-bozier</id>
+            <name>Noemie Bozier</name>
+            <organization>Institut Curie</organization>
+            <roles>
+                <role>founder</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
+    </developers>
+    <contributors>
+        <contributor>
+            <name>Laetitia Besse</name>
+            <url>https://curie.fr/personne/laetitia-besse</url>
+            <roles>
+                <role>reviewer</role>
+            </roles>
+            <!--properties><id></id></properties-->
+        </contributor>
+        <contributor>
+            <name>Christine Walczak</name>
+            <url>https://curie.fr/personne/christine-walczak</url>
+            <roles>
+                <role>reviewer</role>
+            </roles>
+            <!--properties><id></id></properties-->
+        </contributor>
+    </contributors>
+
+    <mailingLists>
+        <mailingList>
+            <name>Image.sc Forum</name>
+            <archive>https://forum.image.sc/</archive>
+        </mailingList>
+    </mailingLists>
+
+    <scm>
+        <connection>
+            scm:git:git://github.com/MultimodalImagingCenter/MIC-Learning.git
+        </connection>
+        <developerConnection>
+            scm:git:ssh://github.com:MultimodalImagingCenter/MIC-Learning.git
+        </developerConnection>
+        <url>
+            https://github.com/MultimodalImagingCenter/MIC-Learning
+        </url>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/MultimodalImagingCenter/MIC-Learning/issues</url>
+    </issueManagement>
+
+    <ciManagement>
+        <system>GitHub Actions</system>
+        <url>https://github.com/MultimodalImagingCenter/MIC-Learning/actions/new</url>
+    </ciManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
+        <package-name>fr.curie.mic_learning</package-name>
+        <license.licenseName>Institut Curie</license.licenseName>
+        <license.copyrightOwners>Multimodal-Imaging-Center</license.copyrightOwners>
+        <!-- NB: Deploy releases to the SciJava Maven repository. -->
+        <releaseProfiles>sign,deploy-to-scijava</releaseProfiles>
     </properties>
 
     <dependencyManagement>
@@ -127,6 +233,8 @@
             <groupId>ai.djl.onnxruntime</groupId>
             <artifactId>onnxruntime-native-auto</artifactId>
             <version>1.3.0</version>
+            <scope>runtime</scope>
+
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
@@ -146,13 +254,14 @@
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-appose</artifactId>
             <version>0.4.0</version>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-ij</artifactId>
             <version>2.0.2</version>
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>
@@ -171,6 +280,11 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>all</shadedClassifierName>
+
+
                             <transformers>
                                 <!-- standard service loader files -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
@@ -231,7 +345,64 @@
                     <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
+<!-- generate javadoc -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.2</version>
 
+                <configuration>
+                    <doclint>none</doclint>
+                    <source>8</source>
+                    <useModulePath>false</useModulePath>
+
+                    <classpathDependencyExcludes>
+                        <classpathDependencyExclude>ai.djl.onnxruntime:onnxruntime-native-auto</classpathDependencyExclude>
+                    </classpathDependencyExcludes>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+    <!-- signing jar for security (maven) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.8</version>
+
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+
+                <configuration>
+                    <bestPractices>true</bestPractices>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.11.0</version>
+                <extensions>true</extensions>
+
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>false</autoPublish>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
