@@ -27,7 +27,7 @@ public class Detection3dUtils {
         }
 
         addTrackedRoisToManager(manager, mfdManager.getDetectionsByFrame(), addBb, addShape, groupingMethod);
-        IJ.log("Rois added to RoiManger");
+        IJ.log("Rois added to RoiManager");
     }
 
     public static void addTrackedRoisToManager(RoiManager manager, MultiFrameDataManager mfdManager, boolean addBb, boolean addShape) {
@@ -59,7 +59,6 @@ public class Detection3dUtils {
                 }
             }
         }
-        IJ.log("Rois added to RoiManger");
     }
 
     private static int getGroupId(ProcessedDetection detection, GroupingMethod groupingMethod){
@@ -94,7 +93,8 @@ public class Detection3dUtils {
 
         ImagePlus stackImp = new ImagePlus("Instance Segmentation Stack", maskStack);
 
-        IJ.log("Instance masks stack created");
+        IJ.log("Instance masks stack created.");
+        stackImp.setDisplayRange(0, Math.max(255.0, stackImp.getStatistics().max));
         setGlasbeyLut(stackImp);
         return stackImp;
     }

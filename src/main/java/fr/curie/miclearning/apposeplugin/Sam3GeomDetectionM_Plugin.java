@@ -58,7 +58,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
 
     @Override
     public void run(String s) {
-        // --- 1. get image, model, prompt and parameters ---
+        // --- 1. get image and geom Rois ---
 
         // 1.1 get selected image
         imp = IJ.getImage(); // select active image
@@ -75,7 +75,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         RoiManager roiManager = getRoiManager();
         Roi[] selectedRoiList = roiManager.getSelectedRoisAsArray();
         if (selectedRoiList.length == 0) {
-            IJ.error("at least one roi in the ROI manager is required to run a sam3 detection with box prompt");
+            IJ.error("at least one roi in the ROI manager is required to run a sam3 detection with visual prompt(s)");
             return;
         }
 
@@ -92,14 +92,14 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
                 promptRoiList.add(roi);
                 uniqueGroups.add(roi.getGroup());
             } else {
-                IJ.log("Only box and point Roi are used as prompts. Roi " + roi.getName() + " will be ignored");
+                IJ.log("Only box and point ROIs are used as prompts. Roi " + roi.getName() + " will be ignored");
             }
         }
         groupNumber = uniqueGroups.size();
         roiNumber = promptRoiList.size();
 
         if (groupNumber == 0){
-            IJ.error("No box Roi were found");
+            IJ.error("No box or point ROIs were found");
             return;
         }
 
@@ -127,7 +127,6 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
 
         // --- 2. retrieve parameters (model path, negative group, output options) ---
         if (Macro.getOptions() != null) {
-            //IJ.log("macro options");
             parseMacro();
         } else {
             askUser();
@@ -171,7 +170,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
                     }
                 }
             } else {
-                IJ.log("error with Roi type : " + roi);
+                IJ.log("error with ROI type : " + roi);
             }
         }
 
@@ -181,7 +180,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         }
 
         recordInMacro();
-        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on 1 image - with box prompts ---");
+        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on 1 image - with visual prompts ---");
         printParameters();
 
         // --- 3. load script and create env ---
@@ -424,7 +423,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
     }
 
     private void recordInMacro() {
-        Recorder.setCommand("SAM3 PCS with Box Prompts");
+        Recorder.setCommand("SAM3 PCS with Visual Prompts");
         Recorder.recordOption("model_path", modelPath);
 
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
@@ -443,7 +442,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
     }
 
     private void askUser() {
-        GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation with text prompts");
+        GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation with visuals prompts");
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {

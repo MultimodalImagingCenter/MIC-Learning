@@ -113,7 +113,7 @@ for frame_idx, img in enumerate(images_bgr) :
         final_ids = torch.cat(slice_prompt_ids, dim=0).numpy().astype('int32')
 
         # resize masks
-        final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8, device="cpu")
+        final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8)
         for i in range(slice_total_detection):
             final_masks[i] = cv2.resize(pre_final_masks[i],(w_img, h_img),
                                           interpolation=cv2.INTER_NEAREST)

@@ -7,9 +7,9 @@ import java.util.Map;
 
 public class MultiFrameDataManager {
     // Master registry of objects across the video
-    private final Map<Integer, TrackedDetection> detectionsRegistry = new HashMap<>();
-    private final Map<Integer, List<Integer>> idByFrame = new HashMap<>();
-    private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
+    private final Map<Integer, TrackedDetection> detectionsRegistry = new HashMap<>(); // list of tracked detection, by id
+    private final Map<Integer, List<Integer>> idByFrame = new HashMap<>(); // list of ids on every frame
+    private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>(); // list of detection on every frame
 
     private final int maxFrameNumber; // number of frames processed
 
@@ -18,6 +18,10 @@ public class MultiFrameDataManager {
     }
 
     public void registerDetection(int frameIndex, ProcessedDetection processedDet, int instanceId) {
+        registerDetection(frameIndex, processedDet, instanceId, false);
+    }
+
+    public void registerDetection(int frameIndex, ProcessedDetection processedDet, int instanceId, boolean probaIsTrackingScore) {
         processedDet.setId(instanceId);
         TrackedDetection trackedDetection = detectionsRegistry.computeIfAbsent(instanceId,
                 id -> new TrackedDetection(id, processedDet.getClassName(), processedDet.getGroupId(), processedDet.getProbability()));
@@ -25,7 +29,8 @@ public class MultiFrameDataManager {
         detectionsByFrame.computeIfAbsent(frameIndex, k -> new ArrayList<>()).add(processedDet);
         idByFrame.computeIfAbsent(frameIndex, k -> new ArrayList<>()).add(instanceId);
 
-        trackedDetection.addFrameData(frameIndex, processedDet.getBoundingBoxRoi(), processedDet.getShapeRoi());
+        if (probaIsTrackingScore) trackedDetection.addFrameData(frameIndex, processedDet.getBoundingBoxRoi(), processedDet.getShapeRoi(), processedDet.getProbability());
+        else trackedDetection.addFrameData(frameIndex, processedDet.getBoundingBoxRoi(), processedDet.getShapeRoi());
     }
 
     public Map<Integer, List<Integer>> getIdByFrame() {
