@@ -44,7 +44,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     // actually to useful for now, may be if we want to extract stats, or add filter to remove 1 slice only objects...
 
     private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer <256)
-    // as only one class/concept, and group id is not relevant, it is only {prompt:1}
+    // as only one class/concept, it is only {prompt:1}
 
     // PROMPTS : only 1 concept/class for the whole video, can be described with mix of text and visual (positive and negative) prompts
     // text prompt (written by user in first generic dialog)
@@ -59,7 +59,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     private boolean visualPositivePromptUsed; // if visual positive prompts are used
     private String[] positiveGroupChoices; // list of ROI to display in the genericDialog for the user to choose
     private List<Integer> positiveGroups; // list of positive groups ID
-    private List<double[]> positiveRois; // list of Roi to be used as positive prompts
+    private List<double[]> positiveRois ; // list of Roi to be used as positive prompts
     // negative prompts
     private boolean negativePromptUsed; // if visual negative prompts are used
     private String[] negativeGroupChoices; // list of ROI to display in the genericDialog for the user to choose
@@ -112,7 +112,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             roiNumber = allRoiList.size();
 
             if (groupNumber == 0){
-                IJ.error("No box or point ROIs were found");
+                //IJ.log("No box or point ROIs were found");
                 visualPositivePromptUsed = false;
                 firstUnusedRoiId = 1;
             } else if (groupNumber > 1) {
@@ -141,7 +141,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 int groupId = uniqueGroups.iterator().next();
                 String name = Roi.getGroupName(groupId);
                 if (name == null) name = String.valueOf(groupId);
-                else name = name + " (" +  groupId + ")";
+                else name = groupId + " (" +  name + ")";
                 negativeGroupChoices[0] = name;
                 positiveGroupChoices[0] = name;
                 firstUnusedRoiId = (groupId % 255) + 1;
@@ -170,7 +170,6 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         }
 
 
-
         // 2.2 Prepare input
         // text prompt
         textPrompt = classIdMap.keySet().toArray()[0].toString();
@@ -179,17 +178,16 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
         // geom prompt
         // sort positive and negative ROIs
-        if (visualPositivePromptUsed) {
-            positiveRois = new ArrayList<>(); // positive_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
-            negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
-
+        positiveRois = new ArrayList<>(); // positive_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+        negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+        if (visualPositivePromptUsed || negativePromptUsed) {
             for (Roi roi : allRoiList) {
                 int groupId = roi.getGroup();
                 double[] coord;
                 if (roi.getType() == Roi.RECTANGLE) { // if roi is box
                     Rectangle rect = roi.getBounds();
                     coord = new double[]{rect.x, rect.y, rect.width, rect.height};
-                    if (positiveGroups.contains(groupId)) {
+                    if (visualPositivePromptUsed && positiveGroups.contains(groupId)) {
                         positiveRois.add(coord);
                     }
                     else if (negativePromptUsed && groupId == negativeGroup) {
@@ -201,7 +199,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     // add every point of the group to the input
                     for (Point point : points) {
                         coord = new double[]{point.getX(), point.getY()};
-                        if (positiveGroups.contains(groupId)) {
+                        if (visualPositivePromptUsed && positiveGroups.contains(groupId)) {
                             positiveRois.add(coord);
                         }
                         else if (negativePromptUsed && groupId == negativeGroup) {
@@ -212,10 +210,16 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     IJ.log("error with Roi type : " + roi);
                 }
 
-                if (positiveRois.isEmpty()) {
-                    IJ.log("No positive ROIs found to process.");
+                if (visualPositivePromptUsed && positiveRois.isEmpty()) {
+                    IJ.log("Error : No positive ROIs found to process.");
                     visualPositivePromptUsed = false;
                 }
+
+                if (negativePromptUsed && negativeRois.isEmpty()) {
+                    IJ.log("Error : No negative ROIs found to process.");
+                    negativePromptUsed = false;
+                }
+
             }
         }
 
@@ -466,7 +470,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     private void askUser() {
         GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation on video");
 
-        // 1- dynamic HELP SECTION (at the top ?? or at bottom ??)
+        // 1- dynamic HELP SECTION (at the top ? or put at bottom ?)
         Panel helpPanel = new Panel(new FlowLayout(FlowLayout.LEFT));
         Label helpLabel = new Label(" "); // nothing for now
         helpLabel.setForeground(Color.BLUE);
@@ -479,15 +483,15 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         ActionListener modelInstructionAction = e -> {
             Sam3Dialogs.addDownloadInstruction();
         };
-        gd.addMessage("");
-        gd.addButton("instructions to download SAM3 model", modelInstructionAction);
+        gd.addButton("Instructions to download SAM3 model", modelInstructionAction);
         gd.addMessage("");
 
         // 3- MODEL PATH
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
 
         // 4-PROMPT(S)
-        // 4.1- text prompt
+        // 4.1 create checkboxes and panels
+        // 4.1.1 text prompt
         gd.addMessage("__________");
         gd.addCheckbox("Text prompt", true);
         Checkbox textCB = (Checkbox) gd.getCheckboxes().lastElement();
@@ -498,25 +502,42 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         textPromptPanel.add(textPromptField);
         gd.addPanel(textPromptPanel);
 
-        // 4.2- positive visual prompt(s)
-        gd.addCheckbox("Positive visual prompts", false);
-        Checkbox visualCB = (Checkbox) gd.getCheckboxes().lastElement();
+        // 4.1.2 positive visual prompt(s)
+        gd.addCheckbox("Positive visual prompt(s)", false);
+        Checkbox posVisualPromptCB = (Checkbox) gd.getCheckboxes().lastElement();
 
-        final Panel visualPromptPanel = new Panel(new GridLayout(2, 1));
-        final Choice choiceList = new Choice();
+        final Panel posVisualPromptPanel = new Panel(new GridLayout(2, 1));
+        final Choice posChoiceList = new Choice();
+        // 4.2 fill lists for visuals prompts choice if at least one ROI
+        if (groupNumber > 0) {
+            // positive visual prompts panel
+            // add list of groups id to choose from
+            for (String choice : positiveGroupChoices) posChoiceList.add(choice);
+            posVisualPromptPanel.add(new Label("Select positive group(s):"));
+            posVisualPromptPanel.add(posChoiceList);
+            gd.addPanel(posVisualPromptPanel);
+            posVisualPromptPanel.setVisible(false);
+        }
+
+        // 4.1.3 negative visual prompt(s)
+        gd.addCheckbox("Negative visual prompt(s)", false);
+        Checkbox negVisualPromptCB = (Checkbox) gd.getCheckboxes().lastElement();
+
+        final Panel negVisualPromptPanel = new Panel(new GridLayout(2, 1));
+        final Choice negChoiceList = new Choice();
 
         if (groupNumber > 0) {
-            // add list of groups id to choose from
-            for (String choice : positiveGroupChoices) choiceList.add(choice);
-            visualPromptPanel.add(new Label("Select positive group(s):"));
-            visualPromptPanel.add(choiceList);
+            // negative visual prompts panel
+            for (String choice : negativeGroupChoices) negChoiceList.add(choice);
+            negVisualPromptPanel.add(new Label("Select negative group(s):"));
+            negVisualPromptPanel.add(negChoiceList);
+            gd.addPanel(negVisualPromptPanel);
+            negVisualPromptPanel.setVisible(false);
+        }
 
-            gd.addPanel(visualPromptPanel);
-            textPromptPanel.setVisible(true);
-            visualPromptPanel.setVisible(false);
-
-        // 4-3 if no ROI selected, block the checkboxes + print help message at top
-        } else if (groupNumber == 0) {
+        // 4.3 if no ROI selected (only prompt allowed = text prompt), block the checkboxes + print help message at top
+        if (groupNumber == 0) {
+            // text prompt
             textCB.setForeground(Color.GRAY);
             textCB.addItemListener(e -> {
                 textCB.setState(true); // revert if user try to uncheck
@@ -524,20 +545,39 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             });
             textPromptPanel.setVisible(true);
 
-            visualCB.setForeground(Color.GRAY);
-            visualCB.addItemListener(e -> {
-                visualCB.setState(false); // Revert if user tries to check
+            // positive visual prompt
+            posVisualPromptCB.setForeground(Color.GRAY);
+            posVisualPromptCB.addItemListener(e -> {
+                posVisualPromptCB.setState(false); // revert if user tries to check
                 updateHelpLabelRequireRoi(helpLabel, gd);
             });
-            visualPromptPanel.setVisible(false);
+            posVisualPromptPanel.setVisible(false);
+
+            // negative visual prompt
+            negVisualPromptCB.setForeground(Color.GRAY);
+            negVisualPromptCB.addItemListener(e -> {
+                negVisualPromptCB.setState(false); // revert if user tries to check
+                updateHelpLabelRequireRoi(helpLabel, gd);
+            });
+            negVisualPromptPanel.setVisible(false);
 
             // hover logic: update the label at the top if mouse
-            visualCB.addMouseListener(new MouseAdapter() {
+            posVisualPromptCB.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseEntered(MouseEvent e) {
                     updateHelpLabelRequireRoi(helpLabel, gd);
                 }
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    updateHelpLabelEmpty(helpLabel, gd);
+                }
+            });
 
+            negVisualPromptCB.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    updateHelpLabelRequireRoi(helpLabel, gd);
+                }
                 @Override
                 public void mouseExited(MouseEvent e) {
                     updateHelpLabelEmpty(helpLabel, gd);
@@ -545,29 +585,30 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             });
         }
 
-        // 4-4 update section visibility
+        // 4.4 update panels visibility
+
         gd.addDialogListener(new DialogListener() {
             @Override
             public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
                 boolean textChecked = textCB.getState();
-                boolean visualChecked = visualCB.getState();
+                boolean visualChecked = posVisualPromptCB.getState();
+                boolean negativeChecked = negVisualPromptCB.getState();
 
                 // sections visible if boxes checked
                 if (groupNumber > 0) {
                     textPromptPanel.setVisible(textChecked);
-                    visualPromptPanel.setVisible(visualChecked);
+                    posVisualPromptPanel.setVisible(visualChecked);
+                    negVisualPromptPanel.setVisible(negativeChecked);
                 }
 
-                // if no option selected (no boxe checked) : OK button is unabled
-                // -> doesn't work !!
+                // if no option selected (no box checked) : OK button is unabled -> doesn't work !!
                 if (!textChecked && !visualChecked) {
-                    okButton.setEnabled(false);
+                    okButton.setEnabled(false); // no effect
                     updateHelpLabelNoOption(helpLabel, gd);
                 } else {
                     okButton.setEnabled(true);
                     updateHelpLabelEmpty(helpLabel, gd);
                 }
-
                 return true;
             }
         });
@@ -604,13 +645,17 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         }
 
         // visual positive prompt
-        visualPositivePromptUsed = visualCB.getState() && groupNumber > 0;
+        visualPositivePromptUsed = posVisualPromptCB.getState() && groupNumber > 0;
         gd.getNextBoolean();
-        String selectedPositiveGroup = choiceList.getSelectedItem();
+        String selectedPositiveGroup = posChoiceList.getSelectedItem();
 
         // visual negative prompt
-        negativePromptUsed = false;
-        negativeGroup = -1;
+        negativePromptUsed = negVisualPromptCB.getState() && groupNumber > 0;
+        gd.getNextBoolean();
+        if (negativePromptUsed) {
+            negativeGroup = Integer.parseInt(negChoiceList.getSelectedItem().split(" ")[0]);
+            if (negativeGroup == -1) negativePromptUsed = false;
+        }
 
         if (visualPositivePromptUsed) {
             positiveGroups = new ArrayList<>();
@@ -621,7 +666,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     }
                 }
             } else { // if only one group is prompt
-                positiveGroups.add(Integer.parseInt(selectedPositiveGroup));
+                positiveGroups.add(Integer.parseInt(selectedPositiveGroup.split(" ")[0]));
             }
         }
 
@@ -666,7 +711,9 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + modelPath);
         IJ.log("number of frames to process: " + detectionParams.getMaxFrame());
-        IJ.log("text prompt: " + textPrompt.toUpperCase());
+        if (textPromptUsed) IJ.log("text prompt: " + textPrompt.toUpperCase());
+        if (visualPositivePromptUsed) IJ.log("visual prompts: " + positiveRois.size() + " ROI(s) as positive prompt(s)");
+        if (negativePromptUsed) IJ.log("visual prompts: " + negativeRois.size() + " ROI(s) as negative prompt(s)");
         IJ.log("----------------------");
     }
 }

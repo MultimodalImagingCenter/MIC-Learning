@@ -10,6 +10,20 @@ def log_to_java(msg):
 
 log_to_java("importing packages...")
 
+def xywh_to_norm_x1y1x2y2(box, img_height, img_width):
+    x1, y1, w, h = box
+    x2, y2 = x1 + w, y1 + h
+    norm_x1 = x1 / img_width
+    norm_y1 = y1 / img_height
+    norm_x2 = x2 / img_width
+    norm_y2 = y2 / img_height
+
+    return [(norm_x1, norm_y1), (norm_x2, norm_y2)]
+
+def norm_xy(point, img_height, img_width):
+    x1, y1 = point
+    return (x1/img_width, y1/img_height)
+
 import torch
 import cv2
 import numpy as np
@@ -52,10 +66,38 @@ n_frames, h_img, w_img = images_bgr.shape[:3]
 # array need to be saved in a contiguous memory block
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 
+# format visual inputs
 pos_box_xy1xy2_norm_list = []  # Format is: [[(x1, y1), (x2, y2)]]
 neg_box_xy1xy2_norm_list = []
 pos_point_xy_norm_list =  [] # Format is [(x1, y1)]
 neg_point_xy_norm_list = []
+
+# positive_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+# expected format:
+#  one list for boxes : [[(x1, y1), (x2, y2)], ...] (normalized values)
+# one list for points : [(x, y), ... ] (normalized values)
+if len(positive_rois) > 0:
+    for prompt in positive_rois :
+        if len(prompt) == 4: # box
+            pos_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
+        elif len(prompt) == 2: #point
+            pos_point_xy_norm_list.append(norm_xy(prompt,h_img, w_img))
+        else :
+            log_to_java(f"unknown prompt size: prompt {prompt}")
+
+
+# negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+# expected format:
+#  one list for boxes : [[(x1, y1), (x2, y2)], ...] (normalized values)
+# one list for points : [(x, y), ... ] (normalized values)
+if len(negative_rois) > 0:
+    for prompt in negative_rois :
+        if len(prompt) == 4: # box
+            neg_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
+        elif len(prompt) == 2: #point
+            neg_point_xy_norm_list.append(norm_xy(prompt,h_img, w_img))
+        else :
+            log_to_java(f"unknown prompt size: prompt {prompt}")
 
 # Controls for detection/tracking
 detect_every_n_frames = detectEveryNFrames  # Set to None to only run once on startup
@@ -170,7 +212,7 @@ for frame_idx in range(initial_frame_index, max_frame_number):
         # If we get new detections, compare to existing objects to see if anything new has appeared
         num_detections = det_masks.shape[1]
         if num_detections > 0:
-            # Get bounding boxes of existing objects
+            # Get bounding boxes of existing objects on frame
             known_boxes_list = []
             for box_xywh in box_xywh_norm_on_frame:
                 box_x, box_y, box_w, box_h = box_xywh
