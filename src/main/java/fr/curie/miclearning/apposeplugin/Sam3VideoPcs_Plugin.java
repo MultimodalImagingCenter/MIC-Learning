@@ -35,6 +35,10 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 public class Sam3VideoPcs_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames; // number of frames in the video
+    int axis; // 3 : Z axis - 4 : Time axis
+    int posStartFrame =0; // starting from index 0
+    int posEndFrame; // starting from index 0
+    boolean bidirectional = false;
 
     private DetectionUtils.OutputOptions outputOptions;
     private String modelPath;
@@ -54,7 +58,6 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     // visual prompts (based on selected ROIs in ROI manager)
     private Set<Integer> uniqueGroups; // list of Roi group ID in manager
     private int groupNumber; // Number of ROI groups in manager
-    private int roiNumber; // Number of selected rectangle/points ROIs
     // positive prompts
     private boolean visualPositivePromptUsed; // if visual positive prompts are used
     private String[] positiveGroupChoices; // list of ROI to display in the genericDialog for the user to choose
@@ -82,38 +85,63 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             return;
         }
 
-        nFrames = Math.max(imp.getNSlices(), imp.getNFrames()); // je considère que les frames peuvent être définies de différentes manières, à revoir ?
         if (!imp.isRGB()) {
             IJ.error("Only RGB images are supported.");
             return;
         }
+
+        // define time axis
+        final int[] dims = imp.getDimensions();
+        int numberOfFrame = dims[4];
+        int numberOfSlices = dims[3];
+        if (numberOfSlices > 1 && numberOfFrame > 1) { // does not work on hyperstack for now
+            IJ.error("Hyperstacks are not supported");
+            return;
+        }
+        else axis = numberOfSlices >= numberOfFrame ? 3 : 4;  // just using the axis with multiple images as time axis
+        nFrames = dims[axis];
 
         // 1.2 get selected ROIs list
         RoiManager roiManager = getRoiManager();
         Roi[] selectedRoiList = roiManager.getSelectedRoisAsArray();
         List<Roi> allRoiList = new ArrayList<>();
         int firstUnusedRoiId=0;
-        if (selectedRoiList.length == 0) {
+        int minRoiPos = nFrames;
+        if (selectedRoiList.length == 0) { // if no Roi are found, only text prompt can be used
             visualPositivePromptUsed = false;
+            negativePromptUsed = false;
             firstUnusedRoiId = 1;
+            imp.setPosition(1);
         } else {
+            // all ROIs have to be on the same frame, first frame with ROI will be used as starting frame
+            // only exploring axis defined as time axis
+
+            for (Roi roi : selectedRoiList) {
+                if (roi.getType() == 0 || roi.getType() == 10) { // only look at point and box ROI
+                    int position = axis == 3 ? roi.getZPosition() : roi.getTPosition(); // find ROI position along time axis
+                    if (position < minRoiPos) minRoiPos = position;
+                    if (minRoiPos == 1) break; // minimum position possible
+                }
+            }
+            // go to first frame with ROI and display them
+            imp.setPosition(minRoiPos);
+            roiManager.runCommand("Show All");
             // 1.3 get ROI groups IDs list
             uniqueGroups = new TreeSet<>();
             for (Roi roi : selectedRoiList) {
-                // check that Roi is a box or point
-                if (roi.getType() == 0 || roi.getType() == 10) {
-                    allRoiList.add(roi);
-                    uniqueGroups.add(roi.getGroup());
-                } else {
-                    IJ.log("Only box and point ROIs are used as prompts. ROI " + roi.getName() + " will be ignored");
+                int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+                if (position == minRoiPos) {
+                    // check that Roi is a box or point
+                    if (roi.getType() == 0 || roi.getType() == 10) {
+                        allRoiList.add(roi);
+                        uniqueGroups.add(roi.getGroup());
+                    }
                 }
             }
             groupNumber = uniqueGroups.size();
-            roiNumber = allRoiList.size();
-
             if (groupNumber == 0){
-                //IJ.log("No box or point ROIs were found");
                 visualPositivePromptUsed = false;
+                negativePromptUsed = false;
                 firstUnusedRoiId = 1;
             } else if (groupNumber > 1) {
                 // create 2 lists of group that will be displayed in generic dialog
@@ -124,7 +152,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 for (int groupId :  uniqueGroups) {
                     String name = Roi.getGroupName(groupId);
                     if (name == null) name = String.valueOf(groupId);
-                    else name = name + " (" +  groupId + ")";
+                    else name = groupId + " (" +  name + ")"; // only the part before the " " will be used as id
                     negativeGroupChoices[j] = name;
                     positiveGroupChoices[j+1] = name;
                     j++;
@@ -148,7 +176,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             }
         }
 
-        // --- 2. retrieve parameters (model path, groups, output options) ---
+        // --- 2. retrieve parameters (model path, prompts, output options) ---
         if (Macro.getOptions() != null) {
             parseMacro();
         } else {
@@ -162,21 +190,24 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         long startTime = System.nanoTime();
 
         if (!textPromptUsed && !visualPositivePromptUsed) {
-            IJ.log("Please enter a prompt, either text or ROI.");
+            IJ.error("Prompt missing","ERROR : no positive prompt (neither text nor visual) found.\n" +
+                    "Please enter a prompt, either text or ROI.");
+            IJ.log("ERROR : no positive prompt (neither text nor visual) found.\n" +
+                    "Please enter a prompt, either text or ROI.");
             return;
         } else {
             classIdMap = new HashMap<>();
             classIdMap.put(textPrompt,firstUnusedRoiId);
         }
 
-
         // 2.2 Prepare input
         // text prompt
         textPrompt = classIdMap.keySet().toArray()[0].toString();
-        textPromptUsed = textPrompt != null && !textPrompt.trim().isEmpty();
+        textPromptUsed = textPrompt != null && !textPrompt.trim().isEmpty() && textPromptUsed;
         if (!textPromptUsed) textPrompt = "visual";
 
-        // geom prompt
+
+        // visual prompt(s)
         // sort positive and negative ROIs
         positiveRois = new ArrayList<>(); // positive_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
         negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
@@ -190,7 +221,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     if (visualPositivePromptUsed && positiveGroups.contains(groupId)) {
                         positiveRois.add(coord);
                     }
-                    else if (negativePromptUsed && groupId == negativeGroup) {
+                    if (negativePromptUsed && groupId == negativeGroup) {
                         negativeRois.add(coord);
                     }
                 } else if (roi.getType() == Roi.POINT) { // if point (or list of points)
@@ -202,7 +233,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                         if (visualPositivePromptUsed && positiveGroups.contains(groupId)) {
                             positiveRois.add(coord);
                         }
-                        else if (negativePromptUsed && groupId == negativeGroup) {
+                        if (negativePromptUsed && groupId == negativeGroup) {
                             negativeRois.add(coord);
                         }
                     }
@@ -210,27 +241,40 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     IJ.log("error with Roi type : " + roi);
                 }
 
-                if (visualPositivePromptUsed && positiveRois.isEmpty()) {
-                    IJ.log("Error : No positive ROIs found to process.");
-                    visualPositivePromptUsed = false;
-                }
+            }
 
-                if (negativePromptUsed && negativeRois.isEmpty()) {
-                    IJ.log("Error : No negative ROIs found to process.");
-                    negativePromptUsed = false;
-                }
+            if (visualPositivePromptUsed && positiveRois.isEmpty()) {
+                IJ.log("Error : No positive ROIs found to process.");
+                visualPositivePromptUsed = false;
+            }
 
+            if (negativePromptUsed && negativeRois.isEmpty()) {
+                IJ.log("Error : No negative ROIs found to process.");
+                negativePromptUsed = false;
             }
         }
 
         if (!textPromptUsed && !visualPositivePromptUsed) {
-            IJ.log("ERROR : No valid prompt were found");
-            IJ.error("No valid prompt were found");
+            IJ.log("ERROR : No valid prompt were found.");
+            IJ.error("Prompt missing","No valid prompt were found.");
             return;
         }
 
+        // first and last frames to segment
+        if (!(visualPositivePromptUsed || negativePromptUsed)) {
+            // if no ROI used, starting at first frame
+            posStartFrame = 0;
+            imp.setPosition(1);
+        } else {
+            // if ROIs used, stating at first frame with ROI
+            posStartFrame = minRoiPos-1;
+        }
+
+        posEndFrame = Math.min(nFrames-1, posStartFrame + detectionParams.getNFrame() - 1);
+        detectionParams.setNFrame(posEndFrame - posStartFrame +1);
+
         //prepare output
-        mfdManager = new MultiFrameDataManager(detectionParams.getMaxFrame());
+        mfdManager = new MultiFrameDataManager(posStartFrame, posEndFrame);
 
         recordInMacro();
         IJ.log("\n   --- Starting SAM3 Promptable Concept Segmentation on video --- ");
@@ -240,7 +284,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         // 2.1 load python script
         String script = getResourceAsString(SCRIPT_PATH);
         if (script == null) {
-            IJ.error("Unable to load script");
+            IJ.error("Unable to load resource","Unable to load script");
             return;
         }
 
@@ -250,7 +294,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         // load toml file
         String envTomlContent = getResourceAsString(ENV_FILE_PATH);
         if (envTomlContent == null) {
-            IJ.error("Unable to load environment file");
+            IJ.error("Unable to load resource","Unable to load environment file");
             return;
         }
 
@@ -265,7 +309,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
             // --- 3. prediction ---
             // 3.1 copy video in shared memory
-            try (ShmImg<?> sharedVid = video2ShmImg(imp)) {
+            try (ShmImg<?> sharedVid = video2ShmImg(imp, posStartFrame, posEndFrame)) {
 
                 // 3.2 create python service in env
                 try (Service python = env.python()) {
@@ -284,11 +328,13 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     inputs.put("removeAfterNMissed", detectionParams.getRemoveAfterNMissed());
                     inputs.put("maxSideLengthDetect", detectionParams.getMaxSideLengthDetect());
                     inputs.put("maxSideLengthTrack", detectionParams.getMaxSideLengthTrack());
-                    inputs.put("max_frame_number", detectionParams.getMaxFrame());
+                    inputs.put("max_frame_number", detectionParams.getNFrame());
 
                     inputs.put("text_prompt", textPrompt);
                     inputs.put("positive_rois", positiveRois);
                     inputs.put("negative_rois", negativeRois);
+
+                    inputs.put("frame_offset", posStartFrame ); // not necessary for computation, just for prints
 
                     // 3.4 Execute script by launching task
                     Service.Task task = python.task(script, inputs);
@@ -298,12 +344,12 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     task.listen(event -> {
                         switch (event.responseType) {
                             case LAUNCH:
-                                IJ.log("Task launched");
+                                System.out.println("Python task launched");
                                 break;
                             case UPDATE:
                                 if (event.message != null && !event.message.isEmpty()) {
                                     IJ.log("   " + event.message);
-
+                                    if (event.current > 0 && event.maximum >0)  System.out.println(" python task: " + event.current + "/" + event.maximum);
                                     Map<String, Object> info = event.info;
                                     if(info != null) {
                                         resultsQueue.offer(info); // immediately send result of the frame to the queue
@@ -311,19 +357,21 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                                 }
                                 break;
                             case CRASH:
+                                System.out.println("Python task crashed : " + task.error);
                                 IJ.error("Python task crashed : ", task.error);
                                 IJ.log("ERROR while running python script");
                                 return;
                             case FAILURE:
+                                System.out.println("Python task failed with error: " + task.error);
                                 IJ.error("Python task failed with error: ", task.error);
                                 IJ.log("ERROR while running python script");
                                 return;
                             case COMPLETION:
-                                System.out.println("Task completed successfully");
+                                System.out.println("Python task completed successfully");
                                 resultsQueue.offer(END_SIGNAL); // send signal to stop processing
                                 break;
                             case CANCELATION:
-                                System.out.println("Task canceled");
+                                System.out.println("Python task canceled");
                                 break;
                             default:
                                 //System.out.println("task response type : " + event.responseType);
@@ -502,6 +550,19 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         textPromptPanel.add(textPromptField);
         gd.addPanel(textPromptPanel);
 
+        okButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if(textCB.getState() && textPromptField.getText().trim().isEmpty()) updateHelpLabelNoText(helpLabel, gd);
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                updateHelpLabelDefault(helpLabel, gd);
+            }
+        });
+
+        textPromptField.getText();
+
         // 4.1.2 positive visual prompt(s)
         gd.addCheckbox("Positive visual prompt(s)", false);
         Checkbox posVisualPromptCB = (Checkbox) gd.getCheckboxes().lastElement();
@@ -541,7 +602,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             textCB.setForeground(Color.GRAY);
             textCB.addItemListener(e -> {
                 textCB.setState(true); // revert if user try to uncheck
-                updateHelpLabelEmpty(helpLabel, gd);
+                updateHelpLabelDefault(helpLabel, gd);
             });
             textPromptPanel.setVisible(true);
 
@@ -569,7 +630,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 }
                 @Override
                 public void mouseExited(MouseEvent e) {
-                    updateHelpLabelEmpty(helpLabel, gd);
+                    updateHelpLabelDefault(helpLabel, gd);
                 }
             });
 
@@ -580,7 +641,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 }
                 @Override
                 public void mouseExited(MouseEvent e) {
-                    updateHelpLabelEmpty(helpLabel, gd);
+                    updateHelpLabelDefault(helpLabel, gd);
                 }
             });
         }
@@ -593,6 +654,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 boolean textChecked = textCB.getState();
                 boolean visualChecked = posVisualPromptCB.getState();
                 boolean negativeChecked = negVisualPromptCB.getState();
+                boolean noText = textPromptField.getText().trim().isEmpty();
 
                 // sections visible if boxes checked
                 if (groupNumber > 0) {
@@ -607,8 +669,9 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     updateHelpLabelNoOption(helpLabel, gd);
                 } else {
                     okButton.setEnabled(true);
-                    updateHelpLabelEmpty(helpLabel, gd);
+                    updateHelpLabelDefault(helpLabel, gd);
                 }
+
                 return true;
             }
         });
@@ -617,7 +680,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         // 5- PARAMETERS
         gd.addMessage("__________");
         detectionParams = new Sam3Parameters();
-        detectionParams.setMaxFrame(nFrames);
+        detectionParams.setNFrame(nFrames);
         Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
 
         // 6- OUTPUTS
@@ -639,11 +702,8 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         textPromptUsed = textCB.getState();
         gd.getNextBoolean();
         textPrompt = textPromptField.getText();
-        if(textPrompt == null || textPrompt.trim().isEmpty() ){
-            textPromptUsed = false;
-            textPrompt="visual";
-        }
-
+        if(textPrompt == null || textPrompt.trim().isEmpty()) textPromptUsed = false;
+        if (!textPromptUsed) textPrompt="visual";
         // visual positive prompt
         visualPositivePromptUsed = posVisualPromptCB.getState() && groupNumber > 0;
         gd.getNextBoolean();
@@ -663,10 +723,20 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                 for (int id : uniqueGroups){
                     if (id != negativeGroup || !negativePromptUsed){
                         positiveGroups.add(id);
+                    } else {
+                        IJ.log("group " + id + " used as negative prompt");
                     }
                 }
             } else { // if only one group is prompt
-                positiveGroups.add(Integer.parseInt(selectedPositiveGroup.split(" ")[0]));
+                int id = Integer.parseInt(selectedPositiveGroup.split(" ")[0]);
+                if (negativePromptUsed && id == negativeGroup){
+                    IJ.log("WARNING : same group can't be used for negative and positive visual prompt. " +
+                            "No visual prompts (neither positive nor negative) will be used.");
+                    negativePromptUsed = false;
+                    visualPositivePromptUsed = false;
+                } else {
+                    positiveGroups.add(Integer.parseInt(selectedPositiveGroup.split(" ")[0]));
+                }
             }
         }
 
@@ -678,20 +748,26 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         outputOptions = Sam3Dialogs.getOutputAnswerVideo(gd);
     }
 
-    private static void updateHelpLabelRequireRoi(Label helpLabel, GenericDialog gd) {
-        helpLabel.setText("Please add ROI(s) to the ROI manager to enable visual prompts.");
-        helpLabel.setForeground(Color.RED);
-        gd.pack();
-    }
-
-    private static void updateHelpLabelEmpty(Label helpLabel, GenericDialog gd) {
+    private static void updateHelpLabelDefault(Label helpLabel, GenericDialog gd) {
         helpLabel.setText(" ");
         helpLabel.setForeground(Color.BLUE);
         gd.pack();
     }
 
+    private static void updateHelpLabelRequireRoi(Label helpLabel, GenericDialog gd) {
+        helpLabel.setText("Please add point and box ROI(s) to the ROI manager to enable visual prompts.");
+        helpLabel.setForeground(Color.MAGENTA);
+        gd.pack();
+    }
+
     private static void updateHelpLabelNoOption(Label helpLabel, GenericDialog gd) {
         helpLabel.setText("Please select at least one option to perform prediction.");
+        helpLabel.setForeground(Color.RED);
+        gd.pack();
+    }
+
+    private static void updateHelpLabelNoText(Label helpLabel, GenericDialog gd) {
+        helpLabel.setText("Please enter a text prompt to enable prediction with text prompt.");
         helpLabel.setForeground(Color.RED);
         gd.pack();
     }
@@ -710,10 +786,12 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + modelPath);
-        IJ.log("number of frames to process: " + detectionParams.getMaxFrame());
+        IJ.log("number of frames to process: " + detectionParams.getNFrame() + " (frame "+ (posStartFrame +1) +" to "+ (posEndFrame +1) + ")");
+        IJ.log("detection every " + detectionParams.getNFrameBtwDetections() + " frames");
         if (textPromptUsed) IJ.log("text prompt: " + textPrompt.toUpperCase());
         if (visualPositivePromptUsed) IJ.log("visual prompts: " + positiveRois.size() + " ROI(s) as positive prompt(s)");
         if (negativePromptUsed) IJ.log("visual prompts: " + negativeRois.size() + " ROI(s) as negative prompt(s)");
         IJ.log("----------------------");
     }
+
 }

@@ -74,16 +74,18 @@ public class Detection3dUtils {
 
     // ID continuity from one frame to the other (same object on multiple frames)
     public static ImagePlus createInstanceMaskStackWithFixedIds(ImagePlus imp, MultiFrameDataManager mfdManager) {
-        int totalFrames = mfdManager.getMaxFrameNumber();
+        int totalFrames = mfdManager.getFrameNumber();
         int width = imp.getWidth();
         int height = imp.getHeight();
 
+        ImageStack originalStack = imp.getStack();
         ImageStack maskStack = new ImageStack(width, height);
         Map<Integer, List<ProcessedDetection>> videoDetectionsRegistry = mfdManager.getDetectionsByFrame();
-        for (int f = 0; f < totalFrames; f++) {
+        for (int f = mfdManager.getFirstFrame(); f <= mfdManager.getLastFrame(); f++) {
             List<ProcessedDetection> detections = videoDetectionsRegistry.getOrDefault(f, new ArrayList<>());
             ImageProcessor sliceProcessor = createAndFillProcessorWithFixedIds(detections, width, height);
-            maskStack.addSlice("Frame " + (f + 1), sliceProcessor);
+            String sliceLabel = originalStack.getSliceLabel(f+1);
+            maskStack.addSlice(sliceLabel, sliceProcessor);
         }
 
         if (maskStack.getSize() == 0) {
@@ -91,7 +93,7 @@ public class Detection3dUtils {
             return null;
         }
 
-        ImagePlus stackImp = new ImagePlus("Instance Segmentation Stack", maskStack);
+        ImagePlus stackImp = new ImagePlus(imp.getTitle() +  " - instance segmentation", maskStack);
 
         IJ.log("Instance masks stack created.");
         stackImp.setDisplayRange(0, Math.max(255.0, stackImp.getStatistics().max));
@@ -125,6 +127,7 @@ public class Detection3dUtils {
         processor.setThreshold(0, 0, ImageProcessor.NONE);
         return processor;
     }
+
 
     public static void generate3dOutputs(ImagePlus imp,  MultiFrameDataManager mfdManager, DetectionUtils.OutputOptions options) {
         // Add to ROI Manager

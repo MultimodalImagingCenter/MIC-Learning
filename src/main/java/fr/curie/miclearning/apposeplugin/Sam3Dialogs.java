@@ -173,6 +173,7 @@ public class Sam3Dialogs {
         gd.addMessage("Detection Settings");
         gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
         gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
+        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(),0);
 
         if (mode == DetectionMode.VIDEO) {
             gd.addMessage("Tracking Settings");
@@ -181,7 +182,6 @@ public class Sam3Dialogs {
             gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
             gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2);
             gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0);
-            gd.addNumericField("Max_masks_side_length_for_detection", params.getMaxSideLengthDetect(),0);
             gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(),0);
         }
     }
@@ -197,10 +197,17 @@ public class Sam3Dialogs {
         double maskThreshold = gd.getNextNumber(); // no check ?
         params.setMaskScoreThreshold(maskThreshold);
 
+        int maxSideLengthDetect = (int) gd.getNextNumber();
+        if (maxSideLengthDetect <= 0) {
+            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
+            maxSideLengthDetect = params.getMaxSideLengthDetect();
+        }
+        params.setMaxSideLengthDetect(maxSideLengthDetect);
+
         if (mode == DetectionMode.VIDEO) {
             int maxFrameUser = (int) gd.getNextNumber();
-            if (maxFrameUser < 0) maxFrameUser = params.getMaxFrame();
-            params.setMaxFrame(Math.min(maxFrameUser, params.getMaxFrame()));
+            if (maxFrameUser < 0) maxFrameUser = params.getNFrame();
+            params.setNFrame(Math.min(maxFrameUser, params.getNFrame()));
 
             int nFramesBtwDetec = (int) gd.getNextNumber();
             if (nFramesBtwDetec <= 0) {
@@ -221,13 +228,6 @@ public class Sam3Dialogs {
                 IJ.log("Detected objects will never be removed from memory.");
             }
             params.setRemoveAfterNMissed(removeAfterNMissed);
-
-            int maxSideLengthDetect = (int) gd.getNextNumber();
-            if (maxSideLengthDetect <= 0) {
-                IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
-                maxSideLengthDetect = params.getMaxSideLengthDetect();
-            }
-            params.setMaxSideLengthDetect(maxSideLengthDetect);
 
             int maxSideLengthTrack = (int) gd.getNextNumber();
             if (maxSideLengthTrack <= 0) {

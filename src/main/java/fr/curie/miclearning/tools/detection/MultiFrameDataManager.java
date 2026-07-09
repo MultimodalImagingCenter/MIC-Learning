@@ -11,10 +11,21 @@ public class MultiFrameDataManager {
     private final Map<Integer, List<Integer>> idByFrame = new HashMap<>(); // list of ids on every frame
     private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>(); // list of detection on every frame
 
-    private final int maxFrameNumber; // number of frames processed
+    private final int frameNumber; // number of frames processed
 
-    public MultiFrameDataManager(int maxFrameNumber) {
-        this.maxFrameNumber = maxFrameNumber;
+    private final int firstFrame; // reference from the original image - starting at index 0
+    private final int lastFrame;
+
+    public MultiFrameDataManager(int frameNumber) {
+        this.frameNumber = frameNumber;
+        this.firstFrame = 0;
+        this.lastFrame =  frameNumber -1;
+    }
+
+    public MultiFrameDataManager(int firstFrame, int lastFrame) {
+        this.firstFrame = firstFrame;
+        this.lastFrame = lastFrame;
+        this.frameNumber = lastFrame - firstFrame + 1;
     }
 
     public void registerDetection(int frameIndex, ProcessedDetection processedDet, int instanceId) {
@@ -42,7 +53,9 @@ public class MultiFrameDataManager {
     public Map<Integer, List<ProcessedDetection>> getDetectionsByFrame() {
         return detectionsByFrame;
     }
-    public int getMaxFrameNumber() { return maxFrameNumber;    }
+    public int getFrameNumber() { return frameNumber;    }
+    public int getFirstFrame() { return firstFrame; }
+    public int getLastFrame() { return lastFrame; }
 
     @Override
     public String toString() {

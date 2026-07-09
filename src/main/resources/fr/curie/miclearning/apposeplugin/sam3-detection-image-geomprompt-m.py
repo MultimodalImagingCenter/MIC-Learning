@@ -56,7 +56,9 @@ image_bgr = np.ascontiguousarray(image_bgr).astype(np.uint8)
 # 3. prepare prediction
 # compute vision embeddings once
 log_to_java("encoding image...")
-enc_img = detect_model.encode_image(image_bgr)
+# encoding image parameters
+imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": True}
+enc_img = detect_model.encode_image(image_bgr, **imgenc_config_dict)
 
 # store results in arrays
 total_detection =0

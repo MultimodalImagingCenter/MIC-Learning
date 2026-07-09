@@ -92,7 +92,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
                 promptRoiList.add(roi);
                 uniqueGroups.add(roi.getGroup());
             } else {
-                IJ.log("Only box and point ROIs are used as prompts. Roi " + roi.getName() + " will be ignored");
+                //IJ.log("Only box and point ROIs are used as prompts. Roi " + roi.getName() + " will be ignored");
             }
         }
         groupNumber = uniqueGroups.size();
@@ -226,6 +226,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
                     inputs.put("model_path", modelPath);
                     inputs.put("confidence_threshold", detectionParams.getConfidenceThreshold());
                     inputs.put("mask_threshold", detectionParams.getMaskScoreThreshold());
+                    inputs.put("max_side_length", detectionParams.getMaxSideLengthDetect());
                     inputs.put("positive_rois", positiveRois);
                     inputs.put("negative_rois", negativeRois);
 
@@ -403,6 +404,10 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         double maskThreshold = Double.parseDouble(Macro.getValue(options, "mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold())));
         detectionParams.setMaskScoreThreshold(maskThreshold);
 
+        int maxSideLength = Integer.parseInt(Macro.getValue(options, "max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect())));
+        if (maxSideLength <= 0) maxSideLength = detectionParams.getMaxSideLengthDetect();
+        detectionParams.setMaxSideLengthDetect(maxSideLength);
+
         // outputs
         outputOptions = new DetectionUtils.OutputOptions();
         outputOptions.addToRoiManagerBB = Boolean.parseBoolean(Macro.getValue(options, "add_box_rois", "false"));
@@ -428,6 +433,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
 
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
+        Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
 
         if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes", String.valueOf(true));
         if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois", String.valueOf(true));

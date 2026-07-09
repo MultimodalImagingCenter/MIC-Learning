@@ -149,7 +149,7 @@ detect_every_n_frames = 2**31 if (detect_every_n_frames is None or detect_every_
 remove_after_n_missed_frames = 2**31 if (remove_after_n_missed_frames is None or remove_after_n_missed_frames <= 0) else remove_after_n_missed_frames
 for frame_idx in range(initial_frame_index, max_frame_number):
     frame = images_bgr[frame_idx]
-    log_to_java(f"   Frame: {frame_idx + 1}")
+    #log_to_java(f"   Frame: {frame_idx + 1}")
 
     # Encode image data for tracking (this is the heaviest part of video inference)
     encoded_img = track_model.encode_image(frame, **imgenc_config_dict_track)
@@ -231,7 +231,7 @@ for frame_idx in range(initial_frame_index, max_frame_number):
             new_det_idxs_list = [det_idx for det_idx, is_new in enumerate(is_new_obj_list) if is_new]
             num_new_objs = len(new_det_idxs_list)
             if num_new_objs > 0:
-                log_to_java(f"    adding {num_new_objs} new objects")
+                log_to_java(f"     {num_new_objs} new object(s) detected")
             for idx_offset, det_idx in enumerate(new_det_idxs_list):
                 raw_det_mask = det_masks[:, [det_idx]]
                 init_mem = track_model.encode_prompt_memory_from_mask(encoded_img, raw_det_mask)
@@ -260,7 +260,8 @@ for frame_idx in range(initial_frame_index, max_frame_number):
     for idx_obj in objs_to_remove_list:
         memory_per_obj_dict.pop(idx_obj)
         missed_frames_per_obj_dict.pop(idx_obj)
-        #log_to_java(f"Removed object index: {idx_obj}")
+    if len(objs_to_remove_list)>0 :
+        log_to_java(f"     {len(objs_to_remove_list)} object(s) removed")
 
     n_obj = len(masks_uint8_on_frame)
     total_detection += n_obj
@@ -297,9 +298,11 @@ for frame_idx in range(initial_frame_index, max_frame_number):
 
         # 6. send results to java via task update
         task.update(
-            message=f"    frame {frame_idx +1} - number of objects detected: {n_obj}",
+            message=f"    frame {frame_idx + frame_offset +1} - number of object detected/tracked: {n_obj}",
+            current=frame_idx+1,
+            maximum=max_frame_number,
             info={
-                "frame_idx": frame_idx,
+                "frame_idx": frame_idx+frame_offset,
                 "n_results": n_obj,
                 "object_ids": all_ids[frame_idx],
                 "scores" : all_scores[frame_idx],
@@ -314,12 +317,12 @@ for frame_idx in range(initial_frame_index, max_frame_number):
         all_ids.append([])
 
         task.update(
-            message=f"   slice {frame_idx+1} - number of objects detected: {n_obj}",
-            current=frame_idx,
-            maximum=n_frames,
+            message=f"   frame {frame_idx+frame_offset+1} - no object detected/tracked",
+            current=frame_idx+1,
+            maximum=max_frame_number,
             info={
-                "frame_idx": frame_idx,
-                "n_results": n_obj
+                "frame_idx": frame_idx+frame_offset,
+                "n_results": 0
             }
         )
 
