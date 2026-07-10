@@ -477,8 +477,8 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                                 // 6.1 create Roi from bounding boxes and masks
                                 List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
                                 if (processedDetections.isEmpty()) {
-                                    IJ.log(" --- No valid detections were processed for frame " + frameIdx +1);
-                                    return;
+                                    IJ.log(" --- No valid detections were processed for frame " + (frameIdx +1));
+                                    continue;
                                 }
 
                                 // 6.2 aggregate detection by id and by frame

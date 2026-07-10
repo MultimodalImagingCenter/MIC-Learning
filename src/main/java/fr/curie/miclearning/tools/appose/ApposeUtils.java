@@ -48,14 +48,14 @@ public class ApposeUtils {
 
         try (InputStream is = ApposeUtils.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
-                IJ.log("ERROR : Unable to find python script");
+                IJ.log("ERROR : Unable to find resource");
                 throw new RuntimeException("Unable to find resource : " + resourcePath);
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                 return reader.lines().collect(Collectors.joining("\n"));
             }
         } catch (Exception e) {
-            IJ.log("ERROR : Unable to load python script");
+            IJ.log("ERROR : Unable to load resource");
             throw new RuntimeException("Error while reading file at " + resourcePath + ": ", e);
         }
     }
