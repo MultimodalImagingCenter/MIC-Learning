@@ -575,7 +575,7 @@ public class ImageJUtils {
             maskStack.addSlice(roi.getName(),processor);
         }
         if (maskStack.getSize() > 0) {
-            ImagePlus stackedImage = new ImagePlus("Instance Mask Stack (" + shapeRois.size() + " instances)", maskStack);
+            ImagePlus stackedImage = new ImagePlus(imp.getTitle() + " - Instance Mask Stack (" + shapeRois.size() + " instances)", maskStack);
             IJ.log("Mask stack created.");
             return stackedImage;
         } else {
@@ -609,7 +609,7 @@ public class ImageJUtils {
             processor.fill(roi);
         }
 
-        return new ImagePlus("Instances Mask (" + instanceId + " instances)", processor);
+        return new ImagePlus(imp.getTitle() + " - Instances Mask (" + instanceId + " instances)", processor);
     }
 
     public static ImagePlus instanceMaskFromDetection2(ImagePlus imp, DetectedObjects detection){
@@ -635,7 +635,7 @@ public class ImageJUtils {
             // fill the shape
             processor.fill(roi);
         }
-        return new ImagePlus("Semantic Mask (" + shapeRois.size() + " instances)", processor);
+        return new ImagePlus(imp.getTitle() + " - Semantic Mask (" + shapeRois.size() + " instances)", processor);
     }
 
     public static ImagePlus semanticMaskFromDetection(ImagePlus imp, DetectedObjects detection){
@@ -681,7 +681,7 @@ public class ImageJUtils {
             // fill the shape
             processor.fill(roi);
         }
-        return new ImagePlus("Instances Mask for each class (" + classStack.size() + "classes)", classStack);
+        return new ImagePlus(imp.getTitle() + " - Instances Mask for each class (" + classStack.size() + "classes)", classStack);
     }
 
     public static ImagePlus instanceMaskPerClassesFromDetection(ImagePlus imp, DetectedObjects detection){

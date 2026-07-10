@@ -56,7 +56,9 @@ image_bgr = np.ascontiguousarray(image_bgr).astype(np.uint8)
 # 3. prepare prediction
 # compute vision embeddings once
 log_to_java("encoding image...")
-enc_img = detect_model.encode_image(image_bgr)
+# encoding image parameters
+imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": True}
+enc_img = detect_model.encode_image(image_bgr, **imgenc_config_dict)
 
 # store results in arrays
 total_detection =0
@@ -154,7 +156,7 @@ if total_detection > 0:
     task.outputs['results_number'] = int(final_boxes.shape[0])
 
     # resize masks
-    final_masks = np.empty((total_detection, h_img, w_img), dtype=np.uint8, device="cpu")
+    final_masks = np.empty((total_detection, h_img, w_img), dtype=np.uint8)
     for i in range(total_detection):
         final_masks[i] = cv2.resize(pre_final_masks[i],(w_img, h_img),
                                       interpolation=cv2.INTER_NEAREST)

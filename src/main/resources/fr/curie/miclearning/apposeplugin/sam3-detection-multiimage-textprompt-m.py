@@ -39,6 +39,9 @@ n_frames, h_img, w_img = images_bgr.shape[:3]
 # array need ot be saved in a contiguous memory block
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 
+# encoding image parameters
+imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": True}
+
 # store results in arrays
 total_detection =0 # number of detections on al frames
 global_masks = []
@@ -52,7 +55,7 @@ for frame_idx, img in enumerate(images_bgr) :
     # compute vision embeddings once per image
     if n_frames >1:
         log_to_java(f"   Slice {frame_idx + 1}")
-    enc_img = detect_model.encode_image(img)
+    enc_img = detect_model.encode_image(img, **imgenc_config_dict)
 
     # store results for this slice
     slice_total_detection =0
@@ -113,7 +116,7 @@ for frame_idx, img in enumerate(images_bgr) :
         final_ids = torch.cat(slice_prompt_ids, dim=0).numpy().astype('int32')
 
         # resize masks
-        final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8, device="cpu")
+        final_masks = np.empty((slice_total_detection, h_img, w_img), dtype=np.uint8)
         for i in range(slice_total_detection):
             final_masks[i] = cv2.resize(pre_final_masks[i],(w_img, h_img),
                                           interpolation=cv2.INTER_NEAREST)
