@@ -77,10 +77,10 @@ public class Sam3PythonRunner implements AutoCloseable {
         }
         IJ.log("Python script loaded");
 
-        try (ShmImg<?> sharedVideo = ApposeUtils.video2ShmImg(imp, config.getStartFrame(), config.getEndFrame())) {
+        try (ShmImg<?> sharedVideo = ApposeUtils.video2ShmImg(imp, config.getPromptFrame(), config.getEndFrame())) {
             try (Service python = environment.python()) {
 
-                Map<String, Object> inputs = buildInputs(config, sharedVideo, config.getStartFrame());
+                Map<String, Object> inputs = buildInputs(config, sharedVideo, config.getPromptFrame());
                 Service.Task task = python.task(script, inputs);
 
                 task.listen(event -> {
@@ -132,7 +132,7 @@ public class Sam3PythonRunner implements AutoCloseable {
 
     /** Builds the Appose input map for one run.*/
     static Map<String, Object> buildInputs(Sam3RunConfig config, ShmImg<?> sharedVideo, int frameOffset) {
-        Sam3Parameters params = config.getDetectionParams();
+        Sam3ModelParameters params = config.getDetectionParams();
         Map<String, Object> inputs = new HashMap<>();
 
         inputs.put("video_input", NDArrays.asNDArray(sharedVideo));
@@ -146,13 +146,16 @@ public class Sam3PythonRunner implements AutoCloseable {
         inputs.put("removeAfterNMissed", params.getRemoveAfterNMissed());
         inputs.put("maxSideLengthDetect", params.getMaxSideLengthDetect());
         inputs.put("maxSideLengthTrack", params.getMaxSideLengthTrack());
-        inputs.put("max_frame_number", params.getNFrame());
+
+        inputs.put("nFrameToProcess", params.getNFrameToProcess()); // = lasFrameIndex - firstFrameIndex +1
+        inputs.put("bidirectional", config.isBidirectional());
+        inputs.put("promptFrame", config.getPromptFrame() - config.getFirstFrame());
 
         inputs.put("text_prompt", config.getTextPrompt());
         inputs.put("positive_rois", config.getPositiveRois());
         inputs.put("negative_rois", config.getNegativeRois());
 
-        inputs.put("frame_offset", frameOffset); // informational only, used for logging on the python side
+        inputs.put("frame_offset", config.getFirstFrame()); // informational only, used for logging on the python side
 
         return inputs;
     }

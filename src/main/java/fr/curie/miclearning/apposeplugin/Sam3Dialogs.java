@@ -169,7 +169,7 @@ public class Sam3Dialogs {
         return Math.min(maxFrameUser, nFrames);
     }
 
-    public static void addParameterDialog(GenericDialog gd, Sam3Parameters params, DetectionMode mode) {
+    public static void addParameterDialog(GenericDialog gd, Sam3ModelParameters params, DetectionMode mode) {
         gd.addMessage("Detection Settings");
         gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
         gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
@@ -186,7 +186,7 @@ public class Sam3Dialogs {
         }
     }
 
-    public static void getParameters(GenericDialog gd, Sam3Parameters params, DetectionMode mode) {
+    public static void getParameters(GenericDialog gd, Sam3ModelParameters params, DetectionMode mode) {
         double confThreshold = gd.getNextNumber();
         if (confThreshold < 0 || confThreshold > 1) {
             IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
@@ -206,8 +206,8 @@ public class Sam3Dialogs {
 
         if (mode == DetectionMode.VIDEO) {
             int maxFrameUser = (int) gd.getNextNumber();
-            if (maxFrameUser < 0) maxFrameUser = params.getNFrame();
-            params.setNFrame(Math.min(maxFrameUser, params.getNFrame()));
+            if (maxFrameUser < 0) maxFrameUser = params.getNFrameToProcess();
+            params.setNFrameToProcess(Math.min(maxFrameUser, params.getNFrameToProcess()));
 
             int nFramesBtwDetec = (int) gd.getNextNumber();
             if (nFramesBtwDetec <= 0) {

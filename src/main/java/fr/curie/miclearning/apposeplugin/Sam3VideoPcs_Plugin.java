@@ -42,12 +42,13 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     private boolean negativePromptUsed;
     private List<Integer> positiveGroups;
     private int negativeGroup;
-    private Sam3Parameters detectionParams;
+    private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
 
     int posStartFrame =0; // starting from index 0
     int posEndFrame; // starting from index 0
     boolean bidirectional = false;
+    int posFirstFrame;
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
@@ -168,8 +169,8 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             imp.setPosition(1);
         }
 
-        int posEndFrame = Math.min(nFrames - 1, posStartFrame + detectionParams.getNFrame() - 1);
-        detectionParams.setNFrame(posEndFrame - posStartFrame + 1);
+        int posEndFrame = Math.min(nFrames - 1, posStartFrame + detectionParams.getNFrameToProcess() - 1);
+        detectionParams.setNFrameToProcess(posEndFrame - posStartFrame + 1);
 
         // prepare model and run configuration
         Sam3RunConfig config;
@@ -416,8 +417,8 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
         // 5- PARAMETERS
         gd.addMessage("__________");
-        detectionParams = new Sam3Parameters();
-        detectionParams.setNFrame(nFrames);
+        detectionParams = new Sam3ModelParameters();
+        detectionParams.setNFrameToProcess(nFrames);
         Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
 
         // 6- OUTPUTS
@@ -526,7 +527,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + config.getModelPath());
         IJ.log("number of frames to process: " + config.getFrameCount()
-                + " (frame " + (config.getStartFrame() + 1) + " to " + (config.getEndFrame() + 1) + ")");
+                + " (frame " + (config.getPromptFrame() + 1) + " to " + (config.getEndFrame() + 1) + ")");
         IJ.log("detection every " + config.getDetectionParams().getNFrameBtwDetections() + " frames");
         if (config.isTextPromptUsed()) IJ.log("text prompt: " + config.getTextPrompt().toUpperCase());
         if (config.isVisualPositivePromptUsed()) IJ.log("visual prompts: " + config.getPositiveRois().size() + " ROI(s) as positive prompt(s)");

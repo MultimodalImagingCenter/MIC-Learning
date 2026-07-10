@@ -25,10 +25,12 @@ public final class Sam3RunConfig {
     private final boolean visualPositivePromptUsed;
     private final boolean negativePromptUsed;
 
-    private final int startFrame; // 0-indexed, inclusive
-    private final int endFrame;   // 0-indexed, inclusive
+    private final int promptFrame; // index of the frame of the original image where the prompt are defined, where the pcs starts 0-indexed, inclusive
+    private final int endFrame;   // index of the frame of te original image  0-indexed, inclusive
+    private final boolean bidirectional;
+    private final int firstFrame; // index frame to go back to if bidirectional, firstFrame = startFrame otherwise
 
-    private final Sam3Parameters detectionParams;
+    private final Sam3ModelParameters detectionParams;
     private final DetectionUtils.OutputOptions outputOptions;
     private final Map<String, Integer> classIdMap;
 
@@ -40,11 +42,14 @@ public final class Sam3RunConfig {
         this.negativeRois = Collections.unmodifiableList(new ArrayList<>(b.negativeRois));
         this.visualPositivePromptUsed = b.visualPositivePromptUsed;
         this.negativePromptUsed = b.negativePromptUsed;
-        this.startFrame = b.startFrame;
+        this.promptFrame = b.promptFrame;
         this.endFrame = b.endFrame;
+        this.bidirectional = b.bidirectional;
+        this.firstFrame = b.firstFrame;
         this.detectionParams = b.detectionParams;
         this.outputOptions = b.outputOptions;
         this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
+
     }
 
     public String getModelPath() { return modelPath; }
@@ -54,10 +59,12 @@ public final class Sam3RunConfig {
     public List<double[]> getNegativeRois() { return negativeRois; }
     public boolean isVisualPositivePromptUsed() { return visualPositivePromptUsed; }
     public boolean isNegativePromptUsed() { return negativePromptUsed; }
-    public int getStartFrame() { return startFrame; }
+    public int getPromptFrame() { return promptFrame; }
     public int getEndFrame() { return endFrame; }
-    public int getFrameCount() { return endFrame - startFrame + 1; }
-    public Sam3Parameters getDetectionParams() { return detectionParams; }
+    public int getFrameCount() { return endFrame - promptFrame + 1; }
+    public boolean isBidirectional() {return bidirectional; }
+    public int getFirstFrame() {return firstFrame; }
+    public Sam3ModelParameters getDetectionParams() { return detectionParams; }
     public DetectionUtils.OutputOptions getOutputOptions() { return outputOptions; }
     public Map<String, Integer> getClassIdMap() { return classIdMap; }
 
@@ -69,9 +76,11 @@ public final class Sam3RunConfig {
         private List<double[]> negativeRois = new ArrayList<>();
         private boolean visualPositivePromptUsed;
         private boolean negativePromptUsed;
-        private int startFrame;
+        private int promptFrame;
         private int endFrame;
-        private Sam3Parameters detectionParams;
+        private boolean bidirectional;
+        private int firstFrame;
+        private Sam3ModelParameters detectionParams;
         private DetectionUtils.OutputOptions outputOptions;
         private Map<String, Integer> classIdMap = new HashMap<>();
 
@@ -95,13 +104,23 @@ public final class Sam3RunConfig {
             return this;
         }
 
-        public Builder frameRange(int startFrame, int endFrame) {
-            this.startFrame = startFrame;
+        public Builder frameRange(int promptFrame, int endFrame) {
+            this.promptFrame = promptFrame;
             this.endFrame = endFrame;
+            this.bidirectional = false;
+            this.firstFrame = promptFrame;
             return this;
         }
 
-        public Builder detectionParams(Sam3Parameters detectionParams) {
+        public Builder frameRange(int firstFrame, int promptFrame, int endFrame) {
+            this.promptFrame = promptFrame;
+            this.endFrame = endFrame;
+            this.bidirectional = firstFrame < promptFrame;
+            this.firstFrame = firstFrame;
+            return this;
+        }
+
+        public Builder detectionParams(Sam3ModelParameters detectionParams) {
             this.detectionParams = detectionParams;
             return this;
         }
@@ -128,9 +147,13 @@ public final class Sam3RunConfig {
                 throw new IllegalStateException(
                         "No positive prompt (neither text nor visual) provided.");
             }
-            if (endFrame < startFrame) {
+            if (endFrame < promptFrame) {
                 throw new IllegalStateException(
-                        "endFrame (" + endFrame + ") must be >= startFrame (" + startFrame + ")");
+                        "endFrame (" + endFrame + ") must be >= startFrame (" + promptFrame + ")");
+            }
+            if (promptFrame < firstFrame) {
+                throw new IllegalStateException(
+                        "startFrame (" + endFrame + ") must be >= firstFrame (" + promptFrame + ")");
             }
             return new Sam3RunConfig(this);
         }

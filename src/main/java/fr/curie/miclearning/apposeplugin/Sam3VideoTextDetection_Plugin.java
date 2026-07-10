@@ -24,6 +24,7 @@ import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.Detection3dUtils.*;
 
+@Deprecated
 public class Sam3VideoTextDetection_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames; // number of frames in the video

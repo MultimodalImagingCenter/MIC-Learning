@@ -37,7 +37,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
     private DetectionUtils.OutputOptions outputOptions;
     private String modelPath;
-    private Sam3Parameters detectionParams;
+    private Sam3ModelParameters detectionParams;
 
     private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
 
@@ -383,7 +383,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         classIdMap = getClassIdMapFromArrays(promptArray,roiIDArray);
 
         // parameters
-        detectionParams = new Sam3Parameters();
+        detectionParams = new Sam3ModelParameters();
         double confidenceThreshold = Double.parseDouble(Macro.getValue(options, "confidence", String.valueOf(detectionParams.getConfidenceThreshold())));
         if (confidenceThreshold < 0 || confidenceThreshold >1) confidenceThreshold = detectionParams.getConfidenceThreshold();
         detectionParams.setConfidenceThreshold(confidenceThreshold);
@@ -459,7 +459,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         // ask for parameters
         gd.addMessage("__________");
-        detectionParams = new Sam3Parameters();
+        detectionParams = new Sam3ModelParameters();
         Sam3Dialogs.addParameterDialog(gd, detectionParams, stackMode);
 
         // ask for SAM outputs

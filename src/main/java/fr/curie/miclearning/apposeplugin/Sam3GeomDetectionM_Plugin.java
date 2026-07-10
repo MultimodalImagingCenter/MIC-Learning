@@ -38,7 +38,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
 
     private DetectionUtils.OutputOptions outputOptions;
     private String modelPath;
-    private Sam3Parameters detectionParams;
+    private Sam3ModelParameters detectionParams;
 
     private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer >0 and <256)
 
@@ -396,7 +396,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
         }
 
         // parameters
-        detectionParams = new Sam3Parameters();
+        detectionParams = new Sam3ModelParameters();
         double confidenceThreshold = Double.parseDouble(Macro.getValue(options, "confidence", String.valueOf(detectionParams.getConfidenceThreshold())));
         if (confidenceThreshold < 0 || confidenceThreshold >1) confidenceThreshold = detectionParams.getConfidenceThreshold();
         detectionParams.setConfidenceThreshold(confidenceThreshold);
@@ -469,7 +469,7 @@ public class Sam3GeomDetectionM_Plugin implements PlugIn {
 
         // ask for parameters
         gd.addMessage("__________");
-        detectionParams = new Sam3Parameters();
+        detectionParams = new Sam3ModelParameters();
         addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
 
         // ask for SAM outputs
