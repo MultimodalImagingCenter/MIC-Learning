@@ -1,12 +1,24 @@
 # Changelog
-## [1.2.0] - 2026-07-01
+## [1.3.0] - current
+### Added
+- SAM3 plugins for pcs on video : handle visual (positive and negative) + text prompt to define the same concept
 
+### Changed
+- SAM3 video plugin: 
+  - refactor implementation for pcs on video to use `muggled_sam`:
+  - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3RunConfig`, `Sam3PythonRunner`, `DetectionResultConsumer`) 
+  - result consumption now runs on a managed `ExecutorService` thread instead of a raw `Thread`
+
+### Deprecated
+- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py` (replaced by `muggled_sam` implementation).
+
+## [1.2.0] - 2026-07-01
 ### Added
 **SAM3 Plugins**
 - Introduce `Sam3Parameters` class to handle inference configuration.
 - Implement `Sam3VideoTextDetection_Plugin` :  video pcs + tracking with single-text prompt
 - Implement `Sam3TextDetectionMultiImage_Plugin` : pcs text prompts across image stacks (prompt(s) encoded on each image) (replaces single-image version).
--  Add support for point-based prompts (positive and negative) to single-image geometric-prompt pcs plugin
+- Add support for point-based prompts (positive and negative) to single-image geometric-prompt pcs plugin
 
 **Detection & 3D Processing**
 - Introduce detection modes to support single-image, multi-image, and video stacks
