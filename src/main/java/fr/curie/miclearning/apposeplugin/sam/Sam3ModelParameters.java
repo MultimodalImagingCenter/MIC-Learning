@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
 public class Sam3ModelParameters {
     // Default values

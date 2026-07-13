@@ -1,5 +1,7 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
+import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
+import fr.curie.miclearning.apposeplugin.VideoDetectionConsumer;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.MultiFrameDataManager;
@@ -23,13 +25,13 @@ import java.util.*;
 import java.util.List;
 import java.util.concurrent.*;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
+import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
  * ImageJ plugin: SAM3 promptable-concept-segmentation on video.
  */
-public class Sam3VideoPcs_Plugin implements PlugIn {
+public class Sam3VideoPcs2_Plugin implements PlugIn {
     protected ImagePlus imp;
     int nFrames; // number of frames in the video
     int axis; // 3 : Z axis - 4 : Time axis
@@ -52,7 +54,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
-    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-m.py";
+    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-bidirectional.py";
 
     @Override
     public void run(String s) {
@@ -140,7 +142,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         // visual prompts, positive and negative
         RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
                 roiSelection.getRoisAtFirstFrame(),
-                visualPositivePromptUsed ? positiveGroups : java.util.Collections.emptyList(),
+                visualPositivePromptUsed ? positiveGroups : Collections.emptyList(),
                 negativePromptUsed ? negativeGroup : null);
 
         if (visualPositivePromptUsed && promptRois.getPositive().isEmpty()) {
@@ -160,17 +162,17 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             return;
         }
 
-
+        int postFirstFrame = 0;
         // first and last frames to segment
-        int posStartFrame = (visualPositivePromptUsed || negativePromptUsed)
+        int posPromptFrame = (visualPositivePromptUsed || negativePromptUsed)
                 ? roiSelection.getFirstFramePosition() - 1
                 : 0;
         if (!(visualPositivePromptUsed || negativePromptUsed)) {
             imp.setPosition(1);
         }
 
-        int posEndFrame = Math.min(nFrames - 1, posStartFrame + detectionParams.getNFrameToProcess() - 1);
-        detectionParams.setNFrameToProcess(posEndFrame - posStartFrame + 1);
+        int posEndFrame = Math.min(nFrames - 1, posPromptFrame + detectionParams.getNFrameToProcess() - 1);
+        detectionParams.setNFrameToProcess(posEndFrame - posPromptFrame + 1);
 
         // prepare model and run configuration
         Sam3VideoRunConfig config;
@@ -180,7 +182,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     .textPrompt(textPrompt, textPromptUsed)
                     .visualPrompts(promptRois.getPositive(), promptRois.getNegative(),
                             visualPositivePromptUsed, negativePromptUsed)
-                    .frameRange(posStartFrame, posEndFrame)
+                    .frameRange(0,posPromptFrame, posEndFrame)
                     .detectionParams(detectionParams)
                     .outputOptions(outputOptions)
                     .classIdMap(classIdMap)
@@ -191,7 +193,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         }
 
         //prepare output
-        MultiFrameDataManager mfdManager = new MultiFrameDataManager(posStartFrame, posEndFrame);
+        MultiFrameDataManager mfdManager = new MultiFrameDataManager(postFirstFrame, posEndFrame);
 
         recordInMacro();
         IJ.log("\n   --- Starting SAM3 Promptable Concept Segmentation on video --- ");
@@ -222,7 +224,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             IJ.log("Executing python script...");
             runner.runBlocking(config, imp, resultsQueue);
 
-            // Wait for the consumer to finish draining the queue before generating outputs.
+            // Wait for the consumer to finish draining the queue before generating outputs
             consumerResult.get();
 
             IJ.log(" --- Generating outputs... ");
@@ -526,12 +528,12 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + config.getModelPath());
-        IJ.log("number of frames to process: " + config.getFrameCount()
-                + " (frame " + (config.getPromptFrame() + 1) + " to " + (config.getEndFrame() + 1) + ")");
-        IJ.log("detection every " + config.getDetectionParams().getNFrameBtwDetections() + " frames");
+        IJ.log("number of frame to process: " + config.getFrameCount()
+                + " (frame " + (config.getFirstFrame() + 1) + (config.getFrameCount()>1 ? " to " + (config.getEndFrame() + 1): "" )+ (config.getFirstFrame()!=config.getPromptFrame()? " - prompt frame: " + (config.getPromptFrame()+1): "") + ")" );
         if (config.isTextPromptUsed()) IJ.log("text prompt: " + config.getTextPrompt().toUpperCase());
         if (config.isVisualPositivePromptUsed()) IJ.log("visual prompts: " + config.getPositiveRois().size() + " ROI(s) as positive prompt(s)");
         if (config.isNegativePromptUsed()) IJ.log("visual prompts: " + config.getNegativeRois().size() + " ROI(s) as negative prompt(s)");
+        IJ.log("detection every " + (config.getDetectionParams().getNFrameBtwDetections()>1 ? config.getDetectionParams().getNFrameBtwDetections() + " frames" : "frame"));
         IJ.log("----------------------");
     }
 

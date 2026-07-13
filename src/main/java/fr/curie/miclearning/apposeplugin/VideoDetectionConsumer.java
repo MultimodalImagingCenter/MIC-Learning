@@ -21,6 +21,7 @@ import fr.curie.miclearning.tools.detection.ProcessedDetection;
 
 /**
  * Collect per-frame detection results from a {@link BlockingQueue}
+ * convert them into {@link ProcessedDetection}
  * and save them into a {@link MultiFrameDataManager}
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.

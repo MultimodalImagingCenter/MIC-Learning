@@ -38,6 +38,9 @@ if torch.cuda.is_available():
     device, dtype = "cuda", torch.bfloat16
 log_to_java(f"loading model, using device: {device}...")
 
+detection_model_path = detectionModelPath
+tracking_model_path = trackingModelPath
+
 sam_core_detect = make_sam_from_state_dict(detection_model_path)
 detect_model = sam_core_detect.get_detector_context().to(device=device, dtype=dtype)
 # Allow loading of alternate model for tracking
@@ -56,6 +59,7 @@ initial_frame_index = 0
 # input image is saved in shared memory as appose.NDArray
 # wrap the input image from appose.NDArray to numpy.ndarray
 log_to_java("pre processing images...")
+video_input = videoInput
 narr = video_input.ndarray()
 
 # fix dimension order (from (B,H,W,C) rgb to (B,H,W,C) bgr)
@@ -65,6 +69,13 @@ n_frames, h_img, w_img = images_bgr.shape[:3]
 
 # array need to be saved in a contiguous memory block
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
+
+# - 2.2.1 text inputs
+text_prompt = textPrompt
+
+# - 2.2.1 visual inputs
+positive_rois = positiveRois
+negative_rois = negativeRois
 
 # format visual inputs
 pos_box_xy1xy2_norm_list = []  # Format is: [[(x1, y1), (x2, y2)]]

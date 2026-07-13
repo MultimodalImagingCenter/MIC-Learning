@@ -1,6 +1,6 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
-import ai.djl.modality.cv.output.BoundingBox;
+import fr.curie.miclearning.apposeplugin.MultiImageDetectionConsumer;
 import fr.curie.miclearning.tools.detection.*;
 import ij.IJ;
 import ij.ImagePlus;
@@ -9,22 +9,16 @@ import ij.gui.GenericDialog;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
-import net.imglib2.appose.NDArrays;
-import net.imglib2.appose.ShmImg;
 import org.apposed.appose.*;
 
 import java.awt.event.ActionListener;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.DoubleBuffer;
-import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.askStackMode;
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
-import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
+import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.askStackMode;
+import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.getClassIdMapFromArrays;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.*;
 import static ij.plugin.frame.RoiManager.getRoiManager;
@@ -33,7 +27,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * ImageJ plugin: SAM3 promptable-concept-segmentation over an image stack (or single image),
  * with multiple independent text prompts. Detections are independent per frame
  */
-public class Sam3TextDetectionMultiImage_Plugin2 implements PlugIn {
+public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames;
 

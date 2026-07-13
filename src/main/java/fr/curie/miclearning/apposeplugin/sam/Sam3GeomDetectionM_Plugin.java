@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
 import ai.djl.modality.cv.output.BoundingBox;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
@@ -9,27 +9,31 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.Macro;
 import ij.gui.GenericDialog;
+import ij.gui.Roi;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
+import ij.plugin.frame.RoiManager;
 import net.imglib2.appose.NDArrays;
 import net.imglib2.appose.ShmImg;
 import org.apposed.appose.*;
 
+import java.awt.*;
 import java.awt.event.ActionListener;
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
-import java.util.stream.Collectors;
-import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
+import java.util.List;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.getClassIdMapFromArrays;
+import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
+import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
+import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseClassIdMap;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
+import static ij.plugin.frame.RoiManager.getRoiManager;
 
-@Deprecated
-public class Sam3TextDetectionM_Plugin implements PlugIn {
+public class Sam3GeomDetectionM_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
     private DetectionUtils.OutputOptions outputOptions;
@@ -37,15 +41,24 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
     private Sam3ModelParameters detectionParams;
 
     private Map<String, Integer> classIdMap; // list to map class name (string) to roi group id (must be integer >0 and <256)
-    private List<String> textPrompts;
+
+    private Set<Integer> uniqueGroups; // list of Roi group ID in manager
+    private int groupNumber; // Number of ROI groups in manager
+    private int roiNumber; // Number of selected rectangle ROIs
+
+    private String[] negativeGroupSelection; // list of ROI to display in the genericDialog for the user to choose
+    private boolean onlyPositiveGroups;
+    private int negativeGroup; // id of the negative group selected (if any)
+    private Map<Integer, List<double[]>> positiveRois; // list of Roi to be used as positive prompts, grouped by group ID
+    private List<double[]> negativeRois; // list of Roi to be used as negative prompts
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml"; // inside the resources folder
-    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-textprompt-m.py"; // inside the resources folder
+    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-geomprompt-m.py"; // inside the resources folder
 
     @Override
     public void run(String s) {
-        // --- 1. get image, model, prompt and parameters ---
+        // --- 1. get image and geom Rois ---
 
         // 1.1 get selected image
         imp = IJ.getImage(); // select active image
@@ -58,9 +71,62 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
             return;
         }
 
-        // 1.2 retrieve parameters (model path, prompt and output options)
+        // 1.2 get selected ROIs list
+        RoiManager roiManager = getRoiManager();
+        Roi[] selectedRoiList = roiManager.getSelectedRoisAsArray();
+        if (selectedRoiList.length == 0) {
+            IJ.error("at least one roi in the ROI manager is required to run a sam3 detection with visual prompt(s)");
+            return;
+        }
+
+        // 1.3 link Roi ID to names
+        // get ROI groups IDs list
+        uniqueGroups = new TreeSet<>();
+        List<Roi> promptRoiList = new ArrayList<>();
+        for (Roi roi : selectedRoiList) {
+            // check that Roi is a box or point
+            if (roi.getType() == 0 || roi.getType() == 10) {
+                if (roi.getGroup() == 0) {
+                    roi.setGroup(MAX_GROUP_VALUE);
+                }
+                promptRoiList.add(roi);
+                uniqueGroups.add(roi.getGroup());
+            } else {
+                //IJ.log("Only box and point ROIs are used as prompts. Roi " + roi.getName() + " will be ignored");
+            }
+        }
+        groupNumber = uniqueGroups.size();
+        roiNumber = promptRoiList.size();
+
+        if (groupNumber == 0){
+            IJ.error("No box or point ROIs were found");
+            return;
+        }
+
+        // create id-name map list + prepare generic dialog
+        classIdMap = new HashMap<>(); // list to map class name (string) to roi group id (must be integer)
+        // each group will create one detection
+
+        // create list of group that will be displayed in generic dialog
+        negativeGroupSelection = new String[uniqueGroups.size() + 1]; // names that will be displayed in generic dialog
+        negativeGroupSelection[0] = ONLY_POSITIVE_TXT;
+        int j = 1;
+        for (int groupId :  uniqueGroups) {
+            if (groupId == 0 || groupId == MAX_GROUP_VALUE) {
+                negativeGroupSelection[j] = GROUP_ZERO_TXT;
+                groupId = MAX_GROUP_VALUE; // ROI group can't be 0 (0 means no group, won't be displayed in masks)
+            } else {
+                negativeGroupSelection[j] = String.valueOf(groupId);
+            }
+            String name = Roi.getGroupName(groupId);
+            if (name==null) name = String.valueOf(groupId);
+            // TODO : if no group name, find class name in ROI name
+            classIdMap.put(name, groupId);
+            j++;
+        }
+
+        // --- 2. retrieve parameters (model path, negative group, output options) ---
         if (Macro.getOptions() != null) {
-            //IJ.log("macro options");
             parseMacro();
         } else {
             askUser();
@@ -70,17 +136,55 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
             return;
         }
 
-        long startTime = System.nanoTime();
-        textPrompts = new ArrayList<>();
-        textPrompts.addAll(classIdMap.keySet());
+        Map<Integer, String> idClassMap = createReverseClassIdMap(classIdMap);
+        if (idClassMap == null ) return;
 
+        long startTime = System.nanoTime();
+
+        // 2.2 Prepare input - Sort positive and negative ROIs
+        positiveRois = new HashMap<>(); // positive_rois structure: { '1': [[x,y,w,h], [x,y], ...], '2': [[x,y,w,h], [x,y], ...] } (absolute values)
+        negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+
+        for (Roi roi : promptRoiList) {
+            int groupId = roi.getGroup() == 0 ? MAX_GROUP_VALUE : roi.getGroup();
+            double[] coord = null;
+            if (roi.getType() == Roi.RECTANGLE) { // if roi is box
+                Rectangle rect = roi.getBounds();
+                coord = new double[]{rect.x, rect.y, rect.width, rect.height};
+
+                if (!onlyPositiveGroups && groupId == negativeGroup) {
+                    negativeRois.add(coord);
+                } else {
+                    positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
+                }
+            } else if (roi.getType() == Roi.POINT) { // if point (or list of points)
+                roi.getContainedPoints();
+                Point[] points = roi.getContainedPoints();  // get list of points in Roi
+                // add every point of the group to the input
+                for (Point point : points){
+                    coord = new double[]{point.getX(), point.getY()};
+                    if (!onlyPositiveGroups && groupId == negativeGroup) {
+                        negativeRois.add(coord);
+                    } else {
+                        positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
+                    }
+                }
+            } else {
+                IJ.log("error with ROI type : " + roi);
+            }
+        }
+
+        if (positiveRois.isEmpty()) {
+            IJ.error("No positive ROIs found to process.");
+            return;
+        }
 
         recordInMacro();
-        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on 1 image - with text prompts ---");
+        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on 1 image - with visual prompts ---");
         printParameters();
 
-        // --- 2. load script and create env ---
-        // 2.1 load python script
+        // --- 3. load script and create env ---
+        // 3.1 load python script
         String script = getResourceAsString(SCRIPT_PATH);
         if (script == null) {
             IJ.log("ERROR : Unable to load python script");
@@ -90,7 +194,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
 
         IJ.log("Python script loaded");
 
-        // 2.2 create environment
+        // 3.2 create environment
         // load toml file
         String envTomlContent = getResourceAsString(ENV_FILE_PATH);
         if (envTomlContent == null) {
@@ -107,24 +211,26 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
 
             IJ.log("Python environment built");
 
-            // --- 3. prediction ---
-            // 3.1 copy image in shared memory
+            // --- 4. prediction ---
+            // 4.1 copy image in shared memory
             try (ShmImg<?> sharedImg = imp2ShmImg(imp)) {
                 //IJ.log("Image copied to shared memory");
 
-                // 3.2 create python service in env
+                // 4.2 create python service in env
                 try (Service python = env.python()) {
 
-                    // 3.3 store image and prompt into a map of inputs to the Python script.
+                    // 4.3 store image and prompt into a map of inputs to the Python script.
                     final Map<String, Object> inputs = new HashMap<>();
 
                     inputs.put("image_input", NDArrays.asNDArray(sharedImg));
-                    inputs.put("text_prompts", textPrompts);
                     inputs.put("model_path", modelPath);
                     inputs.put("confidence_threshold", detectionParams.getConfidenceThreshold());
                     inputs.put("mask_threshold", detectionParams.getMaskScoreThreshold());
+                    inputs.put("max_side_length", detectionParams.getMaxSideLengthDetect());
+                    inputs.put("positive_rois", positiveRois);
+                    inputs.put("negative_rois", negativeRois);
 
-                    // 3.4 Execute script by launching task
+                    // 4.4 Execute script by launching task
                     Service.Task task = python.task(script, inputs);
 
                     // follow task execution
@@ -162,7 +268,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
                     IJ.log("Executing python script...");
                     task.waitFor();
 
-                    // --- 4. get results ---
+                    // --- 5. get results ---
                     Object resultsObj = task.outputs.get("results_number");
                     if (resultsObj == null) {
                         IJ.error("Error", "Python script did not return 'results_number'.");
@@ -178,19 +284,19 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
                         return;
                     }
 
-                    // extract proba, scores and masks as ND array
+                    // 5.2 extract proba, scores and masks as ND array
                     NDArray output_boxes = (NDArray) task.outputs.get("boxes");
                     NDArray output_masks = (NDArray) task.outputs.get("masks");
                     NDArray output_scores = (NDArray) task.outputs.get("scores");
-                    NDArray output_ids = (NDArray) task.outputs.get("prompt_ids");
+                    NDArray output_group = (NDArray) task.outputs.get("group_ids");
 
-                    if (output_boxes == null || output_masks == null || output_scores == null || output_ids == null) {
+                    if (output_boxes == null || output_masks == null || output_scores == null || output_group == null) {
                         IJ.error("Missing output arrays (boxes, masks, scores or ids) from Python.");
                         return;
                     }
 
-                    // --- 5. process results --
-                    // 5.1 extract bounding boxes
+                    // --- 6. process results --
+                    // 6.1 extract bounding boxes
                     // Initialize the 2D array [Number of Boxes][4 Coordinates]
                     double[][] boxesArray = new double[numResults][4];
                     // extract bounding boxes coordinates
@@ -201,7 +307,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
                         buf_boxes.get(boxesArray[i]);
                     }
 
-                    // 5.2 Extract masks
+                    // 6.2 Extract masks
                     long[] shape = output_masks.shape().toLongArray();
                     int height;
                     int width;
@@ -224,26 +330,26 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
                         }
                     }
 
-                    // 5.3 Extract probabilities
+                    // 6.3 Extract probabilities
                     double[] probaArray = new double[numResults];
                     DoubleBuffer buf_scores = output_scores.buffer().asDoubleBuffer();
                     buf_scores.rewind();
                     buf_scores.get(probaArray);
 
-                    // 5.4 Extract prompt ids
-                    int[] promptIds = new int[numResults];
-                    IntBuffer buf_ids = output_ids.buffer().asIntBuffer();
+                    // 6.4 Extract group ids
+                    int[] groupIds = new int[numResults];
+                    IntBuffer buf_ids = output_group.buffer().asIntBuffer();
                     buf_ids.rewind();
-                    buf_ids.get(promptIds);
+                    buf_ids.get(groupIds);
 
-                    // 5.5 convert results to DetectedObjects
+                    // 6.5 convert results to DetectedObjects
                     List<String> classNames = new ArrayList<>();
                     List<Double> probabilities = new ArrayList<>();
                     List<BoundingBox> boundingBoxes = new ArrayList<>();
 
                     for (int i = 0; i < numResults; i++) {
-                        int promptIdx = promptIds[i];
-                        classNames.add(textPrompts.get(promptIdx));
+                        int groupId = groupIds[i];
+                        classNames.add(idClassMap.get(groupId));
                         double[] coord = boxesArray[i];
                         MaskByte mask = new MaskByte(coord[0], coord[1], coord[2], coord[3], masksArray[i], true);
                         boundingBoxes.add(mask);
@@ -266,7 +372,6 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
                 } catch (TaskException | InterruptedException e) {
                     throw new RuntimeException(e);
                 }
-
             }
 
         } catch (BuildException e) {
@@ -275,8 +380,7 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
 
         long endTime = System.nanoTime();
         double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-        IJ.log(" --- SAM3 detection complete. Total time= "+ totalTimeInSeconds + " sec ---");
-
+        IJ.log(" --- SAM3 PCS complete. Total time= "+ totalTimeInSeconds + " sec ---");
     }
 
     private void parseMacro() {
@@ -291,22 +395,6 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
             return;
         }
 
-        // prompts and associated id groups
-        String prompts = Macro.getValue(options, "text_prompts", null);
-        if (prompts == null ||prompts.trim().isEmpty()) {
-            IJ.log("Prompt empty. Closing plug-in.\n");
-            IJ.error("Please enter a valid prompt.");
-            return ;
-        }
-        String[] promptArray = prompts.split(",");
-
-        String roiIDs = Macro.getValue(options, "roi_ids", "1");
-        if (roiIDs.trim().isEmpty()) {
-            roiIDs = String.join("", Collections.nCopies(promptArray.length, "0,"));
-        }
-        String[] roiIDArray = roiIDs.split(",");
-        classIdMap = getClassIdMapFromArrays(promptArray,roiIDArray);
-
         // parameters
         detectionParams = new Sam3ModelParameters();
         double confidenceThreshold = Double.parseDouble(Macro.getValue(options, "confidence", String.valueOf(detectionParams.getConfidenceThreshold())));
@@ -315,6 +403,10 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
 
         double maskThreshold = Double.parseDouble(Macro.getValue(options, "mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold())));
         detectionParams.setMaskScoreThreshold(maskThreshold);
+
+        int maxSideLength = Integer.parseInt(Macro.getValue(options, "max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect())));
+        if (maxSideLength <= 0) maxSideLength = detectionParams.getMaxSideLengthDetect();
+        detectionParams.setMaxSideLengthDetect(maxSideLength);
 
         // outputs
         outputOptions = new DetectionUtils.OutputOptions();
@@ -326,24 +418,22 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false"));
         outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"));
 
+        // check if negative prompt
+        negativeGroup = Integer.parseInt(Macro.getValue(options, "negative_group_id", "-1"));
+        onlyPositiveGroups = negativeGroup == -1;
+        if (!uniqueGroups.contains(negativeGroup)) {
+            IJ.log("Warning: negative group id is not in list of selected roi.");
+            onlyPositiveGroups = true;
+        }
     }
 
     private void recordInMacro() {
-        Recorder.setCommand("SAM3 PCS with Text Prompts");
+        Recorder.setCommand("SAM3 PCS with Visual Prompts");
         Recorder.recordOption("model_path", modelPath);
-
-        String joinedPrompts = textPrompts.stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.joining(","));
-        Recorder.recordOption("text_prompts", joinedPrompts);
-        String roiGroupIds = textPrompts.stream()
-                .map(classIdMap::get)
-                .map(String::valueOf)
-                .collect(Collectors.joining(","));
-        Recorder.recordOption("roi_ids", roiGroupIds);
 
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
+        Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
 
         if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes", String.valueOf(true));
         if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois", String.valueOf(true));
@@ -351,33 +441,39 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
         if (outputOptions.createSemanticMask) Recorder.recordOption("create_semantic_mask", String.valueOf(true));
         if (outputOptions.createInstanceMaskPerClass) Recorder.recordOption("create_instance_mask_per_class", String.valueOf(true));
+
+        if (!onlyPositiveGroups){
+            Recorder.recordOption("negative_group_id", String.valueOf(negativeGroup));
+        }
     }
 
     private void askUser() {
-        GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation with text prompts");
+        GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation with visuals prompts");
 
         // instructions to download model
         ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
+            addDownloadInstruction();
         };
         gd.addMessage("");
         gd.addButton("instructions to download SAM3 model", modelInstructionAction);
         gd.addMessage("");
 
         // ask for model folder
-        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
+        addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
 
-        // ask for text prompt
+        // prompts
         gd.addMessage("__________");
-        Sam3Dialogs.addMultiTextPromptDialog(gd);
+        addBoxGroupInstructions(gd, roiNumber, groupNumber);
+        //if multiple ROI groups, ask if one of them corresponds to negative prompts
+        addNegativeGroupDialog(gd, groupNumber, negativeGroupSelection);
 
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
 
         // ask for SAM outputs
-        Sam3Dialogs.addOutputDialogImage(gd);
+        addOutputDialogImage(gd);
 
         // Show dialog
         gd.showDialog();
@@ -386,10 +482,13 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         }
 
         // retrieve choices
-        modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
-        classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        Sam3Dialogs.getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
-        outputOptions = Sam3Dialogs.getOutputAnswerImage(gd);
+        modelPath = getModelPath(gd, PREF_LAST_MODEL_KEY);
+        negativeGroup = getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
+        getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        outputOptions = getOutputAnswerImage(gd);
+
+        negativeGroup = negativeGroup == 0 ? MAX_GROUP_VALUE : negativeGroup;
+        onlyPositiveGroups = negativeGroup == -1;
     }
 
     private void printParameters(){
@@ -399,11 +498,11 @@ public class Sam3TextDetectionM_Plugin implements PlugIn {
         IJ.log("confidence threshold: " + detectionParams.getConfidenceThreshold());
         IJ.log("mask score threshold: " + detectionParams.getMaskScoreThreshold());
 
-        String joinedPrompts = textPrompts.stream()
-                .map(String::toUpperCase)
-                .collect(Collectors.joining(", "));
-
-        IJ.log("text prompts: " + joinedPrompts);
+        int total_prompts = positiveRois.values().stream()
+                .mapToInt(List::size)
+                .sum();
+        IJ.log("number of positive prompt(s): " + total_prompts + " - number of group(s): "+ positiveRois.size());
+        IJ.log("number of negative prompt(s): " + negativeRois.size());
 
         IJ.log("----------------------");
     }

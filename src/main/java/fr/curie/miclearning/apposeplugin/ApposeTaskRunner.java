@@ -83,21 +83,21 @@ public class ApposeTaskRunner implements AutoCloseable {
                         System.out.println("Python task crashed : " + task.error);
                         IJ.log("Python task crashed: " + task.error);
                         IJ.error("Python task crashed", String.valueOf(task.error));
-                        resultsQueue.offer(VideoDetectionConsumer.END_SIGNAL);
+                        resultsQueue.offer(endSignal);
                         break;
                     case FAILURE:
                         System.out.println("Python task failed with error: " + task.error);
                         IJ.log("Python task failed: " + task.error);
                         IJ.error("Python task failed", String.valueOf(task.error));
-                        resultsQueue.offer(VideoDetectionConsumer.END_SIGNAL);
+                        resultsQueue.offer(endSignal);
                         break;
                     case COMPLETION:
                         System.out.println("Python task completed successfully");
-                        resultsQueue.offer(VideoDetectionConsumer.END_SIGNAL);
+                        resultsQueue.offer(endSignal);
                         break;
                     case CANCELATION:
                         System.out.println("Python task canceled");
-                        resultsQueue.offer(VideoDetectionConsumer.END_SIGNAL);
+                        resultsQueue.offer(endSignal);
                         break;
                     default:
                         break;

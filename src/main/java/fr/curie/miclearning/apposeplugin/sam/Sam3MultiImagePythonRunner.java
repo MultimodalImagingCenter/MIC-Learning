@@ -1,5 +1,7 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
+import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
+import fr.curie.miclearning.apposeplugin.MultiImageDetectionConsumer;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.ImagePlus;
 import net.imglib2.appose.NDArrays;

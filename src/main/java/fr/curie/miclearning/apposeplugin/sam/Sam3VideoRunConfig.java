@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 
@@ -61,7 +61,7 @@ public final class Sam3VideoRunConfig {
     public boolean isNegativePromptUsed() { return negativePromptUsed; }
     public int getPromptFrame() { return promptFrame; }
     public int getEndFrame() { return endFrame; }
-    public int getFrameCount() { return endFrame - promptFrame + 1; }
+    public int getFrameCount() { return endFrame - firstFrame + 1; }
     public boolean isBidirectional() {return bidirectional; }
     public int getFirstFrame() {return firstFrame; }
     public Sam3ModelParameters getDetectionParams() { return detectionParams; }
@@ -76,10 +76,10 @@ public final class Sam3VideoRunConfig {
         private List<double[]> negativeRois = new ArrayList<>();
         private boolean visualPositivePromptUsed;
         private boolean negativePromptUsed;
+        private int firstFrame;
         private int promptFrame;
         private int endFrame;
         private boolean bidirectional;
-        private int firstFrame;
         private Sam3ModelParameters detectionParams;
         private DetectionUtils.OutputOptions outputOptions;
         private Map<String, Integer> classIdMap = new HashMap<>();

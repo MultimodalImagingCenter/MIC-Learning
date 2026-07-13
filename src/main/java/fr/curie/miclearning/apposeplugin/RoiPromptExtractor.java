@@ -86,7 +86,7 @@ public class RoiPromptExtractor {
      *
      * @param roisAtFrame      the ROIs to split
      * @param positiveGroupIds groups to treat as positive prompts (empty if unused)
-     * @param negativeGroupId  group to treat as negative prompt, or {@code null} if unused
+     * @param negativeGroupId  group to treat as negative prompt ( {@code null} if unused)
      */
     public PromptRois buildPromptRois(List<Roi> roisAtFrame, List<Integer> positiveGroupIds,
                                       Integer negativeGroupId) {

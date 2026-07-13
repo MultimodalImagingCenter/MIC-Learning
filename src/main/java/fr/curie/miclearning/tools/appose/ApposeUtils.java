@@ -16,6 +16,7 @@ import net.imglib2.type.numeric.integer.UnsignedByteType;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 
@@ -80,7 +81,7 @@ public class ApposeUtils {
 
         // TODO : ajouter possibilité image initiale RGBStack ou grayscale
 
-        if (lastFrame<=0) lastFrame = Math.max(imp.getNSlices(), imp.getNFrames() -1);
+        if (lastFrame<0) lastFrame = Math.max(imp.getNSlices(), imp.getNFrames())-1;
         int w = imp.getWidth();
         int h = imp.getHeight();
         int channels = 3;

@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin;
+package fr.curie.miclearning.apposeplugin.sam;
 
 import ai.djl.modality.cv.output.BoundingBox;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
@@ -25,7 +25,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.List;
 
-import static fr.curie.miclearning.apposeplugin.Sam3Dialogs.*;
+import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseClassIdMap;
