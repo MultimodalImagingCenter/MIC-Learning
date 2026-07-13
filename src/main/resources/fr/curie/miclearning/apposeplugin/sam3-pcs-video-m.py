@@ -147,7 +147,7 @@ log_to_java("running prediction...")
 # Process video frames
 detect_every_n_frames = 2**31 if (detect_every_n_frames is None or detect_every_n_frames <= 0) else detect_every_n_frames
 remove_after_n_missed_frames = 2**31 if (remove_after_n_missed_frames is None or remove_after_n_missed_frames <= 0) else remove_after_n_missed_frames
-for frame_idx in range(initial_frame_index, max_frame_number):
+for frame_idx in range(initial_frame_index, nFrameToProcess):
     frame = images_bgr[frame_idx]
     #log_to_java(f"   Frame: {frame_idx + 1}")
 
@@ -300,7 +300,7 @@ for frame_idx in range(initial_frame_index, max_frame_number):
         task.update(
             message=f"    frame {frame_idx + frame_offset +1} - number of object detected/tracked: {n_obj}",
             current=frame_idx+1,
-            maximum=max_frame_number,
+            maximum=nFrameToProcess,
             info={
                 "frame_idx": frame_idx+frame_offset,
                 "n_results": n_obj,
@@ -319,7 +319,7 @@ for frame_idx in range(initial_frame_index, max_frame_number):
         task.update(
             message=f"   frame {frame_idx+frame_offset+1} - no object detected/tracked",
             current=frame_idx+1,
-            maximum=max_frame_number,
+            maximum=nFrameToProcess,
             info={
                 "frame_idx": frame_idx+frame_offset,
                 "n_results": 0

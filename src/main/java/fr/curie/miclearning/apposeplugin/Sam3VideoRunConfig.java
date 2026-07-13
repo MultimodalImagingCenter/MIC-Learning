@@ -13,7 +13,7 @@ import java.util.Objects;
  * Immutable description of a single SAM3 promptable-concept-segmentation run.
  * Built once (via {@link Builder}) after the user dialog (or macro parsing) completes,
  */
-public final class Sam3RunConfig {
+public final class Sam3VideoRunConfig {
 
     private final String modelPath;
 
@@ -34,7 +34,7 @@ public final class Sam3RunConfig {
     private final DetectionUtils.OutputOptions outputOptions;
     private final Map<String, Integer> classIdMap;
 
-    private Sam3RunConfig(Builder b) {
+    private Sam3VideoRunConfig(Builder b) {
         this.modelPath = b.modelPath;
         this.textPrompt = b.textPrompt;
         this.textPromptUsed = b.textPromptUsed;
@@ -136,10 +136,10 @@ public final class Sam3RunConfig {
         }
 
         /**
-         * Validates the configuration and builds the {@link Sam3RunConfig}.
+         * Validates the configuration and builds the {@link Sam3VideoRunConfig}.
          * @throws IllegalStateException if the configuration is incomplete or inconsistent
          */
-        public Sam3RunConfig build() {
+        public Sam3VideoRunConfig build() {
             Objects.requireNonNull(modelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
@@ -155,7 +155,7 @@ public final class Sam3RunConfig {
                 throw new IllegalStateException(
                         "startFrame (" + endFrame + ") must be >= firstFrame (" + promptFrame + ")");
             }
-            return new Sam3RunConfig(this);
+            return new Sam3VideoRunConfig(this);
         }
     }
 }

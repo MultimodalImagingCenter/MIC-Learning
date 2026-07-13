@@ -173,9 +173,9 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         detectionParams.setNFrameToProcess(posEndFrame - posStartFrame + 1);
 
         // prepare model and run configuration
-        Sam3RunConfig config;
+        Sam3VideoRunConfig config;
         try {
-            config = new Sam3RunConfig.Builder()
+            config = new Sam3VideoRunConfig.Builder()
                     .modelPath(modelPath)
                     .textPrompt(textPrompt, textPromptUsed)
                     .visualPrompts(promptRois.getPositive(), promptRois.getNegative(),
@@ -202,7 +202,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     }
 
 
-    private void runSam3(Sam3RunConfig config, MultiFrameDataManager mfdManager, long startTime) {
+    private void runSam3(Sam3VideoRunConfig config, MultiFrameDataManager mfdManager, long startTime) {
         // create queue and thread to process results
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
@@ -212,10 +212,10 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         };
         ExecutorService executor = Executors.newSingleThreadExecutor(consumerThreadFactory);
 
-        try (Sam3PythonRunner runner = new Sam3PythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
+        try (Sam3VideoPythonRunner runner = new Sam3VideoPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
-            DetectionResultConsumer consumer = new DetectionResultConsumer(
+            VideoDetectionConsumer consumer = new VideoDetectionConsumer(
                     resultsQueue, mfdManager, config.getClassIdMap(), config.getTextPrompt(), imp);
             Future<Void> consumerResult = executor.submit(consumer);
 
@@ -522,7 +522,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
     }
 
-    private void printParameters(Sam3RunConfig config) {
+    private void printParameters(Sam3VideoRunConfig config) {
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + config.getModelPath());

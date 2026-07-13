@@ -244,7 +244,7 @@
                         <configuration>
                             <target>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="/home/noemie/Applications/Fiji.app/plugins/mic_learning.jar"
+                                      tofile="C:/Users/yepon/Downloads/fiji-stable-win64-jdk/Fiji.app/plugins/mic_learning.jar"
                                 />
                             </target>
                         </configuration>
