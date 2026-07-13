@@ -85,7 +85,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         if (nFrames>0 && stackMode == DetectionMode.SINGLE_IMAGE) {
             current_slice = imp.getCurrentSlice();
-            imp = new ImagePlus("current slice", imp.getProcessor());
+            imp = new ImagePlus(imp.getTitle(), imp.getProcessor());
         }
 
         textPrompts = new ArrayList<>();
@@ -140,6 +140,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
                     inputs.put("model_path", modelPath);
                     inputs.put("confidence_threshold", detectionParams.getConfidenceThreshold());
                     inputs.put("mask_threshold", detectionParams.getMaskScoreThreshold());
+                    inputs.put("max_side_length", detectionParams.getMaxSideLengthDetect());
 
                     // 3.4 Execute script by launching task
                     Service.Task task = python.task(script, inputs);
@@ -390,6 +391,10 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         double maskThreshold = Double.parseDouble(Macro.getValue(options, "mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold())));
         detectionParams.setMaskScoreThreshold(maskThreshold);
 
+        int maxSideLength = Integer.parseInt(Macro.getValue(options, "max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect())));
+        if (maxSideLength <= 0) maxSideLength = detectionParams.getMaxSideLengthDetect();
+        detectionParams.setMaxSideLengthDetect(maxSideLength);
+
         // outputs
         outputOptions = new DetectionUtils.OutputOptions();
         outputOptions.addToRoiManagerBB = Boolean.parseBoolean(Macro.getValue(options, "add_box_rois", "false")) || options.contains("add_box_rois ");
@@ -417,6 +422,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
+        Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
 
         if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes");
         if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois");

@@ -22,6 +22,7 @@ public class Sam3Dialogs {
     public static final int MAX_GROUP_VALUE = 255; // max id for group in ImageJ
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
+    public static final String ALL_ROIS_GROUPS_TXT = "all selected ROIs (except negative group, if any)";
 
     public static DetectionMode askStackMode(int nFrames){
         YesNoCancelDialog gd = new YesNoCancelDialog(IJ.getInstance(),
@@ -170,13 +171,18 @@ public class Sam3Dialogs {
 
     public static void addParameterDialog(GenericDialog gd, Sam3Parameters params, DetectionMode mode) {
         gd.addMessage("Detection Settings");
-        gd.addNumericField("Confidence Threshold:", params.getConfidenceThreshold(), 2);
-        gd.addNumericField("Mask Threshold:", params.getMaskScoreThreshold(), 2);
+        gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
+        gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
+        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(),0);
 
         if (mode == DetectionMode.VIDEO) {
             gd.addMessage("Tracking Settings");
-            gd.addNumericField("Frames Between Detections:", params.getNFrameBtwDetections(), 0);
-            // ajouter ici d'autres paramètres si besoin
+            gd.addNumericField("max number of frame to segment", -1);
+            gd.addMessage("To segment all frames, enter \"-1\"");
+            gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
+            gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2);
+            gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0);
+            gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(),0);
         }
     }
 
@@ -191,15 +197,44 @@ public class Sam3Dialogs {
         double maskThreshold = gd.getNextNumber(); // no check ?
         params.setMaskScoreThreshold(maskThreshold);
 
+        int maxSideLengthDetect = (int) gd.getNextNumber();
+        if (maxSideLengthDetect <= 0) {
+            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
+            maxSideLengthDetect = params.getMaxSideLengthDetect();
+        }
+        params.setMaxSideLengthDetect(maxSideLengthDetect);
+
         if (mode == DetectionMode.VIDEO) {
+            int maxFrameUser = (int) gd.getNextNumber();
+            if (maxFrameUser < 0) maxFrameUser = params.getNFrame();
+            params.setNFrame(Math.min(maxFrameUser, params.getNFrame()));
+
             int nFramesBtwDetec = (int) gd.getNextNumber();
-            if (nFramesBtwDetec < 0) {
+            if (nFramesBtwDetec <= 0) {
                 IJ.log("Number of frames between each detection must be >0. using default value: " + params.getNFrameBtwDetections());
                 nFramesBtwDetec = params.getNFrameBtwDetections();
             }
             params.setNFrameBtwDetections(nFramesBtwDetec);
 
-            // récupérer d'autres paramètres si besoin
+            double trackThreshold = gd.getNextNumber();
+            if (trackThreshold < 0) {
+                IJ.log("Tracking score threshold must be >0. using default value: " + params.getTrackingScoreThreshold());
+                trackThreshold = params.getTrackingScoreThreshold();
+            }
+            params.setTrackingScoreThreshold(trackThreshold);
+
+            int removeAfterNMissed = (int) gd.getNextNumber();
+            if (removeAfterNMissed <= 0) {
+                IJ.log("Detected objects will never be removed from memory.");
+            }
+            params.setRemoveAfterNMissed(removeAfterNMissed);
+
+            int maxSideLengthTrack = (int) gd.getNextNumber();
+            if (maxSideLengthTrack <= 0) {
+                IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthTrack());
+                maxSideLengthTrack = params.getMaxSideLengthTrack();
+            }
+            params.setMaxSideLengthTrack(maxSideLengthTrack);
         }
     }
 
@@ -352,8 +387,8 @@ public class Sam3Dialogs {
         if (roiIDArray.length == 0) {
             Arrays.fill(roiIds, 0);
         } else if (!((nPrompts == roiIDArray.length) || roiIDArray.length == 1)) {
-            IJ.log("Invalid number of ROI IDs ("+ roiIDArray.length +" ROI-ID and "+ nPrompts +" prompts). Closing plug-in.\n");
-            IJ.error("Please provide either 1 Roi ID or as many as prompts.");
+            IJ.log("Invalid number of ROI ID(s) ("+ roiIDArray.length +" ROI ID(s) and "+ nPrompts +" prompt(s)). Closing plug-in.\n");
+            IJ.error("Please provide either 1 ROI group id or as many as prompt(s).");
             return null;
         }
 
@@ -361,10 +396,10 @@ public class Sam3Dialogs {
             // 1 ROI-ID given : the following ROI groups are numbered sequentially
             int initialId = NumberUtils.toInt(roiIDArray[0], 0);
             if (initialId < 0 || initialId >255) {
-                IJ.log("ROI group Id must be a value between 0 (no group) and 255. Group 0 (no group) will be used for all prompts.");
+                IJ.log("ROI group ID must be a value between 0 (no group) and 255. Group 0 (no group) will be used for all prompts.");
                 Arrays.fill(roiIds, 0);
             } else if (initialId == 0){
-                IJ.log("Initial id 0 given. Group 0 (no group) will be used for all prompts.");
+                IJ.log("Initial group ID 0 given. Group 0 (no group) will be used for all prompts.");
                 Arrays.fill(roiIds, 0);
             } else {
                 for (int i = 0; i < nPrompts; i++) {
@@ -377,8 +412,8 @@ public class Sam3Dialogs {
             for (int i = 0; i < nPrompts; i++) {
                 int id = NumberUtils.toInt(roiIDArray[i], 0);
                 if (id < 0 || id >255) {
-                    IJ.log("ROI group Id must be a value between 0 (no group) and 255. " +
-                            "Invalid Roi ID: " + id + " "+
+                    IJ.log("ROI group ID must be a value between 0 (no group) and 255. " +
+                            "Invalid ROI group ID: " + id + " "+
                             "Group 0 (no group) will be used.");
                     id = 0;
                 }
@@ -444,7 +479,7 @@ public class Sam3Dialogs {
     }
 
     public static void addBoxGroupInstructions(GenericDialog gd ,int roiNumber, int groupNumber){
-        gd.addMessage("Only rectangle ROIs, selected in the ROI manager, will be processed.");
+        gd.addMessage("Only rectangle and point ROIs, selected in the ROI manager, will be processed.");
         gd.addMessage("   number of selected ROI(s): " + roiNumber);
         gd.addMessage("   number of group(s): " + groupNumber);
         gd.addMessage("Assign the same group ID to ROIs that belong to the same semantic category. \n" +

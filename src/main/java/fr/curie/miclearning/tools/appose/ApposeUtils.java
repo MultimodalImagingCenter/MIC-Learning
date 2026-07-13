@@ -48,51 +48,51 @@ public class ApposeUtils {
 
         try (InputStream is = ApposeUtils.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
-                IJ.log("ERROR : Unable to find python script");
+                IJ.log("ERROR : Unable to find resource");
                 throw new RuntimeException("Unable to find resource : " + resourcePath);
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                 return reader.lines().collect(Collectors.joining("\n"));
             }
         } catch (Exception e) {
-            IJ.log("ERROR : Unable to load python script");
+            IJ.log("ERROR : Unable to load resource");
             throw new RuntimeException("Error while reading file at " + resourcePath + ": ", e);
         }
     }
 
     public boolean isSupported(ImagePlus imp) {
         int type = imp.getType();
-        return type == ImagePlus.GRAY8 ||
-                type == ImagePlus.GRAY16 ||
-                type == ImagePlus.GRAY32 ||
-                type == ImagePlus.COLOR_RGB;
+        return type == ImagePlus.COLOR_RGB;
     }
 
+    public static ShmImg<UnsignedByteType> video2ShmImg(ImagePlus imp){
+        return video2ShmImg(imp, 0, Math.max(imp.getNSlices(), imp.getNFrames()) -1);
+    }
+    public static ShmImg<UnsignedByteType> video2ShmImg(ImagePlus imp, int firstFrame){
+        return video2ShmImg(imp, firstFrame, Math.max(imp.getNSlices(), imp.getNFrames()) -1);
+    }
 
-    public static ShmImg<UnsignedByteType> video2ShmImg(ImagePlus imp) {
-
+    public static ShmImg<UnsignedByteType> video2ShmImg(ImagePlus imp, int firstFrame, int lastFrame) {
+        // last and first frame with index starting to 0
         if (imp.getType() != ImagePlus.COLOR_RGB) {
             throw new IllegalArgumentException("Only RGB images are supported.");
         }
-        // TODO : ajouter gestion slices et frames (choisir lequel des deux va être considéré comme axe temps)
-        // TODO : ajouter possibilité image initiale RGBStack ou grayscale
-        // TODO : only process the actual number of frames that will be segmented (maxFrameNumber)
 
+        // TODO : ajouter possibilité image initiale RGBStack ou grayscale
+
+        if (lastFrame<=0) lastFrame = Math.max(imp.getNSlices(), imp.getNFrames() -1);
         int w = imp.getWidth();
         int h = imp.getHeight();
-        int frames = Math.max(imp.getNSlices(), imp.getNFrames());
         int channels = 3;
 
-        ShmImg<UnsignedByteType> shm = new ShmImg<>(new UnsignedByteType(),channels, w, h, frames);
+        ShmImg<UnsignedByteType> shm = new ShmImg<>(new UnsignedByteType(),channels, w, h, lastFrame - firstFrame +1);
 
         Cursor<UnsignedByteType> cursor = shm.cursor();
 
-        for (int f = 0; f < frames; f++) {
+        for (int f = firstFrame; f <= lastFrame; f++) {
             int[] pixels = (int[]) imp.getStack().getPixels(f + 1);
 
-            for (int i = 0; i < pixels.length; i++) {
-                int pixel = pixels[i];
-
+            for (int pixel : pixels) {
                 // Channel R
                 cursor.fwd();
                 cursor.get().set((pixel >> 16) & 0xFF);

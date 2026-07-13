@@ -927,7 +927,7 @@ public class DetectionUtils {
             maskStack.addSlice(roi.getName(), processor);
         }
 
-        ImagePlus impMask = new ImagePlus("Stack Mask", maskStack);
+        ImagePlus impMask = new ImagePlus(imp.getTitle() + " - stack Mask", maskStack);
         IJ.log("Stack of binary masks created.");
         impMask.setDisplayRange(0, 255);
         setGlasbeyLut(impMask);
@@ -980,7 +980,7 @@ public class DetectionUtils {
     public static ImagePlus createInstanceMaskImp(ImagePlus imp, List<ProcessedDetection> detections) {
         ImageProcessor processor = createInstanceMaskProcessor(detections, imp.getWidth(), imp.getHeight());
 
-        ImagePlus instanceImage = new ImagePlus("Instance Mask", processor);
+        ImagePlus instanceImage = new ImagePlus(imp.getTitle() + " - instance Mask", processor);
         IJ.log("Instance mask created.");
         instanceImage.setDisplayRange(0, 255);
         setGlasbeyLut(instanceImage);
@@ -1011,7 +1011,7 @@ public class DetectionUtils {
             return null;
         }
 
-        ImagePlus finalImp = new ImagePlus("Instance Masks", maskStack);
+        ImagePlus finalImp = new ImagePlus(imp.getTitle() + " - instance mask", maskStack);
         IJ.log("Instance masks stack created.");
         finalImp.setDisplayRange(0, Math.max(255.0, finalImp.getStatistics().max));
         setGlasbeyLut(finalImp);
@@ -1066,7 +1066,7 @@ public class DetectionUtils {
     public static ImagePlus createSemanticMaskImp(ImagePlus imp, List<ProcessedDetection> detections) {
         ImageProcessor processor = createSemanticMaskProcessor(detections, imp.getWidth(), imp.getHeight());
 
-        ImagePlus semanticImage = new ImagePlus("Semantic Mask", processor);
+        ImagePlus semanticImage = new ImagePlus(imp.getTitle() + " - semantic Mask", processor);
         IJ.log("Semantic mask created.");
         semanticImage.setDisplayRange(0, 255);
         setGlasbeyLut(semanticImage);
@@ -1097,7 +1097,7 @@ public class DetectionUtils {
             return null;
         }
 
-        ImagePlus finalImp = new ImagePlus("Semantic Masks", maskStack);
+        ImagePlus finalImp = new ImagePlus(imp.getTitle() + " - semantic Masks", maskStack);
         IJ.log("Semantic masks stack created.");
         finalImp.setDisplayRange(0, Math.max(255.0, finalImp.getStatistics().max));
         setGlasbeyLut(finalImp);
@@ -1213,7 +1213,7 @@ public class DetectionUtils {
             return null;
         }
 
-        ImagePlus classStackImage = new ImagePlus("Instance Mask per Class", classStack);
+        ImagePlus classStackImage = new ImagePlus(imp.getTitle() + " - instance Mask per Class", classStack);
         IJ.log("Instance mask per class stack created");
         classStackImage.setDisplayRange(0, 255);
         setGlasbeyLut(classStackImage); // Apply LUT

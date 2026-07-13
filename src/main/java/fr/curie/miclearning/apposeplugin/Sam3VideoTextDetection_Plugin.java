@@ -24,6 +24,7 @@ import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.Detection3dUtils.*;
 
+@Deprecated
 public class Sam3VideoTextDetection_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames; // number of frames in the video
@@ -253,7 +254,7 @@ public class Sam3VideoTextDetection_Plugin implements PlugIn {
                                 }
 
                                 DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-                                //IJ.log(" --- Prediction received for frame "+ nFrames +"- total number of detection= " + numResults);
+                                //IJ.log(" --- Prediction received for frame "+ frameIdx +"- total number of detection= " + numResults);
 
                                 // --- 6. process detections ---
                                 // 6.1 create Roi from bounding boxes and masks

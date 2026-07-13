@@ -87,7 +87,7 @@ public class Sam3BoxDetectionHg_Plugin implements PlugIn {
                 boxRoiList.add(roi);
                 uniqueGroups.add(roi.getGroup());
             } else {
-                IJ.log("Only box Roi are used as prompts. Roi " + roi.getName() + " will be ignored");
+                //IJ.log("Only box Roi are used as prompts. Roi " + roi.getName() + " will be ignored");
             }
         }
         groupNumber = uniqueGroups.size();
