@@ -31,8 +31,7 @@ public class Sam3VisualPromptSingleImgPythonRunner implements AutoCloseable {
 
     /**
      * Runs the SAM3 geometric-prompt script, blocking until it completes, and returns the
-     * task's raw outputs map (results_number, boxes, masks, scores, group_ids). Use
-     * {@link Sam3VisualPromptResultParser#parse} to turn it into {@code ProcessedDetection}s.
+     * task's raw outputs map (results_number, boxes, masks, scores, group_ids)
      */
     public Map<String, Object> runAndGetOutputs(Sam3VisualPromptSingleImgRunConfig config, ImagePlus imp)
             throws TaskException, InterruptedException, IOException {
@@ -42,7 +41,7 @@ public class Sam3VisualPromptSingleImgPythonRunner implements AutoCloseable {
         }
     }
 
-    /** Builds the Appose input map for one run. Package-visible for unit testing. */
+    /** Builds the Appose input map for one run */
     static Map<String, Object> buildInputs(Sam3VisualPromptSingleImgRunConfig config, ShmImg<?> sharedImg) {
         Sam3ModelParameters params = config.getDetectionParams();
         Map<String, Object> inputs = new HashMap<>();

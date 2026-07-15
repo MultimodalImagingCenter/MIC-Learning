@@ -1,6 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
 import ai.djl.modality.cv.output.BoundingBox;
+import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.DetectedObjects;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
@@ -20,6 +21,7 @@ import org.apposed.appose.*;
 
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
@@ -33,6 +35,10 @@ import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseC
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
+/**
+ * ImageJ plugin: SAM3 promptable-concept-segmentation over a single image, using
+ *  visual prompts (box/point) red from the RoiManager selection.
+ */
 public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
     protected static ImagePlus imp;
 
@@ -85,14 +91,12 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         List<Roi> promptRoiList = new ArrayList<>();
         for (Roi roi : selectedRoiList) {
             // check that Roi is a box or point
-            if (roi.getType() == 0 || roi.getType() == 10) {
+            if (roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT) {
                 if (roi.getGroup() == 0) {
                     roi.setGroup(MAX_GROUP_VALUE);
                 }
                 promptRoiList.add(roi);
                 uniqueGroups.add(roi.getGroup());
-            } else {
-                //IJ.log("Only box and point ROIs are used as prompts. Roi " + roi.getName() + " will be ignored");
             }
         }
         groupNumber = uniqueGroups.size();
@@ -183,204 +187,67 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on 1 image - with visual prompts ---");
         printParameters();
 
-        // --- 3. load script and create env ---
-        // 3.1 load python script
-        String script = getResourceAsString(SCRIPT_PATH);
-        if (script == null) {
-            IJ.log("ERROR : Unable to load python script");
-            IJ.error("Unable to load script");
-            return;
-        }
-
-        IJ.log("Python script loaded");
-
-        // 3.2 create environment
-        // load toml file
-        String envTomlContent = getResourceAsString(ENV_FILE_PATH);
-        if (envTomlContent == null) {
-            IJ.error("Unable to load environment file");
-            return;
-        }
-
-        // build env
+        Sam3VisualPromptSingleImgRunConfig config;
         try {
-            Environment env = Appose.pixi()
-                    .content(envTomlContent)
-                    //.logDebug()
+            config = new Sam3VisualPromptSingleImgRunConfig.Builder()
+                    .modelPath(modelPath)
+                    .detectionParams(detectionParams)
+                    .outputOptions(outputOptions)
+                    .classIdMap(classIdMap)
+                    .idClassMap(idClassMap)
+                    .positiveRois(positiveRois)
+                    .negativeRois(negativeRois)
                     .build();
+        } catch (IllegalStateException e) {
+            IJ.error("Invalid configuration", e.getMessage());
+            return;
+        }
 
-            IJ.log("Python environment built");
+        runSam3(config, startTime);
+    }
+
+    private void runSam3(Sam3VisualPromptSingleImgRunConfig config, long startTime) {
+        try (Sam3VisualPromptSingleImgPythonRunner runner = new Sam3VisualPromptSingleImgPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
+            // --- 3. load script and create env ---
+            // 3.1 load python script
+            // 3.2 create environment
+            runner.initialize();
 
             // --- 4. prediction ---
-            // 4.1 copy image in shared memory
-            try (ShmImg<?> sharedImg = imp2ShmImg(imp)) {
-                //IJ.log("Image copied to shared memory");
+            IJ.log("Executing python script...");
+            Map<String, Object> outputs = runner.runAndGetOutputs(config, imp);
 
-                // 4.2 create python service in env
-                try (Service python = env.python()) {
+            // --- 5. Process results ---
+            List<ProcessedDetection> processedDetections =
+                    Sam3VisualPromptResultParser.parse(outputs, imp, config.getIdClassMap(), config.getClassIdMap());
 
-                    // 4.3 store image and prompt into a map of inputs to the Python script.
-                    final Map<String, Object> inputs = new HashMap<>();
-
-                    inputs.put("image_input", NDArrays.asNDArray(sharedImg));
-                    inputs.put("model_path", modelPath);
-                    inputs.put("confidence_threshold", detectionParams.getConfidenceThreshold());
-                    inputs.put("mask_threshold", detectionParams.getMaskScoreThreshold());
-                    inputs.put("max_side_length", detectionParams.getMaxSideLengthDetect());
-                    inputs.put("positive_rois", positiveRois);
-                    inputs.put("negative_rois", negativeRois);
-
-                    // 4.4 Execute script by launching task
-                    Service.Task task = python.task(script, inputs);
-
-                    // follow task execution
-                    task.listen(event -> {
-                        switch (event.responseType) {
-                            case LAUNCH:
-                                //IJ.log("Task launched");
-                                break;
-                            case UPDATE:
-                                if (event.message != null && !event.message.isEmpty()) {
-                                    IJ.log("   " + event.message);
-                                }
-                                break;
-                            case CRASH:
-                                IJ.error("Python task crashed : ", task.error);
-                                IJ.log("ERROR while running python script");
-                                return;
-                            case FAILURE:
-                                IJ.error("Python task failed with error: ", task.error);
-                                IJ.log("ERROR while running python script");
-                                return;
-                            case COMPLETION:
-                                //System.out.println("Task completed successfully");
-                                break;
-                            case CANCELATION:
-                                System.out.println("Task canceled");
-                                break;
-                            default:
-                                //System.out.println("task response type : " + event.responseType);
-                                break;
-                        }
-                    });
-
-                    // execute task
-                    IJ.log("Executing python script...");
-                    task.waitFor();
-
-                    // --- 5. get results ---
-                    Object resultsObj = task.outputs.get("results_number");
-                    if (resultsObj == null) {
-                        IJ.error("Error", "Python script did not return 'results_number'.");
-                        return;
-                    }
-                    int numResults = ((Number) resultsObj).intValue();
-
-                    if (numResults == 0) {
-                        long endTime = System.nanoTime();
-                        double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-                        IJ.log("No objects were detected.");
-                        IJ.log(" --- SAM3 detection and segmentation complete. Total time= "+ totalTimeInSeconds + " sec ---");
-                        return;
-                    }
-
-                    // 5.2 extract proba, scores and masks as ND array
-                    NDArray output_boxes = (NDArray) task.outputs.get("boxes");
-                    NDArray output_masks = (NDArray) task.outputs.get("masks");
-                    NDArray output_scores = (NDArray) task.outputs.get("scores");
-                    NDArray output_group = (NDArray) task.outputs.get("group_ids");
-
-                    if (output_boxes == null || output_masks == null || output_scores == null || output_group == null) {
-                        IJ.error("Missing output arrays (boxes, masks, scores or ids) from Python.");
-                        return;
-                    }
-
-                    // --- 6. process results --
-                    // 6.1 extract bounding boxes
-                    // Initialize the 2D array [Number of Boxes][4 Coordinates]
-                    double[][] boxesArray = new double[numResults][4];
-                    // extract bounding boxes coordinates
-                    DoubleBuffer buf_boxes = output_boxes.buffer().asDoubleBuffer();
-                    buf_boxes.rewind();
-                    for (int i = 0; i < numResults; i++) {
-                        // This reads 4 doubles at a time and moves the pointer forward
-                        buf_boxes.get(boxesArray[i]);
-                    }
-
-                    // 6.2 Extract masks
-                    long[] shape = output_masks.shape().toLongArray();
-                    int height;
-                    int width;
-                    if (shape.length == 2) {
-                        height = (int) shape[0];
-                        width = (int) shape[1];
-                    } else {
-                        height = (int) shape[1];
-                        width = (int) shape[2];
-                    }
-
-                    byte[][][] masksArray = new byte[numResults][height][width];
-
-                    ByteBuffer buf_masks = output_masks.buffer();
-                    buf_masks.rewind();
-                    for (int i = 0; i < numResults; i++) {
-                        for (int y = 0; y < height; y++) {
-
-                            buf_masks.get(masksArray[i][y]);
-                        }
-                    }
-
-                    // 6.3 Extract probabilities
-                    double[] probaArray = new double[numResults];
-                    DoubleBuffer buf_scores = output_scores.buffer().asDoubleBuffer();
-                    buf_scores.rewind();
-                    buf_scores.get(probaArray);
-
-                    // 6.4 Extract group ids
-                    int[] groupIds = new int[numResults];
-                    IntBuffer buf_ids = output_group.buffer().asIntBuffer();
-                    buf_ids.rewind();
-                    buf_ids.get(groupIds);
-
-                    // 6.5 convert results to DetectedObjects
-                    List<String> classNames = new ArrayList<>();
-                    List<Double> probabilities = new ArrayList<>();
-                    List<BoundingBox> boundingBoxes = new ArrayList<>();
-
-                    for (int i = 0; i < numResults; i++) {
-                        int groupId = groupIds[i];
-                        classNames.add(idClassMap.get(groupId));
-                        double[] coord = boxesArray[i];
-                        MaskByte mask = new MaskByte(coord[0], coord[1], coord[2], coord[3], masksArray[i], true);
-                        boundingBoxes.add(mask);
-                        probabilities.add(probaArray[i]);
-                    }
-
-                    DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-                    IJ.log(" --- Prediction done - total number of detection= " + numResults);
-
-                    // --- 6. process detections ---
-                    List<ProcessedDetection> processedDetections = DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
-                    if (processedDetections.isEmpty()) {
-                        IJ.log(" --- No valid detections were processed.");
-                    }
-
-                    // --- 7. generate Outputs, based on user choices
-                    IJ.log(" --- Generating output... ");
-                    generateOutputs(imp, processedDetections, outputOptions, classIdMap);
-
-                } catch (TaskException | InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+            if (processedDetections.isEmpty()) {
+                IJ.log(" --- No detections were found.");
+            } else {
+                IJ.log(" --- Prediction done - total number of detections= " + processedDetections.size());
             }
 
-        } catch (BuildException e) {
-            throw new RuntimeException(e);
-        }
+            // --- 7. generate Outputs ---
+            IJ.log(" --- Generating output... ");
+            generateOutputs(imp, processedDetections, config.getOutputOptions(), config.getClassIdMap());
 
-        long endTime = System.nanoTime();
-        double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-        IJ.log(" --- SAM3 PCS complete. Total time= "+ totalTimeInSeconds + " sec ---");
+        } catch (IOException | BuildException e) {
+            IJ.error("Unable to prepare Python environment", String.valueOf(e.getMessage()));
+            IJ.log("ERROR while preparing python environment: " + e);
+        } catch (TaskException e) {
+            IJ.error("Python task error", String.valueOf(e.getMessage()));
+            IJ.log("ERROR while running python script: " + e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            IJ.log("Processing was interrupted.");
+        } catch (IllegalStateException e) {
+            IJ.error("Error while processing results", e.getMessage());
+            IJ.log("ERROR parsing python results: " + e);
+        } finally {
+            long endTime = System.nanoTime();
+            double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
+            IJ.log(" --- SAM3 PCS complete. Total time= " + totalTimeInSeconds + " sec ---");
+        }
     }
 
     private void parseMacro() {
