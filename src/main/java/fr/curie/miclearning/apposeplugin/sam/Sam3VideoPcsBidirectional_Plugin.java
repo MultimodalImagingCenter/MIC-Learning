@@ -31,7 +31,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 /**
  * ImageJ plugin: SAM3 promptable-concept-segmentation on video.
  */
-public class Sam3VideoPcs2_Plugin implements PlugIn {
+public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     protected ImagePlus imp;
     int nFrames; // number of frames in the video
     int axis; // 3 : Z axis - 4 : Time axis

@@ -27,7 +27,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * ImageJ plugin: SAM3 promptable-concept-segmentation over an image stack (or single image),
  * with multiple independent text prompts. Detections are independent per frame
  */
-public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
+public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
     protected static ImagePlus imp;
     int nFrames;
 
@@ -92,9 +92,9 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
         printParameters();
 
 
-        Sam3MultiImageRunConfig config;
+        Sam3TextPromptPcsMultiImgRunConfig config;
         try {
-            config = new Sam3MultiImageRunConfig.Builder()
+            config = new Sam3TextPromptPcsMultiImgRunConfig.Builder()
                     .modelPath(modelPath)
                     .textPrompts(textPrompts)
                     .classIdMap(classIdMap)
@@ -111,7 +111,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
     }
 
 
-    private void runSam3(Sam3MultiImageRunConfig config, long startTime) {
+    private void runSam3(Sam3TextPromptPcsMultiImgRunConfig config, long startTime) {
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
             Thread t = new Thread(r, "sam3-multiimage-consumer");
@@ -121,7 +121,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
         ExecutorService executor = Executors.newSingleThreadExecutor(consumerThreadFactory);
 
-        try (Sam3MultiImagePythonRunner runner = new Sam3MultiImagePythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
+        try (Sam3TextPromptPcsMultiImgPythonRunner runner = new Sam3TextPromptPcsMultiImgPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
             MultiImageDetectionConsumer consumer = new MultiImageDetectionConsumer(
@@ -166,7 +166,7 @@ public class Sam3TextDetectionMultiImage_Plugin implements PlugIn {
 
     }
 
-    private void generateOutputs(Sam3MultiImageRunConfig config) {
+    private void generateOutputs(Sam3TextPromptPcsMultiImgRunConfig config) {
         DetectionUtils.OutputOptions options = config.getOutputOptions();
         DetectionMode mode = config.getStackMode();
 

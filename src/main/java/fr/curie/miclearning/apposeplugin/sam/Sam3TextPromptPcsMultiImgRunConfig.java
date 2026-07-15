@@ -14,7 +14,7 @@ import java.util.Objects;
  * image stack with multiple independent text prompts (no ROI-based visual prompts, no
  * cross-frame tracking - each frame's detections are independent).
  */
-public final class Sam3MultiImageRunConfig {
+public final class Sam3TextPromptPcsMultiImgRunConfig {
 
     private final String modelPath;
     private final List<String> textPrompts;
@@ -23,7 +23,7 @@ public final class Sam3MultiImageRunConfig {
     private final DetectionUtils.OutputOptions outputOptions;
     private final DetectionUtils.DetectionMode stackMode;
 
-    private Sam3MultiImageRunConfig(Builder b) {
+    private Sam3TextPromptPcsMultiImgRunConfig(Builder b) {
         this.modelPath = b.modelPath;
         this.textPrompts = Collections.unmodifiableList(new ArrayList<>(b.textPrompts));
         this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
@@ -77,7 +77,7 @@ public final class Sam3MultiImageRunConfig {
             return this;
         }
 
-        public Sam3MultiImageRunConfig build() {
+        public Sam3TextPromptPcsMultiImgRunConfig build() {
             Objects.requireNonNull(modelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
@@ -85,7 +85,7 @@ public final class Sam3MultiImageRunConfig {
             if (textPrompts.isEmpty() || classIdMap.isEmpty()) {
                 throw new IllegalStateException("At least one text prompt with a class id must be provided.");
             }
-            return new Sam3MultiImageRunConfig(this);
+            return new Sam3TextPromptPcsMultiImgRunConfig(this);
         }
     }
 }

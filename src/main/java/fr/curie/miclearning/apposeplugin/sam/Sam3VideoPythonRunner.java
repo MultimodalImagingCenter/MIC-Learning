@@ -35,7 +35,7 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
      * Runs the SAM3 video script, blocking until it reaches a terminal state.
      */
     public void runBlocking(Sam3VideoRunConfig config, ImagePlus imp, BlockingQueue<Map<String, Object>> resultsQueue)
-            throws TaskException, InterruptedException {
+            throws TaskException, InterruptedException, IOException {
         try (ShmImg<?> sharedVideo = ApposeUtils.video2ShmImg(imp, config.getFirstFrame(), config.getEndFrame())) {
             Map<String, Object> inputs = buildInputs(config, sharedVideo);
             taskRunner.runBlocking(inputs, VideoDetectionConsumer.END_SIGNAL, resultsQueue);
