@@ -1,13 +1,10 @@
-package fr.curie.miclearning.apposeplugin; // TODO: adjust to match your actual package
+package fr.curie.miclearning.apposeplugin;
 
 import ij.gui.Roi;
 
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 
 /**
  * ROI-scanning : finding the earliest usable frame, collecting ROI groups,
@@ -17,8 +14,16 @@ public class RoiPromptExtractor {
 
     /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
     // TODO : extract a rectangle from any ROI type
-    private static boolean isUsableRoiType(Roi roi) {
+    public static boolean isUsableRoiType(Roi roi) {
         return roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT;
+    }
+
+    /**
+     * ROI group {@code 0} means "no group" in ImageJ and can't be used as a real prompt
+     * group id. Returns {@code replacementForZero} in that case, {@code groupId} otherwise.
+     */
+    public static int normalizeGroupZero(int groupId, int replacementForZero) {
+        return groupId == 0 ? replacementForZero : groupId;
     }
 
     /**
@@ -32,7 +37,7 @@ public class RoiPromptExtractor {
      */
     public RoiSelectionResult extract(Roi[] selectedRois, int axis, int totalFrames) {
         if (selectedRois == null || selectedRois.length == 0) {
-            return RoiSelectionResult.none(totalFrames);
+            return RoiSelectionResult.none();
         }
 
         int minPosition = totalFrames;
@@ -55,7 +60,7 @@ public class RoiPromptExtractor {
         }
 
         if (uniqueGroups.isEmpty()) {
-            return RoiSelectionResult.none(totalFrames);
+            return RoiSelectionResult.none();
         }
 
         int firstUnusedGroupId = findFirstUnusedGroupId(uniqueGroups);
@@ -83,6 +88,8 @@ public class RoiPromptExtractor {
     /**
      * Splits ROIs at a single frame into positive/negative prompt coordinate lists.
      * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs one {@code [x, y]} per contained point.
+     * <p>
+     * Note: unlike {@link #buildGroupedPromptRois}, this does NOT normalize group {@code 0}
      *
      * @param roisAtFrame      the ROIs to split
      * @param positiveGroupIds groups to treat as positive prompts (empty if unused)
@@ -118,6 +125,42 @@ public class RoiPromptExtractor {
         return new PromptRois(positive, negative);
     }
 
+    /**
+     * Splits ROIs into positive prompt coordinates grouped by each ROI's own group id
+     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs one {@code [x, y]} per contained point.
+     * Group {@code 0} is normalized to {@code groupZeroReplacement} 
+     *
+     * @param rois               the ROIs to split (non-usable types are ignored)
+     * @param negativeGroupId    group to treat as negative prompt ({@code null} if unused)
+     * @param groupZeroReplacement replacement group id to use in place of group 0
+     */
+    public GroupedPromptRois buildGroupedPromptRois(List<Roi> rois, Integer negativeGroupId,
+                                                     int groupZeroReplacement) {
+        Map<Integer, List<double[]>> positiveByGroup = new HashMap<>();
+        List<double[]> negative = new ArrayList<>();
+
+        for (Roi roi : rois) {
+            if (!isUsableRoiType(roi)) continue;
+            int effectiveGroupId = normalizeGroupZero(roi.getGroup(), groupZeroReplacement);
+            boolean isNegativeGroup = negativeGroupId != null && effectiveGroupId == negativeGroupId;
+
+            if (roi.getType() == Roi.RECTANGLE) {
+                Rectangle rect = roi.getBounds();
+                double[] coord = {rect.x, rect.y, rect.width, rect.height};
+                if (isNegativeGroup) negative.add(coord);
+                else positiveByGroup.computeIfAbsent(effectiveGroupId, k -> new ArrayList<>()).add(coord);
+            } else if (roi.getType() == Roi.POINT) {
+                for (Point point : roi.getContainedPoints()) {
+                    double[] coord = {point.getX(), point.getY()};
+                    if (isNegativeGroup) negative.add(coord);
+                    else positiveByGroup.computeIfAbsent(effectiveGroupId, k -> new ArrayList<>()).add(coord);
+                }
+            }
+        }
+
+        return new GroupedPromptRois(positiveByGroup, negative);
+    }
+
     /** label for a group, e.g. "3 (nucleus)" or "3" if the group has no name. */
     public static String formatGroupLabel(int groupId) {
         String name = Roi.getGroupName(groupId);
@@ -139,7 +182,7 @@ public class RoiPromptExtractor {
             this.firstUnusedGroupId = firstUnusedGroupId;
         }
 
-        private static RoiSelectionResult none(int totalFrames) {
+        private static RoiSelectionResult none() {
             return new RoiSelectionResult(1, Collections.emptyList(), new TreeSet<>(), 1);
         }
 
@@ -162,6 +205,24 @@ public class RoiPromptExtractor {
         }
 
         public List<double[]> getPositive() { return positive; }
+        public List<double[]> getNegative() { return negative; }
+    }
+
+    /** Positive ROI coordinates grouped by group id, plus a negative list. */
+    public static final class GroupedPromptRois {
+        private final Map<Integer, List<double[]>> positiveByGroup;
+        private final List<double[]> negative;
+
+        private GroupedPromptRois(Map<Integer, List<double[]>> positiveByGroup, List<double[]> negative) {
+            Map<Integer, List<double[]>> positiveByGroupCopy = new HashMap<>();
+            for (Map.Entry<Integer, List<double[]>> entry : positiveByGroup.entrySet()) {
+                positiveByGroupCopy.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));
+            }
+            this.positiveByGroup = Collections.unmodifiableMap(positiveByGroupCopy);
+            this.negative = Collections.unmodifiableList(negative);
+        }
+
+        public Map<Integer, List<double[]>> getPositiveByGroup() { return positiveByGroup; }
         public List<double[]> getNegative() { return negative; }
     }
 }

@@ -58,6 +58,8 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
     private Map<Integer, List<double[]>> positiveRois; // list of Roi to be used as positive prompts, grouped by group ID
     private List<double[]> negativeRois; // list of Roi to be used as negative prompts
 
+    private final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
+
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml"; // inside the resources folder
     private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-geomprompt-m.py"; // inside the resources folder
@@ -91,12 +93,10 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         List<Roi> promptRoiList = new ArrayList<>();
         for (Roi roi : selectedRoiList) {
             // check that Roi is a box or point
-            if (roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT) {
-                if (roi.getGroup() == 0) {
-                    roi.setGroup(MAX_GROUP_VALUE);
-                }
+            if (RoiPromptExtractor.isUsableRoiType(roi)) {
+                int effectiveGroupId = RoiPromptExtractor.normalizeGroupZero(roi.getGroup(), MAX_GROUP_VALUE);
                 promptRoiList.add(roi);
-                uniqueGroups.add(roi.getGroup());
+                uniqueGroups.add(effectiveGroupId);
             }
         }
         groupNumber = uniqueGroups.size();
@@ -146,37 +146,10 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         long startTime = System.nanoTime();
 
         // 2.2 Prepare input - Sort positive and negative ROIs
-        positiveRois = new HashMap<>(); // positive_rois structure: { '1': [[x,y,w,h], [x,y], ...], '2': [[x,y,w,h], [x,y], ...] } (absolute values)
-        negativeRois = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
-
-        for (Roi roi : promptRoiList) {
-            int groupId = roi.getGroup() == 0 ? MAX_GROUP_VALUE : roi.getGroup();
-            double[] coord = null;
-            if (roi.getType() == Roi.RECTANGLE) { // if roi is box
-                Rectangle rect = roi.getBounds();
-                coord = new double[]{rect.x, rect.y, rect.width, rect.height};
-
-                if (!onlyPositiveGroups && groupId == negativeGroup) {
-                    negativeRois.add(coord);
-                } else {
-                    positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
-                }
-            } else if (roi.getType() == Roi.POINT) { // if point (or list of points)
-                roi.getContainedPoints();
-                Point[] points = roi.getContainedPoints();  // get list of points in Roi
-                // add every point of the group to the input
-                for (Point point : points){
-                    coord = new double[]{point.getX(), point.getY()};
-                    if (!onlyPositiveGroups && groupId == negativeGroup) {
-                        negativeRois.add(coord);
-                    } else {
-                        positiveRois.computeIfAbsent(groupId, k -> new ArrayList<>()).add(coord);
-                    }
-                }
-            } else {
-                IJ.log("error with ROI type : " + roi);
-            }
-        }
+        RoiPromptExtractor.GroupedPromptRois groupedPromptRois = roiPromptExtractor.buildGroupedPromptRois(
+                promptRoiList, onlyPositiveGroups ? null : negativeGroup, MAX_GROUP_VALUE);
+        positiveRois = groupedPromptRois.getPositiveByGroup(); // positive_rois structure: { '1': [[x,y,w,h], [x,y], ...], '2': [[x,y,w,h], [x,y], ...] } (absolute values)
+        negativeRois = groupedPromptRois.getNegative(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
 
         if (positiveRois.isEmpty()) {
             IJ.error("No positive ROIs found to process.");

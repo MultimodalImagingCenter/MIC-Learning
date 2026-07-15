@@ -44,7 +44,7 @@ public class Sam3TextPromptPcsMultiImgPythonRunner implements AutoCloseable {
         }
     }
 
-    /** Builds the Appose input map for one run. Package-visible for unit testing. */
+    /** Builds the Appose input map for one run */
     static Map<String, Object> buildInputs(Sam3TextPromptPcsMultiImgRunConfig config, ShmImg<?> sharedImg) {
         Sam3ModelParameters params = config.getDetectionParams();
         Map<String, Object> inputs = new HashMap<>();
