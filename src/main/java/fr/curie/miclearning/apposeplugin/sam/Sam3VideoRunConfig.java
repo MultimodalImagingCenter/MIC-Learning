@@ -15,7 +15,8 @@ import java.util.Objects;
  */
 public final class Sam3VideoRunConfig {
 
-    private final String modelPath;
+    private final String detectionModelPath;
+    private final String trackingModelPath;
 
     private final String textPrompt;
     private final boolean textPromptUsed;
@@ -35,7 +36,8 @@ public final class Sam3VideoRunConfig {
     private final Map<String, Integer> classIdMap;
 
     private Sam3VideoRunConfig(Builder b) {
-        this.modelPath = b.modelPath;
+        this.detectionModelPath = b.detectionModelPath;
+        this.trackingModelPath = b.trackingModelPath;
         this.textPrompt = b.textPrompt;
         this.textPromptUsed = b.textPromptUsed;
         this.positiveRois = Collections.unmodifiableList(new ArrayList<>(b.positiveRois));
@@ -52,7 +54,8 @@ public final class Sam3VideoRunConfig {
 
     }
 
-    public String getModelPath() { return modelPath; }
+    public String getDetectionModelPath() { return detectionModelPath; }
+    public String getTrackingModelPath() { return trackingModelPath; }
     public String getTextPrompt() { return textPrompt; }
     public boolean isTextPromptUsed() { return textPromptUsed; }
     public List<double[]> getPositiveRois() { return positiveRois; }
@@ -69,7 +72,8 @@ public final class Sam3VideoRunConfig {
     public Map<String, Integer> getClassIdMap() { return classIdMap; }
 
     public static final class Builder {
-        private String modelPath;
+        private String detectionModelPath;
+        private String trackingModelPath;
         private String textPrompt = "visual";
         private boolean textPromptUsed;
         private List<double[]> positiveRois = new ArrayList<>();
@@ -85,7 +89,14 @@ public final class Sam3VideoRunConfig {
         private Map<String, Integer> classIdMap = new HashMap<>();
 
         public Builder modelPath(String modelPath) {
-            this.modelPath = modelPath;
+            this.detectionModelPath = modelPath;
+            this.trackingModelPath = modelPath;
+            return this;
+        }
+
+        public Builder modelPath(String detectionModelPath, String trackingModelPath) {
+            this.detectionModelPath = detectionModelPath;
+            this.trackingModelPath = (trackingModelPath == null || trackingModelPath.trim().isEmpty() || trackingModelPath.equals(detectionModelPath))? detectionModelPath : trackingModelPath;
             return this;
         }
 
@@ -140,7 +151,7 @@ public final class Sam3VideoRunConfig {
          * @throws IllegalStateException if the configuration is incomplete or inconsistent
          */
         public Sam3VideoRunConfig build() {
-            Objects.requireNonNull(modelPath, "modelPath must be set");
+            Objects.requireNonNull(detectionModelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
             if (!textPromptUsed && !visualPositivePromptUsed) {

@@ -1,6 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
-import fr.curie.miclearning.apposeplugin.MultiImageDetectionConsumer;
+import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
 import fr.curie.miclearning.tools.detection.*;
 import ij.IJ;
 import ij.ImagePlus;
@@ -124,7 +124,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         try (Sam3TextPromptPcsMultiImgPythonRunner runner = new Sam3TextPromptPcsMultiImgPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
-            MultiImageDetectionConsumer consumer = new MultiImageDetectionConsumer(
+            MultiImagePcsResultsConsumer consumer = new MultiImagePcsResultsConsumer(
                     resultsQueue, detectionsByFrame, config.getClassIdMap(), config.getTextPrompts(), imp);
             Future<Void> consumerResult = executor.submit(consumer);
 

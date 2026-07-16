@@ -1,11 +1,8 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
-import ai.djl.modality.cv.output.BoundingBox;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
-import fr.curie.miclearning.tools.detection.DetectedObjects;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
-import fr.curie.miclearning.tools.detection.MaskByte;
 import fr.curie.miclearning.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
@@ -15,22 +12,14 @@ import ij.gui.Roi;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
-import net.imglib2.appose.NDArrays;
-import net.imglib2.appose.ShmImg;
 import org.apposed.appose.*;
 
-import java.awt.*;
 import java.awt.event.ActionListener;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.DoubleBuffer;
-import java.nio.IntBuffer;
 import java.util.*;
 import java.util.List;
 
 import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.*;
-import static fr.curie.miclearning.tools.appose.ApposeUtils.getResourceAsString;
-import static fr.curie.miclearning.tools.appose.ApposeUtils.imp2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseClassIdMap;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
@@ -192,7 +181,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
 
             // --- 5. Process results ---
             List<ProcessedDetection> processedDetections =
-                    Sam3VisualPromptResultParser.parse(outputs, imp, config.getIdClassMap(), config.getClassIdMap());
+                    SingleImagePcsResultParser.parse(outputs, imp, config.getIdClassMap(), config.getClassIdMap());
 
             if (processedDetections.isEmpty()) {
                 IJ.log(" --- No detections were found.");
@@ -313,7 +302,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
 
         // ask for SAM outputs
-        addOutputDialogImage(gd);
+        addOutputDialog(gd, DetectionMode.SINGLE_IMAGE);
 
         // Show dialog
         gd.showDialog();
@@ -325,7 +314,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         modelPath = getModelPath(gd, PREF_LAST_MODEL_KEY);
         negativeGroup = getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
         getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
-        outputOptions = getOutputAnswerImage(gd);
+        outputOptions = getOutputAnswer(gd, DetectionMode.SINGLE_IMAGE);
 
         negativeGroup = negativeGroup == 0 ? MAX_GROUP_VALUE : negativeGroup;
         onlyPositiveGroups = negativeGroup == -1;

@@ -8,7 +8,7 @@ import java.nio.IntBuffer;
 
 /**
  * Helpers for turning Appose {@link NDArray} outputs (boxes/masks/scores/ids) coming back
- * from the SAM3 python scripts into plain Java arrays.
+ * from the SAM3 python scripts into plain Java arrays
  */
 public class DetectionArrayParsing {
     private DetectionArrayParsing() {}

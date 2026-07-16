@@ -21,7 +21,7 @@ public class Sam3ModelParameters {
     private int nFrameBtwDetections = DEFAULT_FRAME_BTW_DETECT;
     private int nFrameInMemory = DEFAULT_FRAME_IN_MEMORY; // number of frames in memory for each object (only the last frames where the object was detected)
     private double trackingScoreThreshold = DEFAULT_TRACK_SCORE_THRESHOLD; // min presence score to keep an object already existing
-    private double existingBoxIouThreshold = DEFAULT_BOX_IOU_THRESHOLD; // iou threshold to consider 2 objects as the same object
+    private double trackingBoxIouThreshold = DEFAULT_BOX_IOU_THRESHOLD; // iou threshold to consider 2 objects as the same object (on 2 consecutive frames)
     private int removeAfterNMissed = DEFAULT_REMOVE_AFTER_MISSING; // if an object is not detected for x frames, it is removed from memory
     private int maxSideLengthDetect = DEFAULT_MAX_SIDE_LENGTH_DETECT;
     private int maxSideLengthTrack = DEFAULT_MAX_SIDE_LENGTH_TRACK;
@@ -36,7 +36,7 @@ public class Sam3ModelParameters {
     public int getNFrameBtwDetections() {return nFrameBtwDetections;}
     public int getNFrameInMemory() {return nFrameInMemory;}
     public double getTrackingScoreThreshold() {return trackingScoreThreshold;}
-    public double getExistingBoxIouThreshold() {return existingBoxIouThreshold;}
+    public double getTrackingBoxIouThreshold() {return trackingBoxIouThreshold;}
     public int getRemoveAfterNMissed() {return removeAfterNMissed;}
     public int getMaxSideLengthDetect() {return maxSideLengthDetect;}
     public int getMaxSideLengthTrack() {return maxSideLengthTrack;}
@@ -47,7 +47,7 @@ public class Sam3ModelParameters {
     public void setNFrameBtwDetections(int nFrameBtwDetections) {this.nFrameBtwDetections = nFrameBtwDetections;}
     public void setNFrameInMemory(int nFrameInMemory) {this.nFrameInMemory = nFrameInMemory;}
     public void setTrackingScoreThreshold(double trackingScoreThreshold) {this.trackingScoreThreshold = trackingScoreThreshold;}
-    public void setExistingBoxIouThreshold(double existingBoxIouThreshold) {this.existingBoxIouThreshold = existingBoxIouThreshold;}
+    public void setTrackingBoxIouThreshold(double trackingBoxIouThreshold) {this.trackingBoxIouThreshold = trackingBoxIouThreshold;}
     public void setRemoveAfterNMissed(int removeAfterNMissed) {this.removeAfterNMissed = removeAfterNMissed;}
     public void setMaxSideLengthDetect(int maxSideLengthDetect) {this.maxSideLengthDetect = maxSideLengthDetect;}
     public void setMaxSideLengthTrack(int maxSideLengthTrack) {this.maxSideLengthTrack = maxSideLengthTrack;}

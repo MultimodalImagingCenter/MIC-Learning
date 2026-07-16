@@ -15,12 +15,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Parses the single-shot outputs map returned by {@link Sam3VisualPromptSingleImgPythonRunner#runAndGetOutputs}
+ * Parses the outputs map returned by {@link Sam3VisualPromptSingleImgPythonRunner#runAndGetOutputs}
  *  into a list of {@link ProcessedDetection}
  */
-public class Sam3VisualPromptResultParser {
+public class SingleImagePcsResultParser {
 
-    private Sam3VisualPromptResultParser() {}
+    private SingleImagePcsResultParser() {}
 
     public static List<ProcessedDetection> parse(Map<String, Object> outputs, ImagePlus imp,
                                                  Map<Integer, String> idClassMap,

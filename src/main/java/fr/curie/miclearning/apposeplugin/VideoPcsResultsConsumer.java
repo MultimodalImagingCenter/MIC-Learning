@@ -26,9 +26,8 @@ import fr.curie.miclearning.tools.detection.ProcessedDetection;
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
-public class VideoDetectionConsumer implements Callable<Void> {
+public class VideoPcsResultsConsumer implements Callable<Void> {
 
-    // signal pushed onto the queue exactly once, on every terminal python task outcome. */
     public static final Map<String, Object> END_SIGNAL = Collections.unmodifiableMap(new HashMap<>());
 
     private final BlockingQueue<Map<String, Object>> resultsQueue;
@@ -37,8 +36,8 @@ public class VideoDetectionConsumer implements Callable<Void> {
     private final String textPrompt;
     private final ImagePlus imp;
 
-    public VideoDetectionConsumer(BlockingQueue<Map<String, Object>> resultsQueue, MultiFrameDataManager mfdManager,
-                                  Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
+    public VideoPcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, MultiFrameDataManager mfdManager,
+                                   Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
         this.resultsQueue = resultsQueue;
         this.mfdManager = mfdManager;
         this.classIdMap = classIdMap;

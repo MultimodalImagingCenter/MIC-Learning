@@ -87,13 +87,13 @@ public class RoiPromptExtractor {
 
     /**
      * Splits ROIs at a single frame into positive/negative prompt coordinate lists.
-     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs one {@code [x, y]} per contained point.
+     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs: one {@code [x, y]} per contained point.
      * <p>
      * Note: unlike {@link #buildGroupedPromptRois}, this does NOT normalize group {@code 0}
      *
      * @param roisAtFrame      the ROIs to split
      * @param positiveGroupIds groups to treat as positive prompts (empty if unused)
-     * @param negativeGroupId  group to treat as negative prompt ( {@code null} if unused)
+     * @param negativeGroupId  group to treat as negative prompt ({@code null} if unused)
      */
     public PromptRois buildPromptRois(List<Roi> roisAtFrame, List<Integer> positiveGroupIds,
                                       Integer negativeGroupId) {
@@ -127,17 +127,17 @@ public class RoiPromptExtractor {
 
     /**
      * Splits ROIs into positive prompt coordinates grouped by each ROI's own group id
-     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs one {@code [x, y]} per contained point.
-     * Group {@code 0} is normalized to {@code groupZeroReplacement} 
+     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs: one {@code [x, y]} per contained point.
+     * Note: Group {@code 0} is normalized to {@code groupZeroReplacement}
      *
-     * @param rois               the ROIs to split (non-usable types are ignored)
+     * @param rois               the ROIs to split
      * @param negativeGroupId    group to treat as negative prompt ({@code null} if unused)
      * @param groupZeroReplacement replacement group id to use in place of group 0
      */
     public GroupedPromptRois buildGroupedPromptRois(List<Roi> rois, Integer negativeGroupId,
                                                      int groupZeroReplacement) {
-        Map<Integer, List<double[]>> positiveByGroup = new HashMap<>();
-        List<double[]> negative = new ArrayList<>();
+        Map<Integer, List<double[]>> positiveByGroup = new HashMap<>(); // positive_rois format: {group_id_2: [[x,y,w,h], [x,y], ...], group_id_2: ... } (absolute values)
+        List<double[]> negative = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
 
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;

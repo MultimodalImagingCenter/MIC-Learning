@@ -1,7 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
-import fr.curie.miclearning.apposeplugin.VideoDetectionConsumer;
+import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.ImagePlus;
 import net.imglib2.appose.NDArrays;
@@ -15,8 +15,8 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
 /**
- * SAM3-video specific wrapper: builds the shared-memory video buffer and the Appose inputs
- * map from a {@link Sam3VideoRunConfig}, then delegates environment/task lifecycle to * {@link ApposeTaskRunner}.
+ * SAM3-video specific wrapper: builds the shared-memory video buffer and the Appose inputs map
+ *  from a {@link Sam3VideoRunConfig}, then delegates environment/task lifecycle to * {@link ApposeTaskRunner}.
  */
 public class Sam3VideoPythonRunner implements AutoCloseable {
 
@@ -38,7 +38,7 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
             throws TaskException, InterruptedException, IOException {
         try (ShmImg<?> sharedVideo = ApposeUtils.video2ShmImg(imp, config.getFirstFrame(), config.getEndFrame())) {
             Map<String, Object> inputs = buildInputs(config, sharedVideo);
-            taskRunner.runBlocking(inputs, VideoDetectionConsumer.END_SIGNAL, resultsQueue);
+            taskRunner.runBlocking(inputs, VideoPcsResultsConsumer.END_SIGNAL, resultsQueue);
         }
     }
 
@@ -48,8 +48,8 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         Map<String, Object> inputs = new HashMap<>();
 
         inputs.put("videoInput", NDArrays.asNDArray(sharedVideo));
-        inputs.put("detectionModelPath", config.getModelPath());
-        inputs.put("trackingModelPath", null); // TODO: wire up once a separate tracking model is supported
+        inputs.put("detectionModelPath", config.getDetectionModelPath());
+        inputs.put("trackingModelPath", config.getTrackingModelPath());
 
         inputs.put("detectionScoreThreshold", params.getConfidenceThreshold());
         inputs.put("trackingScoreThreshold", params.getTrackingScoreThreshold());
@@ -58,17 +58,18 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         inputs.put("removeAfterNMissed", params.getRemoveAfterNMissed());
         inputs.put("maxSideLengthDetect", params.getMaxSideLengthDetect());
         inputs.put("maxSideLengthTrack", params.getMaxSideLengthTrack());
+        inputs.put("trackingBoxIouThreshold", params.getTrackingBoxIouThreshold());
 
         inputs.put("nFrameToProcess", config.getFrameCount()); // = lasFrameIndex - firstFrameIndex +1
         inputs.put("biDirectional", config.isBidirectional());
-        inputs.put("promptFrame", config.getPromptFrame() - config.getFirstFrame()); //index
-        inputs.put("lastFrame", config.getEndFrame() - config.getFirstFrame());
+        inputs.put("promptFrame", config.getPromptFrame() - config.getFirstFrame()); //indexed with first frame as 0
+        inputs.put("lastFrame", config.getEndFrame() - config.getFirstFrame()); //indexed with first frame as 0
 
         inputs.put("textPrompt", config.getTextPrompt());
         inputs.put("positiveRois", config.getPositiveRois());
         inputs.put("negativeRois", config.getNegativeRois());
 
-        inputs.put("frame_offset", config.getFirstFrame()); // informational only, used for logging on the python side
+        inputs.put("frameOffset", config.getFirstFrame()); // informational only, used for logging on the python side
 
         return inputs;
     }

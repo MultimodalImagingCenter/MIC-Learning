@@ -1,7 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
-import fr.curie.miclearning.apposeplugin.MultiImageDetectionConsumer;
+import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.ImagePlus;
 import net.imglib2.appose.NDArrays;
@@ -40,7 +40,7 @@ public class Sam3TextPromptPcsMultiImgPythonRunner implements AutoCloseable {
             throws TaskException, InterruptedException, IOException {
         try (ShmImg<?> sharedImg = ApposeUtils.video2ShmImg(imp)) {
             Map<String, Object> inputs = buildInputs(config, sharedImg);
-            taskRunner.runBlocking(inputs, MultiImageDetectionConsumer.END_SIGNAL, resultsQueue);
+            taskRunner.runBlocking(inputs, MultiImagePcsResultsConsumer.END_SIGNAL, resultsQueue);
         }
     }
 

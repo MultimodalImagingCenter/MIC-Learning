@@ -6,20 +6,20 @@
 ### Changed
 - SAM3 video pcs plugin: 
   - refactor implementation for pcs on video to use `muggled_sam`:
-  - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3VideoRunConfig`, `Sam3VideoPythonRunner`, `VideoDetectionConsumer`) 
+  - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3VideoRunConfig`, `Sam3VideoPythonRunner`, `VideoPcsResultsConsumer`) 
   - result consumption now runs on a managed `ExecutorService` thread instead of a raw `Thread`
 - SAM3 text prompt multi-image pcs plugin (`Sam3TextPromptPcsMultiImg_Plugin`) : reworked along the same pattern as the video plugin (`Sam3TextPromptPcsMultiImgRunConfig`,
-  `Sam3TextPromptPcsMultiImgPythonRunner`, `MultiImageDetectionConsumer`)
+  `Sam3TextPromptPcsMultiImgPythonRunner`, `MultiImagePcsResultsConsumer`)
 - SAM3 geometric-prompt single-image plugin (`Sam3VisualPromptSingleImgPcs_Plugin`): reworked along
   the same pattern (`Sam3VisualPromptSingleImgRunConfig`, `Sam3VisualPromptSingleImgPythonRunner`,
-  `Sam3VisualPromptResultParser`).
+  `SingleImagePcsResultParser`).
 - Appose: extracted `ApposeTaskRunner`, a generic environment/task runner shared by all
     three SAM3 plugins (streaming results via a queue, or single-shot via `task.outputs`)
 - Appose: extracted `DetectionArrayParsing`, shared boxes/masks/scores/ids buffer-parsing
   used by all three plugins' result handling.
 
 ### Deprecated
-- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py` (replaced by `muggled_sam` implementation).
+- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py` (replaced by `muggled_sam` implementation)
 
 ## [1.2.0] - 2026-07-01
 ### Added

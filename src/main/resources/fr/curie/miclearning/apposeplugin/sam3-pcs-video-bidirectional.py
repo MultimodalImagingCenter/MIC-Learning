@@ -30,7 +30,7 @@ def xywh_to_norm_x1y1x2y2(box, img_height, img_width):
 
 def norm_xy(point, img_height, img_width):
     x1, y1 = point
-    return (x1/img_width, y1/img_height)
+    return (x1 / img_width, y1 / img_height)
 
 # --- 1. build sam3 model
 device, dtype = "cpu", torch.float32
@@ -41,7 +41,6 @@ log_to_java(f"loading model, using device: {device}...")
 # model paths received from java
 detection_model_path = detectionModelPath
 tracking_model_path = trackingModelPath
-
 sam_core_detect = make_sam_from_state_dict(detection_model_path)
 detect_model = sam_core_detect.get_detector_context().to(device=device, dtype=dtype)
 # Allow loading of alternate model for tracking
@@ -112,7 +111,7 @@ if len(negative_rois) > 0:
 detect_every_n_frames = detectEveryNFrames  # Set to None to only run once on startup
 detection_score_threshold = detectionScoreThreshold # proba min pour ajouter nouvelle detection
 tracking_score_threshold = trackingScoreThreshold # score de présence min pour garder un objet déjà suivi
-existing_box_iou_threshold = 0.25
+existing_box_iou_threshold = trackingBoxIouThreshold
 remove_after_n_missed_frames = removeAfterNMissed
 mask_threshold = maskThreshold
 # taille max du coté le plus long pour detection et tracking
@@ -151,6 +150,7 @@ bidirectional = biDirectional
 first_frame_index = 0
 prompt_frame_index = promptFrame
 last_frame_index = lastFrame
+frame_offset= frameOffset
 
 #forward
 forward_id_list = range(prompt_frame_index+1, last_frame_index+1)

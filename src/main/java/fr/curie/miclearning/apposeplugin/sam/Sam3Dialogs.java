@@ -37,17 +37,6 @@ public class Sam3Dialogs {
         }
     }
 
-    public static void addModelDirDialogHg(GenericDialog gd, String lastModelPrefKey) {
-        String defaultDir = null;
-        String lastDir = Prefs.get(lastModelPrefKey, defaultDir);
-        if (lastDir != null && Files.isDirectory(Paths.get(lastDir))) {
-            defaultDir = lastDir;
-        } else {
-            defaultDir = getDefaultSam3ModelDirHg();
-        }
-        gd.addDirectoryField("Model_Directory:", defaultDir, 60);
-    }
-
     public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
         String defaultPath = null;
         String lastPath = Prefs.get(lastModelPrefKey, defaultPath);
@@ -72,62 +61,6 @@ public class Sam3Dialogs {
             IJ.error("Selection Error", "The selected path is not valid:\n" + modelPathString);
             return null;
         }
-    }
-
-    public static void addThresholdDialog(GenericDialog gd) {
-        gd.addNumericField("Confidence threshold", 0.5, 2);
-    }
-
-    public static double getThreshold(GenericDialog gd) {
-       double threshold =  gd.getNextNumber();
-       if (threshold < 0 || threshold >1) {
-            IJ.log("Confidence threshold must be a value between 0 and 1. Default value 0.5 will be used.");
-           threshold = 0.5;
-       }
-       return threshold;
-    }
-
-    public static void addTextPromptDialog(GenericDialog gd) {
-        gd.addStringField("Text_prompt", "", 10);
-    }
-
-    public static Map<String, Integer> getTextPrompt(GenericDialog gd) {
-        String prompt = gd.getNextString();
-        if (prompt == null || prompt.trim().isEmpty()) {
-            IJ.log("Prompt empty. Closing plug-in.\n");
-            IJ.error("Please enter a valid prompt.");
-            return null;
-        }
-
-        int roiID = getFirstUnusedRoiID();
-        Map<String, Integer> classIdMap = new LinkedHashMap<>();
-        classIdMap.put(prompt.trim(), roiID);
-
-        return classIdMap;
-    }
-
-    public static void addTextPromptAndGroupDialog(GenericDialog gd) {
-        gd.addStringField("Text_prompt", "", 10);
-        gd.addNumericField("Roi_ID", getFirstUnusedRoiID(), 0);
-    }
-
-    public static Map<String, Integer> getTextPromptAndGroup(GenericDialog gd) {
-        String prompt = gd.getNextString();
-        if (prompt == null || prompt.trim().isEmpty()) {
-            IJ.log("Prompt empty. Closing plug-in.\n");
-            IJ.error("Please enter a valid prompt.");
-            return null;
-        }
-
-        int roiID = (int) gd.getNextNumber();
-        if (roiID < 0 || roiID >255) {
-            IJ.log("ROI group Id must be a value between 0 (no group) and 255. Group 0 (no group) will be used.");
-            roiID = 0;
-        }
-        Map<String, Integer> classIdMap = new LinkedHashMap<>();
-        classIdMap.put(prompt, roiID);
-
-        return classIdMap;
     }
 
     public static void addMultiTextPromptDialog(GenericDialog gd) {
@@ -158,31 +91,22 @@ public class Sam3Dialogs {
         return getClassIdMapFromArrays(promptArray,roiIDArray);
     }
 
-    public static void addMaxFrameDialog(GenericDialog gd) {
-        gd.addNumericField("max number of frame to segment", -1.0);
-        gd.addMessage("To segment all frames, enter \"-1\"");
-    }
-
-    public static int getMaxFrame(GenericDialog gd, int nFrames) {
-        int maxFrameUser = (int) gd.getNextNumber();
-        if (maxFrameUser < 0) maxFrameUser = nFrames;
-        return Math.min(maxFrameUser, nFrames);
-    }
 
     public static void addParameterDialog(GenericDialog gd, Sam3ModelParameters params, DetectionMode mode) {
         gd.addMessage("Detection Settings");
         gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
         gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
-        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(),0);
+        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(),0); // advanced parameter
 
         if (mode == DetectionMode.VIDEO) {
             gd.addMessage("Tracking Settings");
             gd.addNumericField("max number of frame to segment", -1);
             gd.addMessage("To segment all frames, enter \"-1\"");
             gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
-            gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2);
-            gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0);
-            gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(),0);
+            gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2); // advanced parameter
+            gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0); // advanced parameter
+            gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(),0); // advanced parameter
+            gd.addNumericField("Box_iou_threshold",  params.getTrackingBoxIouThreshold(), 2); // advanced parameter
         }
     }
 
@@ -235,6 +159,13 @@ public class Sam3Dialogs {
                 maxSideLengthTrack = params.getMaxSideLengthTrack();
             }
             params.setMaxSideLengthTrack(maxSideLengthTrack);
+
+            double trackingBoxIouThreshold = gd.getNextNumber();
+            if (trackingBoxIouThreshold < 0) {
+                IJ.log("tracking box IoU threshold must be >0. using default value: " + params.getTrackingBoxIouThreshold());
+                trackingBoxIouThreshold = params.getTrackingBoxIouThreshold();
+            }
+            params.setTrackingBoxIouThreshold(trackingBoxIouThreshold);
         }
     }
 
@@ -244,11 +175,10 @@ public class Sam3Dialogs {
         gd.addCheckbox("Add_Shape_ROIs to ROI Manager", true);
         gd.addCheckbox("Create_Instance_Masks (unique value per instance)", false);
 
-        if (mode != DetectionMode.VIDEO) {
+        if (mode == DetectionMode.SINGLE_IMAGE || mode == DetectionMode.MULTI_IMAGE) {
             gd.addCheckbox("Create_Semantic_Masks (unique value per class)", false);
 
             if (mode == DetectionMode.SINGLE_IMAGE) {
-                gd.addCheckbox("Create_Stack_Mask (one slice per instance, unique value per class)", false);
                 gd.addCheckbox("Create_Instance_Mask_per_Class (one slice per class)", false);
             }
         }
@@ -259,57 +189,14 @@ public class Sam3Dialogs {
         options.deletePreviousRoi = false;
         options.addToRoiManagerBB = gd.getNextBoolean();
         options.addToRoiManagerShapes = gd.getNextBoolean();
+        options.createSemanticMask = false;
         options.createInstanceMask = gd.getNextBoolean();
         options.createSemanticMask = mode != DetectionMode.VIDEO && gd.getNextBoolean();
-        options.createStackMask = mode == DetectionMode.SINGLE_IMAGE && gd.getNextBoolean();
         options.createInstanceMaskPerClass = mode == DetectionMode.SINGLE_IMAGE && gd.getNextBoolean();
 
         return options;
     }
 
-    public static void addOutputDialogImage(GenericDialog gd) {
-        gd.addMessage("Select the outputs to generate:");
-        gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", false);
-        gd.addCheckbox("Add_Shape_ROIs to ROI Manager", true);
-        gd.addCheckbox("Create_Stack_Mask (one slice per instance, unique value per class)", false);
-        gd.addCheckbox("Create_Instance_Mask (unique value per instance)", false);
-        gd.addCheckbox("Create_Semantic_Mask (unique value per class)", false);
-        gd.addCheckbox("Create_Instance_Mask_per_Class (one slice per stack)", false);
-    }
-
-    public static DetectionUtils.OutputOptions getOutputAnswerImage(GenericDialog gd) {
-        DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
-        options.addToRoiManagerBB = gd.getNextBoolean();
-        options.addToRoiManagerShapes = gd.getNextBoolean();
-        options.deletePreviousRoi = false;
-        options.createStackMask = gd.getNextBoolean();
-        options.createInstanceMask = gd.getNextBoolean();
-        options.createSemanticMask = gd.getNextBoolean();
-        options.createInstanceMaskPerClass = gd.getNextBoolean();
-
-        return options;
-    }
-
-
-    public static void addOutputDialogVideo(GenericDialog gd) {
-        gd.addMessage("Select the outputs to generate:");
-        gd.addCheckbox("Add_Bounding_Boxes to ROI Manager", false);
-        gd.addCheckbox("Add_Shape_ROIs to ROI Manager", true);
-        gd.addCheckbox("Create_Instance_Masks (unique value per instance)", false);
-    }
-
-    public static DetectionUtils.OutputOptions getOutputAnswerVideo(GenericDialog gd) {
-        DetectionUtils.OutputOptions options = new DetectionUtils.OutputOptions();
-        options.addToRoiManagerBB = gd.getNextBoolean();
-        options.addToRoiManagerShapes = gd.getNextBoolean();
-        options.deletePreviousRoi = false;
-        options.createStackMask = false;
-        options.createInstanceMask = gd.getNextBoolean();
-        options.createSemanticMask = false;
-        options.createInstanceMaskPerClass = false;
-
-        return options;
-    }
 
     public static void addNegativeGroupDialog(GenericDialog gd, int groupNumber, String[] negativeGroupSelection) {
         //if multiple ROI groups, ask if one of them corresponds to negative prompts
@@ -332,29 +219,6 @@ public class Sam3Dialogs {
             }
         }
         return -1; // no negative group
-    }
-
-    private static String getDefaultSam3ModelDirHg() {
-        String imagejRoot = IJ.getDirectory("imagej");
-
-        if (imagejRoot != null) {
-            Path modelPath = Paths.get(imagejRoot, "models", "sam3","model.safetensors");
-            // Check if the file 'sam3/model.safetensors' exist in the 'models' folder
-            if (Files.exists(modelPath)) {
-                return modelPath.getParent().toString();
-            } else {
-                // check in the MiclearningModels folder
-                modelPath = Paths.get(imagejRoot, "models", "MicLearningModels", "sam3","model.safetensors");
-                if (Files.exists(modelPath)) {
-                    return modelPath.getParent().toString();
-                } else {
-                    return IJ.getDirectory("home"); // Fallback to user's home directory
-                }
-            }
-        } else {
-            //IJ.log("Warning: Could not determine ImageJ installation directory. Defaulting to user home.");
-            return IJ.getDirectory("home"); // Fallback to user's home directory
-        }
     }
 
     private static String getDefaultSam3ModelPath() {
@@ -453,18 +317,6 @@ public class Sam3Dialogs {
         return 0; // if no value available, no group
     }
 
-    public static void addDownloadInstructionHg() {
-        GenericDialog gd = new GenericDialog("instructions to download SAM3 model");
-        gd.addMessage("The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
-                "To download them, you need to:\n" +
-                "   1/ Create a Hugging Face account\n" +
-                "   2/ Request access\n" +
-                "     The authorization process usually takes no more than an hour.\n" +
-                "   3/ Once your access request is approved, you can download the \"model.safetensors\" file.\n" +
-                "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and place the model file in it.");
-        gd.hideCancelButton();
-        gd.showDialog();
-    }
     public static void addDownloadInstruction() {
         GenericDialog gd = new GenericDialog("instructions to download SAM3 model");
         gd.addMessage("The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
@@ -486,6 +338,4 @@ public class Sam3Dialogs {
                 "The system will launch a separate detection for each group, using all ROIs within that group as input.\n " +
                 "Note: Group \"0\" will be internally remapped to \"255\" for processing.\n");
     }
-
-
 }

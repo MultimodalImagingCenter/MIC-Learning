@@ -16,7 +16,7 @@ import java.util.concurrent.Callable;
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
-public class MultiImageDetectionConsumer implements Callable<Void> {
+public class MultiImagePcsResultsConsumer implements Callable<Void> {
     // signal pushed onto the queue exactly once, on every terminal python task outcome. */
     public static final Map<String, Object> END_SIGNAL = Collections.unmodifiableMap(new HashMap<>());
 
@@ -26,8 +26,8 @@ public class MultiImageDetectionConsumer implements Callable<Void> {
     private final List<String> textPrompts;
     private final ImagePlus imp;
 
-    public MultiImageDetectionConsumer(BlockingQueue<Map<String, Object>> resultsQueue, Map<Integer, List<ProcessedDetection>> detectionsByFrame,
-                                             Map<String, Integer> classIdMap, List<String> textPrompts, ImagePlus imp) {
+    public MultiImagePcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, Map<Integer, List<ProcessedDetection>> detectionsByFrame,
+                                        Map<String, Integer> classIdMap, List<String> textPrompts, ImagePlus imp) {
         this.resultsQueue = resultsQueue;
         this.detectionsByFrame = detectionsByFrame;
         this.classIdMap = classIdMap;

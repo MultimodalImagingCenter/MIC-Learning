@@ -1,7 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
-import fr.curie.miclearning.apposeplugin.VideoDetectionConsumer;
+import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.MultiFrameDataManager;
@@ -37,7 +37,8 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     int axis; // 3 : Z axis - 4 : Time axis
 
     private final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
-    private String modelPath;
+    private String detectionModelPath;
+    private String trackingModelPath;
     private String textPrompt = "visual";
     private boolean textPromptUsed;
     private boolean visualPositivePromptUsed;
@@ -47,12 +48,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
 
-    int posStartFrame =0; // starting from index 0
-    int posEndFrame; // starting from index 0
-    boolean bidirectional = false;
-    int posFirstFrame;
 
-    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
+    private static final String PREF_LAST_DETECT_MODEL_KEY = "miclearning.lastmodeldir.sam3";
+    private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
     private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-bidirectional.py";
 
@@ -128,7 +126,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             askUser(roiSelection.getGroupCount(), positiveGroupChoices, negativeGroupChoices);
         }
 
-        if (outputOptions == null || modelPath == null || detectionParams == null) {
+        if (outputOptions == null || detectionModelPath == null || detectionParams == null) {
             return;
         }
 
@@ -178,7 +176,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         Sam3VideoRunConfig config;
         try {
             config = new Sam3VideoRunConfig.Builder()
-                    .modelPath(modelPath)
+                    .modelPath(detectionModelPath, trackingModelPath)
                     .textPrompt(textPrompt, textPromptUsed)
                     .visualPrompts(promptRois.getPositive(), promptRois.getNegative(),
                             visualPositivePromptUsed, negativePromptUsed)
@@ -217,7 +215,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         try (Sam3VideoPythonRunner runner = new Sam3VideoPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
-            VideoDetectionConsumer consumer = new VideoDetectionConsumer(
+            VideoPcsResultsConsumer consumer = new VideoPcsResultsConsumer(
                     resultsQueue, mfdManager, config.getClassIdMap(), config.getTextPrompt(), imp);
             Future<Void> consumerResult = executor.submit(consumer);
 
@@ -278,7 +276,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         gd.addMessage("");
 
         // 3- MODEL PATH
-        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_MODEL_KEY);
+        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
+        gd.addMessage("Optional: you can use a different model for tracking (sam");
+        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_TRACK_MODEL_KEY);
 
         // 4-PROMPT(S)
         // 4.1 create checkboxes and panels
@@ -425,7 +425,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         // 6- OUTPUTS
         gd.addMessage("__________");
-        Sam3Dialogs.addOutputDialogVideo(gd);
+        Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
 
         // 7- SHOW DIALOG
         gd.showDialog();
@@ -435,8 +435,8 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         // 8- get results
         // model path
-        modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
-
+        detectionModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_DETECT_MODEL_KEY);
+        trackingModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_TRACK_MODEL_KEY);
         // prompt
         // text prompt
         textPromptUsed = textCB.getState();
@@ -487,7 +487,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         // detection and tracking parameters
         Sam3Dialogs.getParameters(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
         // outputs
-        outputOptions = Sam3Dialogs.getOutputAnswerVideo(gd);
+        outputOptions = Sam3Dialogs.getOutputAnswer(gd,DetectionUtils.DetectionMode.VIDEO);
     }
 
     private static void updateHelpLabelDefault(Label helpLabel, GenericDialog gd) {
@@ -525,15 +525,22 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     }
 
     private void printParameters(Sam3VideoRunConfig config) {
+        Sam3ModelParameters params = config.getDetectionParams();
+        boolean sameModel = trackingModelPath == null || trackingModelPath.trim().isEmpty() || trackingModelPath.equals(detectionModelPath);
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
-        IJ.log("model: " + config.getModelPath());
+        if (sameModel) IJ.log("model: " + config.getDetectionModelPath());
+        else {
+            IJ.log("detection model: " + config.getDetectionModelPath());
+            IJ.log("tracking model: " + config.getTrackingModelPath());
+        }
         IJ.log("number of frame to process: " + config.getFrameCount()
                 + " (frame " + (config.getFirstFrame() + 1) + (config.getFrameCount()>1 ? " to " + (config.getEndFrame() + 1): "" )+ (config.getFirstFrame()!=config.getPromptFrame()? " - prompt frame: " + (config.getPromptFrame()+1): "") + ")" );
         if (config.isTextPromptUsed()) IJ.log("text prompt: " + config.getTextPrompt().toUpperCase());
         if (config.isVisualPositivePromptUsed()) IJ.log("visual prompts: " + config.getPositiveRois().size() + " ROI(s) as positive prompt(s)");
         if (config.isNegativePromptUsed()) IJ.log("visual prompts: " + config.getNegativeRois().size() + " ROI(s) as negative prompt(s)");
-        IJ.log("detection every " + (config.getDetectionParams().getNFrameBtwDetections()>1 ? config.getDetectionParams().getNFrameBtwDetections() + " frames" : "frame"));
+        IJ.log("detection every " + (params.getNFrameBtwDetections()>1 ? params.getNFrameBtwDetections() + " frames" : "frame"));
+        IJ.log("confidence threshold for detection: " + params.getConfidenceThreshold());
         IJ.log("----------------------");
     }
 

@@ -108,33 +108,13 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/ai.djl.mxnet/mxnet-model-zoo -->
-        <dependency>
-            <groupId>ai.djl.mxnet</groupId>
-            <artifactId>mxnet-model-zoo</artifactId>
-        </dependency>
-
-
-        <!-- Runtime ONNX -->
-        <dependency>
-            <groupId>ai.djl.onnxruntime</groupId>
-            <artifactId>onnxruntime-engine</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/ai.djl.onnxruntime/onnxruntime-native-auto -->
-        <dependency>
-            <groupId>ai.djl.onnxruntime</groupId>
-            <artifactId>onnxruntime-native-auto</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.18.0</version>
         </dependency>
+
         <dependency>
             <groupId>org.apposed</groupId>
             <artifactId>appose</artifactId>
@@ -153,6 +133,7 @@
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-ij</artifactId>
             <version>2.0.2</version>
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>
@@ -214,6 +195,8 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>models/**</exclude>
+                                        <exclude>images/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -244,7 +227,7 @@
                         <configuration>
                             <target>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="C:/Users/yepon/Downloads/fiji-stable-win64-jdk/Fiji.app/plugins/mic_learning.jar"
+                                      tofile="/home/noemie/Applications/Fiji.app/plugins/mic_learning.jar"
                                 />
                             </target>
                         </configuration>
