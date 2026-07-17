@@ -100,8 +100,6 @@ public class Sam3Dialogs {
 
         if (mode == DetectionMode.VIDEO) {
             gd.addMessage("Tracking Settings");
-            gd.addNumericField("max number of frame to segment", -1);
-            gd.addMessage("To segment all frames, enter \"-1\"");
             gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
             gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2); // advanced parameter
             gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0); // advanced parameter
@@ -129,14 +127,10 @@ public class Sam3Dialogs {
         params.setMaxSideLengthDetect(maxSideLengthDetect);
 
         if (mode == DetectionMode.VIDEO) {
-            int maxFrameUser = (int) gd.getNextNumber();
-            if (maxFrameUser < 0) maxFrameUser = params.getNFrameToProcess();
-            params.setNFrameToProcess(Math.min(maxFrameUser, params.getNFrameToProcess()));
-
             int nFramesBtwDetec = (int) gd.getNextNumber();
             if (nFramesBtwDetec <= 0) {
-                IJ.log("Number of frames between each detection must be >0. using default value: " + params.getNFrameBtwDetections());
-                nFramesBtwDetec = params.getNFrameBtwDetections();
+                //IJ.log("Number of frames between each detection must be >0. using default value: " + params.getNFrameBtwDetections());
+                nFramesBtwDetec = params.getNFrameToProcess() +1;
             }
             params.setNFrameBtwDetections(nFramesBtwDetec);
 

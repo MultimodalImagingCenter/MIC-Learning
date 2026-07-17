@@ -8,6 +8,7 @@
   - refactor implementation for pcs on video to use `muggled_sam`:
   - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3VideoRunConfig`, `Sam3VideoPythonRunner`, `VideoPcsResultsConsumer`) 
   - result consumption now runs on a managed `ExecutorService` thread instead of a raw `Thread`
+  - add possibility to use a second model (sam2 or sam3 model) for the tracking part
 - SAM3 text prompt multi-image pcs plugin (`Sam3TextPromptPcsMultiImg_Plugin`) : reworked along the same pattern as the video plugin (`Sam3TextPromptPcsMultiImgRunConfig`,
   `Sam3TextPromptPcsMultiImgPythonRunner`, `MultiImagePcsResultsConsumer`)
 - SAM3 geometric-prompt single-image plugin (`Sam3VisualPromptSingleImgPcs_Plugin`): reworked along

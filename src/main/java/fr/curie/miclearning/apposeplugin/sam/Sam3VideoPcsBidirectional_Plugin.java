@@ -1,5 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
+import fr.curie.miclearning.apposeplugin.DialogHelpBar;
+import fr.curie.miclearning.apposeplugin.FrameRangeSelector;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
@@ -10,6 +12,7 @@ import ij.ImagePlus;
 import ij.Macro;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.gui.Roi;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
@@ -32,6 +35,22 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * ImageJ plugin: SAM3 promptable-concept-segmentation on video.
  */
 public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
+
+    // sentinels for the "remembered" positive/negative group selection
+    private static final int NONE_SELECTION = -1; // user hasn't picked anything yet
+    private static final int ALL_SELECTION = -2;  // user picked "all ROI groups" (for positive prompts only)
+
+    // owner keys for DialogHelpBar sticky messages
+    private static final String ROI_AVAILABILITY_OWNER = "roiAvailability";
+    private static final String NO_OPTION_OWNER = "noOptionSelected";
+
+    private static final String PREF_LAST_DETECT_MODEL_KEY = "miclearning.lastmodeldir.sam3";
+    private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
+    private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
+    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-bidirectional.py";
+
+    private static final Color COLOR_INSTRUCTION = Color.MAGENTA;
+
     protected ImagePlus imp;
     int nFrames; // number of frames in the video
     int axis; // 3 : Z axis - 4 : Time axis
@@ -48,11 +67,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
 
-
-    private static final String PREF_LAST_DETECT_MODEL_KEY = "miclearning.lastmodeldir.sam3";
-    private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
-    private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
-    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-bidirectional.py";
+    // frame range chosen by the user in the FrameRangeSelector widget (1-indexed)
+    private int chosenFirstFrame;
+    private int chosenPromptFrame;
+    private int chosenLastFrame;
 
     @Override
     public void run(String s) {
@@ -86,44 +104,21 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         RoiPromptExtractor.RoiSelectionResult roiSelection = roiPromptExtractor.extract(selectedRoiList, axis, nFrames);
         int firstUnusedRoiId;
-        String[] positiveGroupChoices = null;
-        String[] negativeGroupChoices = null;
 
-        //
         if (!roiSelection.hasUsableRois()) {
-            visualPositivePromptUsed = false;
-            negativePromptUsed = false;
             firstUnusedRoiId = 1;
-            imp.setPosition(1);
+            //imp.setPosition(1);
         } else {
-            imp.setPosition(roiSelection.getFirstFramePosition());
+            //imp.setPosition(roiSelection.getFirstFramePosition());
             roiManager.runCommand("Show All");
             firstUnusedRoiId = roiSelection.getFirstUnusedGroupId();
-
-            // create 2 lists of group that will be displayed in generic dialog
-            TreeSet<Integer> uniqueGroups = roiSelection.getUniqueGroups();
-            if (uniqueGroups.size() > 1) {
-                positiveGroupChoices = new String[uniqueGroups.size() + 1];
-                negativeGroupChoices = new String[uniqueGroups.size()];
-                positiveGroupChoices[0] = ALL_ROIS_GROUPS_TXT;
-                int j = 0;
-                for (int groupId : uniqueGroups) {
-                    String label = RoiPromptExtractor.formatGroupLabel(groupId);
-                    negativeGroupChoices[j] = label;
-                    positiveGroupChoices[j + 1] = label;
-                    j++;
-                }
-            } else {
-                positiveGroupChoices = new String[]{RoiPromptExtractor.formatGroupLabel(uniqueGroups.first())};
-                negativeGroupChoices = new String[]{RoiPromptExtractor.formatGroupLabel(uniqueGroups.first())};
-            }
         }
 
         // --- 2. retrieve parameters (model path, prompts, output options) ---
         if (Macro.getOptions() != null) {
             parseMacro();
         } else {
-            askUser(roiSelection.getGroupCount(), positiveGroupChoices, negativeGroupChoices);
+            askUser(roiSelection, selectedRoiList);
         }
 
         if (outputOptions == null || detectionModelPath == null || detectionParams == null) {
@@ -137,9 +132,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         Map<String, Integer> classIdMap = new HashMap<>();
         classIdMap.put(textPrompt, firstUnusedRoiId);
 
-        // visual prompts, positive and negative
+        // visual prompts, positive and negative - taken from the frame the user chose as prompt frame
+        List<Roi> roisAtPromptFrame = roiPromptExtractor.getRoisAtFrame(selectedRoiList, axis, chosenPromptFrame);
         RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
-                roiSelection.getRoisAtFirstFrame(),
+                roisAtPromptFrame,
                 visualPositivePromptUsed ? positiveGroups : Collections.emptyList(),
                 negativePromptUsed ? negativeGroup : null);
 
@@ -160,17 +156,11 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             return;
         }
 
-        int postFirstFrame = 0;
-        // first and last frames to segment
-        int posPromptFrame = (visualPositivePromptUsed || negativePromptUsed)
-                ? roiSelection.getFirstFramePosition() - 1
-                : 0;
-        if (!(visualPositivePromptUsed || negativePromptUsed)) {
-            imp.setPosition(1);
-        }
-
-        int posEndFrame = Math.min(nFrames - 1, posPromptFrame + detectionParams.getNFrameToProcess() - 1);
-        detectionParams.setNFrameToProcess(posEndFrame - posPromptFrame + 1);
+        // frame range, 0-indexed, as chosen by the user
+        int posFirstFrame = chosenFirstFrame - 1;
+        int posPromptFrame = chosenPromptFrame - 1;
+        int posEndFrame = chosenLastFrame - 1;
+        detectionParams.setNFrameToProcess(posEndFrame - posFirstFrame + 1);
 
         // prepare model and run configuration
         Sam3VideoRunConfig config;
@@ -180,7 +170,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
                     .textPrompt(textPrompt, textPromptUsed)
                     .visualPrompts(promptRois.getPositive(), promptRois.getNegative(),
                             visualPositivePromptUsed, negativePromptUsed)
-                    .frameRange(0,posPromptFrame, posEndFrame)
+                    .frameRange(posFirstFrame,posPromptFrame, posEndFrame)
                     .detectionParams(detectionParams)
                     .outputOptions(outputOptions)
                     .classIdMap(classIdMap)
@@ -191,7 +181,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         }
 
         //prepare output
-        MultiFrameDataManager mfdManager = new MultiFrameDataManager(postFirstFrame, posEndFrame);
+        MultiFrameDataManager mfdManager = new MultiFrameDataManager(posFirstFrame, posEndFrame);
 
         recordInMacro();
         IJ.log("\n   --- Starting SAM3 Promptable Concept Segmentation on video --- ");
@@ -200,7 +190,6 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         // --- 4. Run ---
         runSam3(config, mfdManager, startTime);
     }
-
 
     private void runSam3(Sam3VideoRunConfig config, MultiFrameDataManager mfdManager, long startTime) {
         // create queue and thread to process results
@@ -256,15 +245,14 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         }
     }
 
-    private void askUser(int groupNumber, String[] positiveGroupChoices, String[] negativeGroupChoices) {
-        GenericDialog gd = new GenericDialog("SAM3 Promptable Concept Segmentation on video");
+    private void askUser(RoiPromptExtractor.RoiSelectionResult roiSelection, Roi[] selectedRoiList) {
+        final Map<Integer, List<Roi>> roisByFrame = roiPromptExtractor.groupRoisByFrame(selectedRoiList, axis);
+        // NonBlockingGenericDialog (rather than plain GenericDialog): the image window and the RoiManager stay interactive while this dialog is open
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("SAM3 Promptable Concept Segmentation on video");
 
         // 1- dynamic HELP SECTION (at the top ? or put at bottom ?)
-        Panel helpPanel = new Panel(new FlowLayout(FlowLayout.LEFT));
-        Label helpLabel = new Label(" "); // nothing for now
-        helpLabel.setForeground(Color.BLUE);
-        helpPanel.add(helpLabel);
-        gd.addPanel(helpPanel);
+        DialogHelpBar helpBar = new DialogHelpBar(gd);
+        gd.addPanel(helpBar.getPanel());
 
         final Button okButton = gd.getButtons()[0]; // ok button is the first one
 
@@ -277,10 +265,19 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         // 3- MODEL PATH
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
-        gd.addMessage("Optional: you can use a different model for tracking (sam");
+        gd.addMessage("Optional: you can use a different model for tracking (sam 2 or sam 3)");
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_TRACK_MODEL_KEY);
 
-        // 4-PROMPT(S)
+        // 4- PROMPT(S)
+        // first define FRAME RANGE SELECTOR (first / prompt / last)
+        FrameRangeSelector frameSelector = new FrameRangeSelector(imp, nFrames, helpBar);
+        if (roiSelection.hasUsableRois()) {
+            // default: prompt frame starts on the earliest frame that has usable ROIs
+            frameSelector.setPromptFrame(roiSelection.getFirstFramePosition());
+        } else {
+            frameSelector.setPromptFrame(imp.getCurrentSlice());
+        }
+
         // 4.1 create checkboxes and panels
         // 4.1.1 text prompt
         gd.addMessage("__________");
@@ -293,16 +290,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         textPromptPanel.add(textPromptField);
         gd.addPanel(textPromptPanel);
 
-        okButton.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                if(textCB.getState() && textPromptField.getText().trim().isEmpty()) updateHelpLabelNoText(helpLabel, gd);
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                updateHelpLabelDefault(helpLabel, gd);
-            }
-        });
+        helpBar.attachDynamic(okButton, () ->
+                (textCB.getState() && textPromptField.getText().trim().isEmpty())
+                        ? new DialogHelpBar.Hint("Please enter a text prompt to enable prediction with text prompt.", Color.RED)
+                        : null);
 
         // 4.1.2 positive visual prompt(s)
         gd.addCheckbox("Positive visual prompt(s)", false);
@@ -310,16 +301,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         final Panel posVisualPromptPanel = new Panel(new GridLayout(2, 1));
         final Choice posChoiceList = new Choice();
-        // 4.2 fill lists for visuals prompts choice if at least one ROI
-        if (groupNumber > 0) {
-            // positive visual prompts panel
-            // add list of groups id to choose from
-            for (String choice : positiveGroupChoices) posChoiceList.add(choice);
-            posVisualPromptPanel.add(new Label("Select positive group(s):"));
-            posVisualPromptPanel.add(posChoiceList);
-            gd.addPanel(posVisualPromptPanel);
-            posVisualPromptPanel.setVisible(false);
-        }
+        posVisualPromptPanel.add(new Label("Select positive group(s):"));
+        posVisualPromptPanel.add(posChoiceList);
+        gd.addPanel(posVisualPromptPanel);
+        posVisualPromptPanel.setVisible(false);
 
         // 4.1.3 negative visual prompt(s)
         gd.addCheckbox("Negative visual prompt(s)", false);
@@ -327,116 +312,164 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         final Panel negVisualPromptPanel = new Panel(new GridLayout(2, 1));
         final Choice negChoiceList = new Choice();
+        negVisualPromptPanel.add(new Label("Select negative group(s):"));
+        negVisualPromptPanel.add(negChoiceList);
+        gd.addPanel(negVisualPromptPanel);
+        negVisualPromptPanel.setVisible(false);
 
-        if (groupNumber > 0) {
-            // negative visual prompts panel
-            for (String choice : negativeGroupChoices) negChoiceList.add(choice);
-            negVisualPromptPanel.add(new Label("Select negative group(s):"));
-            negVisualPromptPanel.add(negChoiceList);
-            gd.addPanel(negVisualPromptPanel);
-            negVisualPromptPanel.setVisible(false);
-        }
 
-        // 4.3 if no ROI selected (only prompt allowed = text prompt), block the checkboxes + print help message at top
-        if (groupNumber == 0) {
-            // text prompt
-            textCB.setForeground(Color.GRAY);
-            textCB.addItemListener(e -> {
-                textCB.setState(true); // revert if user try to uncheck
-                updateHelpLabelDefault(helpLabel, gd);
-            });
-            textPromptPanel.setVisible(true);
+        // 4.2 gate the visual-prompt checkboxes and choice list on whether the current prompt frame (as chosen in frameSelector)
+        // has usable ROIs. if no usable ROI (so only prompt allowed = text prompt), block the checkboxes + print help message at top
+        //
+        // "remembered" selections (updated only by the user directly interacting with a choice
+        final int[] rememberedPositiveSelection = {NONE_SELECTION};
+        final int[] rememberedNegativeSelection = {NONE_SELECTION};
 
-            // positive visual prompt
-            posVisualPromptCB.setForeground(Color.GRAY);
-            posVisualPromptCB.addItemListener(e -> {
-                posVisualPromptCB.setState(false); // revert if user tries to check
-                updateHelpLabelRequireRoi(helpLabel, gd);
-            });
-            posVisualPromptPanel.setVisible(false);
+        // guards the choice lists' own item listeners while the selection is programmatically changed during a refresh
+        final boolean[] updatingChoices = {false};
 
-            // negative visual prompt
-            negVisualPromptCB.setForeground(Color.GRAY);
-            negVisualPromptCB.addItemListener(e -> {
-                negVisualPromptCB.setState(false); // revert if user tries to check
-                updateHelpLabelRequireRoi(helpLabel, gd);
-            });
-            negVisualPromptPanel.setVisible(false);
+        // listeners to remember last selected frame
+        posChoiceList.addItemListener(e -> {
+            IJ.log("posChoicelist triggered");
+            if (updatingChoices[0]) return;
+            String sel = posChoiceList.getSelectedItem();
+            if (Objects.equals(sel, ALL_ROIS_GROUPS_TXT)) {
+                rememberedPositiveSelection[0] = ALL_SELECTION;
+            } else if (sel != null) {
+                rememberedPositiveSelection[0] = Integer.parseInt(sel.split(" ")[0]);
+            }
+        });
+        negChoiceList.addItemListener(e -> {
+            if (updatingChoices[0]) return;
+            String sel = negChoiceList.getSelectedItem();
+            if (sel != null) {
+                rememberedNegativeSelection[0] = Integer.parseInt(sel.split(" ")[0]);
+            }
+        });
 
-            // hover logic: update the label at the top if mouse
-            posVisualPromptCB.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    updateHelpLabelRequireRoi(helpLabel, gd);
+        // adapt help text depending on if Roi choice list is empty
+        final String requireRoiHint = "No usable ROI on the current prompt frame - add point/box ROI(s) and restart the plugin, \r"
+                + "\n"
+                + "or pick a different prompt frame, to enable visual prompts.";
+        helpBar.attachDynamic(posVisualPromptCB, () ->
+                roisByFrame.getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
+                        ? new DialogHelpBar.Hint( "No usable ROI on the current prompt frame - add point/box ROI(s) and restart the plugin, \r"
+                        + "\n"
+                        + "or pick a different prompt frame, to enable visual prompts.", COLOR_INSTRUCTION)
+                        : new DialogHelpBar.Hint("Select which ROI group(s) on the current prompt frame to use as positive prompt(s).", Color.BLUE));
+        helpBar.attachDynamic(negVisualPromptCB, () ->
+                roisByFrame.getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
+                        ? new DialogHelpBar.Hint(requireRoiHint, COLOR_INSTRUCTION)
+                        : new DialogHelpBar.Hint("Select which ROI group on the current prompt frame to use as a negative prompt.", Color.BLUE));
+
+
+        Runnable updateVisualPromptState = () -> {
+            IJ.log("updateVisualPromptState called here!");
+            int frame = frameSelector.getPromptFrame();
+            List<Roi> roisAtFrame = roisByFrame.getOrDefault(frame, Collections.emptyList());
+            TreeSet<Integer> groupsAtFrame = new TreeSet<>();
+            for (Roi r : roisAtFrame) groupsAtFrame.add(r.getGroup());
+            boolean anyGroupAtFrame = !groupsAtFrame.isEmpty();
+
+            boolean posMismatch = refreshGroupChoiceList(posChoiceList, groupsAtFrame, rememberedPositiveSelection,
+                    true, updatingChoices);
+            boolean negMismatch = refreshGroupChoiceList(negChoiceList, groupsAtFrame, rememberedNegativeSelection,
+                    false, updatingChoices);
+
+            IJ.log("posMismatch: " + posMismatch + " negMismatch: " + negMismatch);
+            IJ.log("rememberedPositiveSelection: " + Arrays.toString(rememberedPositiveSelection));
+            IJ.log("rememberedNegativeSelection: " + Arrays.toString(rememberedNegativeSelection));
+
+
+            if (!anyGroupAtFrame) {
+                IJ.log("   pas de ROI sur la frame");
+                if (posVisualPromptCB.getState() || negVisualPromptCB.getState()) {
+                    IJ.log("   au moins un des deux doit être turned off de force");
+                    helpBar.sticky(ROI_AVAILABILITY_OWNER, "Prompt frame " + frame
+                            + " has no usable ROI - visual prompts turned off.", Color.RED);
+                } else {
+                    helpBar.clearSticky(ROI_AVAILABILITY_OWNER);
                 }
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    updateHelpLabelDefault(helpLabel, gd);
+                posVisualPromptCB.setState(false);
+                negVisualPromptCB.setState(false);
+            } else {
+                IJ.log("   des ROIs sur la frame !!");
+                if (posMismatch && posVisualPromptCB.getState()) {
+                    helpBar.sticky(ROI_AVAILABILITY_OWNER, "The previously selected positive ROI group isn't on frame "
+                            + frame + " - positive visual prompt turned off", Color.RED);
+                    posVisualPromptCB.setState(false);
                 }
-            });
+                if (negMismatch && negVisualPromptCB.getState()) {
+                    helpBar.sticky(ROI_AVAILABILITY_OWNER, "The previously selected negative ROI group isn't on frame "
+                            + frame + " - negative visual prompt turned off", Color.RED);
+                    negVisualPromptCB.setState(false);
+                }
+                if (!posMismatch && !negMismatch) {
+                    helpBar.clearSticky(ROI_AVAILABILITY_OWNER);
+                }
+            }
 
-            negVisualPromptCB.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    updateHelpLabelRequireRoi(helpLabel, gd);
-                }
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    updateHelpLabelDefault(helpLabel, gd);
-                }
-            });
-        }
+            // greyed out (not setEnabled(false) - see FrameRangeSelector javadoc for why) when
+            // there's nothing to choose; the checkboxes' own item listeners (below) block
+            // checking them in that state.
+            Color groupColor = anyGroupAtFrame ? Color.BLACK : Color.GRAY;
+            posVisualPromptCB.setForeground(groupColor);
+            negVisualPromptCB.setForeground(groupColor);
+            checkCBs(textCB, textPromptPanel, posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel, helpBar);
+
+            gd.pack();
+        };
+        frameSelector.addPromptFrameListener(updateVisualPromptState);
+        updateVisualPromptState.run(); // initial state, based on the default prompt frame set above
 
         // 4.4 update panels visibility
 
         gd.addDialogListener(new DialogListener() {
             @Override
             public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
-                boolean textChecked = textCB.getState();
-                boolean visualChecked = posVisualPromptCB.getState();
-                boolean negativeChecked = negVisualPromptCB.getState();
-                boolean noText = textPromptField.getText().trim().isEmpty();
+                IJ.log("dialog item changed called here: " + e);
+                updateVisualPromptState.run();
 
-                // sections visible if boxes checked
-                if (groupNumber > 0) {
-                    textPromptPanel.setVisible(textChecked);
-                    posVisualPromptPanel.setVisible(visualChecked);
-                    negVisualPromptPanel.setVisible(negativeChecked);
-                }
+               checkCBs(textCB, textPromptPanel, posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel, helpBar);
 
-                // if no option selected (no box checked) : OK button is unabled -> doesn't work !!
-                if (!textChecked && !visualChecked) {
-                    okButton.setEnabled(false); // no effect
-                    updateHelpLabelNoOption(helpLabel, gd);
-                } else {
-                    okButton.setEnabled(true);
-                    updateHelpLabelDefault(helpLabel, gd);
-                }
-
+                // clear the ROI messages
+                helpBar.clearSticky(ROI_AVAILABILITY_OWNER);
+                gd.pack();
                 return true;
             }
         });
 
-        // 5- PARAMETERS
+        // 5 - RANGE SELECTOR
+        gd.addMessage("__________");
+        gd.addMessage("Frame range");
+        gd.addPanel(frameSelector.getPanel());
+
+        // 6- PARAMETERS
         gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
         detectionParams.setNFrameToProcess(nFrames);
         Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
 
-        // 6- OUTPUTS
+        // 7- OUTPUTS
         gd.addMessage("__________");
         Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
 
-        // 7- SHOW DIALOG
+        // 8- SHOW DIALOG
         gd.showDialog();
         if (gd.wasCanceled()) {
             return; // User canceled
         }
 
-        // 8- get results
+        // 9- get results
+        // frame range
+        chosenFirstFrame = frameSelector.getFirstFrame();
+        chosenPromptFrame = frameSelector.getPromptFrame();
+        chosenLastFrame = frameSelector.getLastFrame();
+
         // model path
         detectionModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_DETECT_MODEL_KEY);
         trackingModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_TRACK_MODEL_KEY);
+
         // prompt
         // text prompt
         textPromptUsed = textCB.getState();
@@ -445,33 +478,36 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         if(textPrompt == null || textPrompt.trim().isEmpty()) textPromptUsed = false;
         if (!textPromptUsed) textPrompt="visual";
         // visual positive prompt
-        visualPositivePromptUsed = posVisualPromptCB.getState() && groupNumber > 0;
+        visualPositivePromptUsed = posVisualPromptCB.getState();
         gd.getNextBoolean();
         String selectedPositiveGroup = posChoiceList.getSelectedItem();
 
         // visual negative prompt
-        negativePromptUsed = negVisualPromptCB.getState() && groupNumber > 0;
+        negativePromptUsed = negVisualPromptCB.getState();
         gd.getNextBoolean();
         if (negativePromptUsed) {
-            negativeGroup = Integer.parseInt(negChoiceList.getSelectedItem().split(" ")[0]);
+            String selectedNegativeGroup = negChoiceList.getSelectedItem();
+            negativeGroup = selectedNegativeGroup != null ? Integer.parseInt(selectedNegativeGroup.split(" ")[0]) : -1;
             if (negativeGroup == -1) negativePromptUsed = false;
         }
 
         if (visualPositivePromptUsed) {
+            List<Roi> roisAtChosenPromptFrame = roisByFrame.getOrDefault(chosenPromptFrame, Collections.emptyList());
+            TreeSet<Integer> groupsAtChosenFrame = new TreeSet<>();
+            for (Roi r : roisAtChosenPromptFrame) groupsAtChosenFrame.add(r.getGroup());
+
             positiveGroups = new ArrayList<>();
-            if (Objects.equals(selectedPositiveGroup, ALL_ROIS_GROUPS_TXT)){ // if all ROI group are prompts
-                for (String choice : positiveGroupChoices) {
-                    if (Objects.equals(choice, ALL_ROIS_GROUPS_TXT)) continue;
-                    int id = Integer.parseInt(choice.split(" ")[0]);
+            if (Objects.equals(selectedPositiveGroup, ALL_ROIS_GROUPS_TXT)) { // if all ROI group are prompts
+                for (int id : groupsAtChosenFrame) {
                     if (!negativePromptUsed || id != negativeGroup) {
                         positiveGroups.add(id);
                     } else {
                         IJ.log("group " + id + " used as negative prompt");
                     }
                 }
-            } else { // if only one group is prompt
+            } else if (selectedPositiveGroup != null) { // if only one group is prompt
                 int id = Integer.parseInt(selectedPositiveGroup.split(" ")[0]);
-                if (negativePromptUsed && id == negativeGroup){
+                if (negativePromptUsed && id == negativeGroup) {
                     IJ.log("WARNING : same group can't be used for negative and positive visual prompt. " +
                             "No visual prompts (neither positive nor negative) will be used.");
                     negativePromptUsed = false;
@@ -490,30 +526,76 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         outputOptions = Sam3Dialogs.getOutputAnswer(gd,DetectionUtils.DetectionMode.VIDEO);
     }
 
-    private static void updateHelpLabelDefault(Label helpLabel, GenericDialog gd) {
-        helpLabel.setText(" ");
-        helpLabel.setForeground(Color.BLUE);
-        gd.pack();
+    private void checkCBs(Checkbox textCB, Panel textPromptPanel, Checkbox posVisualPromptCB, Panel posVisualPromptPanel,
+                          Checkbox negVisualPromptCB, Panel negVisualPromptPanel, DialogHelpBar helpBar) {
+        boolean textChecked = textCB.getState();
+        boolean visualChecked = posVisualPromptCB.getState();
+        boolean negativeChecked = negVisualPromptCB.getState();
+
+        textPromptPanel.setVisible(textChecked);
+        posVisualPromptPanel.setVisible(visualChecked);
+        negVisualPromptPanel.setVisible(negativeChecked);
+
+        // if no option selected (no box checked) : warning
+        if (!textChecked && !visualChecked) {
+            helpBar.sticky(NO_OPTION_OWNER, "Please select at least one option to perform prediction.", Color.RED);
+        } else {
+            helpBar.clearSticky(NO_OPTION_OWNER);
+        }
     }
 
-    private static void updateHelpLabelRequireRoi(Label helpLabel, GenericDialog gd) {
-        helpLabel.setText("Please add point and box ROI(s) to the ROI manager to enable visual prompts.");
-        helpLabel.setForeground(Color.MAGENTA);
-        gd.pack();
-    }
+    /**
+     * Rebuilds one group {@link Choice} list (positive or negative) for the ROI groups present
+     * on the current prompt frame, and re-selects the user's remembered choice if it's still
+     * available there.
+     * <p>
+     *
+     * @param allowAll whether an "ALL_ROIS_GROUPS_TXT" entry should be offered when there's more
+     *                 than one group (true for the positive list, false for the negative one)
+     * @return {@code true} if the user had a real remembered choice (a specific group, or ALL)
+     *         that is no longer available on this frame i.e. the caller should warn/uncheck.
+     *         {@code false} if there was nothing to remember yet, or the remembered choice is
+     *         still honored.
+     */
+    private boolean refreshGroupChoiceList(Choice choiceList, TreeSet<Integer> groupsAtFrame,
+                                           int[] remembered, boolean allowAll, boolean[] updatingChoices) {
+        updatingChoices[0] = true;
+        try {
+            choiceList.removeAll();
+            if (groupsAtFrame.isEmpty()) {
+                return remembered[0] != NONE_SELECTION; // had a choice, now nothing at all to offer
+            }
 
-    private static void updateHelpLabelNoOption(Label helpLabel, GenericDialog gd) {
-        helpLabel.setText("Please select at least one option to perform prediction.");
-        helpLabel.setForeground(Color.RED);
-        gd.pack();
-    }
+            if (allowAll && groupsAtFrame.size() > 1) {
+                choiceList.add(ALL_ROIS_GROUPS_TXT);
+            }
+            for (int groupId : groupsAtFrame) {
+                choiceList.add(RoiPromptExtractor.formatGroupLabel(groupId));
+            }
 
-    private static void updateHelpLabelNoText(Label helpLabel, GenericDialog gd) {
-        helpLabel.setText("Please enter a text prompt to enable prediction with text prompt.");
-        helpLabel.setForeground(Color.RED);
-        gd.pack();
-    }
+            boolean hadMemory = remembered[0] != NONE_SELECTION;
+            boolean rememberedIsAll = remembered[0] == ALL_SELECTION;
+            boolean rememberedAvailable = hadMemory && (rememberedIsAll || groupsAtFrame.contains(remembered[0]));
 
+            if (rememberedAvailable) {
+                if (rememberedIsAll) {
+                    if (groupsAtFrame.size() > 1) {
+                        choiceList.select(ALL_ROIS_GROUPS_TXT);
+                    } else {
+                        choiceList.select(0); // only one group present - it stands in for "all"
+                    }
+                } else {
+                    choiceList.select(RoiPromptExtractor.formatGroupLabel(remembered[0]));
+                }
+                return false; // no mismatch, choice is respected
+            }
+
+            choiceList.select(0); // visual default; caller decides whether to warn/uncheck
+            return hadMemory;
+        } finally {
+            updatingChoices[0] = false;
+        }
+    }
 
 
     private void parseMacro() {
@@ -539,7 +621,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         if (config.isTextPromptUsed()) IJ.log("text prompt: " + config.getTextPrompt().toUpperCase());
         if (config.isVisualPositivePromptUsed()) IJ.log("visual prompts: " + config.getPositiveRois().size() + " ROI(s) as positive prompt(s)");
         if (config.isNegativePromptUsed()) IJ.log("visual prompts: " + config.getNegativeRois().size() + " ROI(s) as negative prompt(s)");
-        IJ.log("detection every " + (params.getNFrameBtwDetections()>1 ? params.getNFrameBtwDetections() + " frames" : "frame"));
+        int nFrameBtwDetec = params.getNFrameBtwDetections();
+        if (nFrameBtwDetec >= config.getFrameCount()) IJ.log("Detection only on frame " + config.getPromptFrame());
+        else IJ.log("detection every " + (nFrameBtwDetec>1 ? nFrameBtwDetec + " frames" : "frame"));
         IJ.log("confidence threshold for detection: " + params.getConfidenceThreshold());
         IJ.log("----------------------");
     }

@@ -7,7 +7,7 @@ import java.awt.Rectangle;
 import java.util.*;
 
 /**
- * ROI-scanning : finding the earliest usable frame, collecting ROI groups,
+ * ROI-scanning : finding the frames usable as prompt frame, collecting ROI groups,
  * and splitting ROIs into positive/negative prompt coordinates.
  */
 public class RoiPromptExtractor {
@@ -83,6 +83,72 @@ public class RoiPromptExtractor {
         }
         // All 255 IDs are in use - fall back to 0 (no group)
         return 0;
+    }
+
+    /**
+     * Groups the usable ROIs (rectangle or point) in {@code selectedRois} by frame position,
+     * in a single pass.
+     *
+     * @param selectedRois ROIs currently selected in the RoiManager
+     * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     */
+    public Map<Integer, List<Roi>> groupRoisByFrame(Roi[] selectedRois, int axis) {
+        Map<Integer, List<Roi>> byFrame = new HashMap<>();
+        if (selectedRois == null) return byFrame;
+        for (Roi roi : selectedRois) {
+            if (!isUsableRoiType(roi)) continue;
+            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            byFrame.computeIfAbsent(position, k -> new ArrayList<>()).add(roi);
+        }
+        return byFrame;
+    }
+
+    /**
+     * Checks whether at least one usable ROI (rectangle or point) sits on the given frame.
+     *
+     * @param roiByFrame map of usable ROIs, grouped by frame
+     * @param frame        1-indexed position of the frame to test
+     */
+    public boolean hasUsableRoiAtFrame(Map<Integer, List<Roi>> roiByFrame, int frame) {
+        if (roiByFrame == null || roiByFrame.isEmpty()) return false;
+        List<Roi> roiAtFrame = roiByFrame.getOrDefault(frame, Collections.emptyList());
+        return !roiAtFrame.isEmpty();
+    }
+
+
+    /**
+     * Checks whether at least one usable ROI (rectangle or point) sits on the given frame.
+     *
+     * @param selectedRois ROIs currently selected in the RoiManager
+     * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frame        1-indexed position of the frame to test
+     */
+    public boolean hasUsableRoiAtFrame(Roi[] selectedRois, int axis, int frame) {
+        if (selectedRois == null) return false;
+        for (Roi roi : selectedRois) {
+            if (!isUsableRoiType(roi)) continue;
+            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            if (position == frame) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Collects the usable ROIs (rectangle or point) on the given frame.
+     *
+     * @param selectedRois ROIs currently selected in the RoiManager (may be empty, not null)
+     * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frame        1-indexed frame position to collect ROIs from
+     */
+    public List<Roi> getRoisAtFrame(Roi[] selectedRois, int axis, int frame) {
+        List<Roi> result = new ArrayList<>();
+        if (selectedRois == null) return result;
+        for (Roi roi : selectedRois) {
+            if (!isUsableRoiType(roi)) continue;
+            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            if (position == frame) result.add(roi);
+        }
+        return result;
     }
 
     /**
