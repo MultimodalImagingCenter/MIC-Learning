@@ -1,10 +1,8 @@
 package fr.curie.miclearning.apposeplugin;
 
-import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.awt.Button;
@@ -18,8 +16,9 @@ import java.awt.Panel;
 import java.awt.TextField;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
-import java.util.ArrayList;
-import java.util.List;
+
+import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_INSTRUCTION_COLOR;
+import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_NOTIFICATION_COLOR;
 
 /**
  * Embeds a "First / Prompt / Last frame" widget in a {@link GenericDialog}: one numeric
@@ -29,7 +28,9 @@ import java.util.List;
 public class FrameRangeSelector {
     private static final Color ENABLED_COLOR = Color.BLACK;
     private static final Color DISABLED_COLOR = Color.GRAY;
-    private static final Color NOTICE_COLOR = Color.ORANGE;
+
+    /** owner key for this widget's temporary info notices (see DialogHelpBar) */
+    private static final String INFO_OWNER = "frameRange";
 
     private final ImagePlus imp;
     private final int nFrames;
@@ -45,7 +46,7 @@ public class FrameRangeSelector {
 
     private final List<Runnable> promptFrameListeners = new ArrayList<>();
 
-    private boolean updating = false;
+    private boolean updating = false; // re-entrancy guard while a field is being set
 
     /**
      * @param imp      the image to stay in sync with (may be null to disable image sync)
@@ -84,12 +85,13 @@ public class FrameRangeSelector {
         firstBtn.addActionListener(e -> {
             if (!bidirectionalCB.getState()) {
                 if (helpBar != null) {
-                    helpBar.showTransient("Check \"Bidirectional\" to edit the first frame.", Color.ORANGE);
+                    helpBar.showInfo(INFO_OWNER, "Check \"Bidirectional\" to edit the first frame.", DEFAULT_INSTRUCTION_COLOR);
                 }
                 return;
             }
             pullCurrentFrameInto(firstField, this::onFirstChanged);
         });
+
         promptBtn.addActionListener(e -> pullCurrentFrameInto(promptField, this::onPromptChanged));
         lastBtn.addActionListener(e -> pullCurrentFrameInto(lastField, this::onLastChanged));
 
@@ -105,16 +107,16 @@ public class FrameRangeSelector {
             String firstHint = "First frame to segment when going backward. Only used if \"Bidirectional\" is checked.";
             String promptHint = "Frame where the prompt (text and/or ROIs) is defined - segmentation starts here.";
             String lastHint = "Last frame to segment, going forward from the prompt frame.";
-            helpBar.attach(firstField, firstHint);
-            helpBar.attach(firstLabel, firstHint);
-            helpBar.attach(promptField, promptHint);
-            helpBar.attach(promptLabel, promptHint);
-            helpBar.attach(lastField, lastHint);
-            helpBar.attach(lastLabel, lastHint);
-            helpBar.attach(bidirectionalCB, "If checked, segmentation also runs backward from the prompt frame down to \"First frame\".");
-            helpBar.attach(firstBtn, "Fill in the frame currently displayed on the image. Requires \"Bidirectional\".");
-            helpBar.attach(promptBtn, "Fill in the frame currently displayed on the image.");
-            helpBar.attach(lastBtn, "Fill in the frame currently displayed on the image.");
+            helpBar.attachHelp(firstField, firstHint);
+            helpBar.attachHelp(firstLabel, firstHint);
+            helpBar.attachHelp(promptField, promptHint);
+            helpBar.attachHelp(promptLabel, promptHint);
+            helpBar.attachHelp(lastField, lastHint);
+            helpBar.attachHelp(lastLabel, lastHint);
+            helpBar.attachHelp(bidirectionalCB, "If checked, segmentation also runs backward from the prompt frame down to \"First frame\".");
+            helpBar.attachHelp(firstBtn, "Fill in the frame currently displayed on the image. Requires \"Bidirectional\".");
+            helpBar.attachHelp(promptBtn, "Fill in the frame currently displayed on the image.");
+            helpBar.attachHelp(lastBtn, "Fill in the frame currently displayed on the image.");
         }
     }
 
@@ -138,6 +140,7 @@ public class FrameRangeSelector {
     }
 
     private void setFirstFrameEditable(boolean editable) {
+        if (helpBar != null) helpBar.clearInfo(INFO_OWNER);
         firstField.setEditable(editable); // blocks typing without disabling the component
         firstField.setForeground(editable ? ENABLED_COLOR : DISABLED_COLOR);
         firstLabel.setForeground(editable ? ENABLED_COLOR : DISABLED_COLOR);
@@ -182,20 +185,14 @@ public class FrameRangeSelector {
     }
 
     private void notice(String message) {
-        if (helpBar != null) helpBar.showTransient(message, NOTICE_COLOR);
+        if (helpBar != null) helpBar.showInfo(INFO_OWNER, message, DEFAULT_NOTIFICATION_COLOR);
     }
 
     private void onFirstChanged() {
         if (updating) return;
         updating = true;
-        if (!bidirectionalCB.getState()) {
-            if (helpBar != null) {
-                helpBar.showTransient("Check \"Bidirectional\" to edit the first frame.", Color.ORANGE);
-            }
-            updating = false;
-            return;
-        }
         try {
+            if (helpBar != null) helpBar.clearInfo(INFO_OWNER);
             int value = clamp(readInt(firstField, 1));
             firstField.setText(String.valueOf(value));
 
@@ -216,6 +213,7 @@ public class FrameRangeSelector {
         if (updating) return;
         updating = true;
         try {
+            if (helpBar != null) helpBar.clearInfo(INFO_OWNER);
             int value = clamp(readInt(promptField, 1));
             promptField.setText(String.valueOf(value));
 
@@ -242,6 +240,7 @@ public class FrameRangeSelector {
         if (updating) return;
         updating = true;
         try {
+            if (helpBar != null) helpBar.clearInfo(INFO_OWNER);
             int value = clamp(readInt(lastField, nFrames));
             lastField.setText(String.valueOf(value));
 
