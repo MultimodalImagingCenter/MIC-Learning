@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.*;
+import javax.swing.Timer;
 
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.*;
 import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
@@ -69,6 +70,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private int chosenPromptFrame;
     private int chosenLastFrame;
 
+    // all ROIs in the RoiManager as askUser's dialog close
+    private Roi[] finalRoiSnapshot;
+
     @Override
     public void run(String s) {
         // --- 1. get image and ROIs ---
@@ -95,25 +99,15 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         axis = numberOfSlices >= numberOfFrame ? 3 : 4;  // just using the axis with multiple images as time axis
         nFrames = dims[axis];
 
-        // 1.2 get selected ROIs list and extract the potential prompts ROIs
+        // 1.2 make any existing ROIs visible;
         RoiManager roiManager = getRoiManager();
-        Roi[] selectedRoiList = roiManager.getSelectedRoisAsArray();
-
-        RoiPromptExtractor.RoiSelectionResult roiSelection = roiPromptExtractor.extract(selectedRoiList, axis, nFrames);
-        int firstUnusedRoiId;
-
-        if (!roiSelection.hasUsableRois()) {
-            firstUnusedRoiId = 1;
-        } else {
-            roiManager.runCommand("Show All");
-            firstUnusedRoiId = roiSelection.getFirstUnusedGroupId();
-        }
+        if (roiManager.getCount() > 0) roiManager.runCommand("Show All");
 
         // --- 2. retrieve parameters (model path, prompts, output options) ---
         if (Macro.getOptions() != null) {
             parseMacro();
         } else {
-            askUser(roiSelection, selectedRoiList);
+            askUser();
         }
 
         if (outputOptions == null || detectionModelPath == null || detectionParams == null) {
@@ -123,12 +117,17 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         long startTime = System.nanoTime();
 
         // --- 3. Prepare prompts, define config ---
-        // text prompt (even if just "visual"
+        // all ROIs as they stood when the dialog closed
+        Roi[] roisForRun = finalRoiSnapshot != null ? finalRoiSnapshot : roiManager.getRoisAsArray();
+        RoiPromptExtractor.RoiGroupIdsScanResult groupIdScan = roiPromptExtractor.scanGroupsIds(roisForRun);
+        int firstUnusedRoiId = groupIdScan.hasUsableRois() ? groupIdScan.getFirstUnusedGroupId() : 1;
+
+        // text prompt (even if just "visual")
         Map<String, Integer> classIdMap = new HashMap<>();
         classIdMap.put(textPrompt, firstUnusedRoiId);
 
-        // visual prompts, positive and negative - taken from the frame the user chose as prompt frame
-        List<Roi> roisAtPromptFrame = roiPromptExtractor.getRoisAtFrame(selectedRoiList, axis, chosenPromptFrame);
+        // extract visual prompts, positive and negative - taken from the frame the user chose as prompt frame
+        List<Roi> roisAtPromptFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, chosenPromptFrame);
         RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
                 roisAtPromptFrame,
                 visualPositivePromptUsed ? positiveGroups : Collections.emptyList(),
@@ -240,8 +239,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         }
     }
 
-    private void askUser(RoiPromptExtractor.RoiSelectionResult roiSelection, Roi[] selectedRoiList) {
-        final Map<Integer, List<Roi>> roisByFrame = roiPromptExtractor.groupRoisByFrame(selectedRoiList, axis);
+    private void askUser() {
         // NonBlockingGenericDialog (rather than plain GenericDialog): the image window and the RoiManager stay interactive while this dialog is open
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("SAM3 Promptable Concept Segmentation on video");
 
@@ -309,16 +307,14 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         negVisualPromptPanel.setVisible(false);
 
 
-        // 4.3 gate the visual-prompt checkboxes and choice list on whether the current prompt frame (as chosen in frameSelector)
-        // has usable ROIs. if no usable ROI (so only prompt allowed = text prompt), block the checkboxes + print help message at top
-        //
-        // "remembered" selections (updated only by the user directly interacting with a choice
+        // 4.3 Update ROIs, groupID lists and checkbox depending on whether the current prompt frame has usable ROI
+
+        // 4.3.1 "remembered" selections of group IDs
         final int[] rememberedPositiveSelection = {NONE_SELECTION};
         final int[] rememberedNegativeSelection = {NONE_SELECTION};
 
-        // guards the choice lists' own item listeners while the selection is programmatically changed during a refresh
+        // guards the choice lists own item listeners while the selection is programmatically changed during a refresh
         final boolean[] updatingChoices = {false};
-
 
         Runnable updateRememberedPositiveSelection = () -> {
             if (updatingChoices[0]) return;
@@ -353,23 +349,24 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             if (rememberedNegativeSelection[0] == NONE_SELECTION ) updateRememberedNegativeSelection.run();
         });
 
-
-        // adapt help text depending on if Roi choice list is empty
-        final String requireRoiHint = "No usable ROI on the current prompt frame - add point/box ROI(s) there, " +
+        // 4.3.2 adapt help text depending on whether ROI(s) are present on the current prompt frame
+        final String requireRoiHint = "No usable ROI on the current prompt frame \n" +
+                "add point/box ROI(s) " +
                 "or pick a different prompt frame, to enable visual prompts.";
         helpBar.attachHelp(posVisualPromptCB, () ->
-                roisByFrame.getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
+                currentRoisByFrame().getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
                         ? new DialogHelpBar.Hint( requireRoiHint, DEFAULT_INSTRUCTION_COLOR)
                         : new DialogHelpBar.Hint("Select which ROI group(s) on the current prompt frame to use as positive prompt(s).", Color.BLUE));
         helpBar.attachHelp(negVisualPromptCB, () ->
-                roisByFrame.getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
+                currentRoisByFrame().getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
                         ? new DialogHelpBar.Hint(requireRoiHint, DEFAULT_INSTRUCTION_COLOR)
                         : new DialogHelpBar.Hint("Select which ROI group on the current prompt frame to use as a negative prompt.", Color.BLUE));
 
 
+        // 4.3.3 update choice list depending on Roi on the prompt frame
         Runnable updateVisualPromptState = () -> {
             int frame = frameSelector.getPromptFrame();
-            List<Roi> roisAtFrame = roisByFrame.getOrDefault(frame, Collections.emptyList());
+            List<Roi> roisAtFrame = currentRoisByFrame().getOrDefault(frame, Collections.emptyList());
             TreeSet<Integer> groupsAtFrame = new TreeSet<>();
             for (Roi r : roisAtFrame) groupsAtFrame.add(r.getGroup());
             boolean anyGroupAtFrame = !groupsAtFrame.isEmpty();
@@ -386,7 +383,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
                             + " has no usable ROI - visual prompts turned off.", DEFAULT_NOTIFICATION_COLOR);
                 }
                 posVisualPromptCB.setState(false);
+                rememberedPositiveSelection[0] = NONE_SELECTION;
                 negVisualPromptCB.setState(false);
+                rememberedNegativeSelection[0] = NONE_SELECTION;
             } else { // il y a des ROIs
                 if (posVisualPromptCB.getState()) { // veut un ROI positif
                     if (posMismatch) { // mais il y a mismatch -> visual prompt turned off + rememberedPositiveSelection reset
@@ -448,7 +447,22 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
 
         // 8- SHOW DIALOG
-        gd.showDialog();
+        // poll the RoiManager every 0.5 sec while the dialog is open
+        final String[] lastRoiSignature = {roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis)};
+        Timer roiPollTimer = new Timer(500, e -> {
+            String sig = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
+            if (!sig.equals(lastRoiSignature[0])) {
+                lastRoiSignature[0] = sig;
+                updateVisualPromptState.run();
+            }
+        });
+        roiPollTimer.start();
+        try {
+            gd.showDialog();
+        } finally {
+            roiPollTimer.stop();
+        }
+        finalRoiSnapshot = getRoiManager().getRoisAsArray();
         if (gd.wasCanceled()) {
             return; // User canceled
         }
@@ -485,7 +499,8 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         }
 
         if (visualPositivePromptUsed) {
-            List<Roi> roisAtChosenPromptFrame = roisByFrame.getOrDefault(chosenPromptFrame, Collections.emptyList());
+            Map<Integer, List<Roi>> finalRoisByFrame = roiPromptExtractor.groupRoisByFrame(finalRoiSnapshot, axis);
+            List<Roi> roisAtChosenPromptFrame = finalRoisByFrame.getOrDefault(chosenPromptFrame, Collections.emptyList());
             TreeSet<Integer> groupsAtChosenFrame = new TreeSet<>();
             for (Roi r : roisAtChosenPromptFrame) groupsAtChosenFrame.add(r.getGroup());
 
@@ -517,6 +532,11 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         Sam3Dialogs.getParameters(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
         // outputs
         outputOptions = Sam3Dialogs.getOutputAnswer(gd,DetectionUtils.DetectionMode.VIDEO);
+    }
+
+    /** Live view of all RoiManager ROIs grouped by frame (always re-reads the manager) */
+    private Map<Integer, List<Roi>> currentRoisByFrame() {
+        return roiPromptExtractor.groupRoisByFrame(getRoiManager().getRoisAsArray(), axis);
     }
 
     private void checkCBs(Checkbox textCB, Panel textPromptPanel, Checkbox posVisualPromptCB, Panel posVisualPromptPanel,

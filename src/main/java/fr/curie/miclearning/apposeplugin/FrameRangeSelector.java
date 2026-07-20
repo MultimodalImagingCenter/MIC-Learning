@@ -99,6 +99,12 @@ public class FrameRangeSelector {
         addCommitListener(promptField, this::onPromptChanged);
         addCommitListener(lastField, this::onLastChanged);
 
+        // live image feedback as the user types, ahead of the commit (Enter/focus-lost) that
+        // does the real validation/clamping - so the image doesn't lag one field behind
+        addLiveNavigateListener(firstField);
+        addLiveNavigateListener(promptField);
+        addLiveNavigateListener(lastField);
+
         bidirectionalCB.addItemListener(e -> setFirstFrameEditable(bidirectionalCB.getState()));
         setFirstFrameEditable(false); // not bidirectional by default
 
@@ -157,6 +163,19 @@ public class FrameRangeSelector {
             @Override
             public void focusLost(FocusEvent e) {
                 onCommit.run();
+            }
+        });
+    }
+
+    /**
+     * Jumps the image to whatever frame {@code field} currently parses to, on every keystroke
+     */
+    private void addLiveNavigateListener(TextField field) {
+        field.addTextListener(e -> {
+            try {
+                navigateImageTo(clamp(Integer.parseInt(field.getText().trim())));
+            } catch (NumberFormatException ignored) {
+                // incomplete/invalid input while typing - leave the image where it is
             }
         });
     }

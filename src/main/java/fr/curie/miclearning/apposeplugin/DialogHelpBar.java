@@ -7,6 +7,9 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -53,6 +56,8 @@ public class DialogHelpBar {
     private static final String PREF_MODE_KEY = "miclearning.helpbarmode";
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
+    private static final int MAX_LINES = 2;
+
     private HelpBarMode helpBarMode;
 
     public void setHelpBarMode(HelpBarMode helpBarMode) {
@@ -72,7 +77,7 @@ public class DialogHelpBar {
     }
 
     private final GenericDialog gd;
-    private final Label label;
+    private final List<Label> lines = new ArrayList<>();
     private final Panel panel;
 
     private boolean hovering = false;
@@ -88,20 +93,25 @@ public class DialogHelpBar {
 
     public DialogHelpBar(GenericDialog gd) {
         this.gd = gd;
-        this.panel = new Panel(new FlowLayout(FlowLayout.LEFT));
-        this.label = new Label(" ");
-        this.label.setForeground(DEFAULT_BLANK_COLOR);
-        this.panel.add(label);
+        this.panel = new Panel(new GridLayout(MAX_LINES, 1));
         this.helpBarMode = HelpBarMode.HELP;
+        initLines();
     }
 
     public DialogHelpBar(GenericDialog gd, HelpBarMode helpBarMode) {
         this.gd = gd;
-        this.panel = new Panel(new FlowLayout(FlowLayout.LEFT));
-        this.label = new Label(" ");
-        this.label.setForeground(DEFAULT_BLANK_COLOR);
-        this.panel.add(label);
+        this.panel = new Panel(new GridLayout(MAX_LINES, 1));
         this.helpBarMode = helpBarMode;
+        initLines();
+    }
+
+    private void initLines() {
+        for (int i = 0; i < MAX_LINES; i++) {
+            Label line = new Label(" ");
+            line.setForeground(DEFAULT_BLANK_COLOR);
+            panel.add(line);
+            lines.add(line);
+        }
     }
 
 
@@ -267,8 +277,25 @@ public class DialogHelpBar {
     }
 
     private void show(String text, Color color) {
-        label.setText(text);
-        label.setForeground(color);
+        setLines(text, color);
         gd.pack();
+    }
+
+    /**
+     * Renders {@code text} as one {@link Label} per {@code \n}-separated line,
+     */
+    private void setLines(String text, Color color) {
+        String[] textLines = text.split("\n", -1);
+        for (int i = 0; i < MAX_LINES; i++) {
+            String lineText;
+            if (i < MAX_LINES - 1) {
+                lineText = i < textLines.length ? textLines[i] : " ";
+            } else {
+                lineText = i < textLines.length ? String.join(" ", Arrays.asList(textLines).subList(i, textLines.length)) : " ";
+            }
+            Label line = lines.get(i);
+            line.setText(lineText.isEmpty() ? " " : lineText);
+            line.setForeground(color);
+        }
     }
 }

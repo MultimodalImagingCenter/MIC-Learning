@@ -27,49 +27,34 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Scans the selected ROIs to find the earliest frame (along the given axis) containing
-     * at least one usable ROI, and collects the group IDs present on that frame.
+     * Scans the selected ROIs collects the group IDs present on that frame.
      *
-     * @param selectedRois ROIs currently selected in the RoiManager (may be empty, not null)
-     * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
-     * @param totalFrames  total number of frames along that axis
+     * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
      * @return the scan result
      */
-    public RoiSelectionResult extract(Roi[] selectedRois, int axis, int totalFrames) {
-        if (selectedRois == null || selectedRois.length == 0) {
-            return RoiSelectionResult.none();
+    public RoiGroupIdsScanResult scanGroupsIds(Roi[] rois) {
+        if (rois == null || rois.length == 0) {
+            return RoiGroupIdsScanResult.none();
         }
 
-        int minPosition = totalFrames;
-        for (Roi roi : selectedRois) {
-            if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
-            if (position < minPosition) minPosition = position;
-            if (minPosition == 1) break; // earliest possible position
-        }
-
-        List<Roi> roisAtFirstFrame = new ArrayList<>();
         TreeSet<Integer> uniqueGroups = new TreeSet<>();
-        for (Roi roi : selectedRois) {
+        for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
-            if (position == minPosition) {
-                roisAtFirstFrame.add(roi);
-                uniqueGroups.add(roi.getGroup());
-            }
+            uniqueGroups.add(roi.getGroup());
+
         }
 
         if (uniqueGroups.isEmpty()) {
-            return RoiSelectionResult.none();
+            return RoiGroupIdsScanResult.none();
         }
 
         int firstUnusedGroupId = findFirstUnusedGroupId(uniqueGroups);
-        return new RoiSelectionResult(minPosition, roisAtFirstFrame, uniqueGroups, firstUnusedGroupId);
+        return new RoiGroupIdsScanResult(uniqueGroups, firstUnusedGroupId);
     }
 
     /**
      * Finds the smallest group ID in [1, 255] not already used by an existing ROI group,
-     * so it can be assigned to the (single) prompt/class used in this run.
+     * so it can be assigned to the prompt/class used in this run.
      */
     private int findFirstUnusedGroupId(TreeSet<Integer> uniqueGroups) {
         if (uniqueGroups.size() == 1) {
@@ -81,7 +66,7 @@ public class RoiPromptExtractor {
                 return candidate;
             }
         }
-        // All 255 IDs are in use - fall back to 0 (no group)
+        // All 255 IDs are in use : fall back to 0 (no group)
         return 0;
     }
 
@@ -136,14 +121,14 @@ public class RoiPromptExtractor {
     /**
      * Collects the usable ROIs (rectangle or point) on the given frame.
      *
-     * @param selectedRois ROIs currently selected in the RoiManager (may be empty, not null)
+     * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
      * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
      * @param frame        1-indexed frame position to collect ROIs from
      */
-    public List<Roi> getRoisAtFrame(Roi[] selectedRois, int axis, int frame) {
+    public List<Roi> getRoisAtFrame(Roi[] rois, int axis, int frame) {
         List<Roi> result = new ArrayList<>();
-        if (selectedRois == null) return result;
-        for (Roi roi : selectedRois) {
+        if (rois == null) return result;
+        for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
             int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
             if (position == frame) result.add(roi);
@@ -227,6 +212,24 @@ public class RoiPromptExtractor {
         return new GroupedPromptRois(positiveByGroup, negative);
     }
 
+    /**
+     * fingerprint of the ROI state that matters for prompt selection (group + frame per
+     * usable ROI), for detecting whether a live-refresh poll should recompute anything
+     *
+     * @param rois ROIs to fingerprint (typically the full RoiManager content)
+     * @param axis 3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     */
+    public String signature(Roi[] rois, int axis) {
+        StringBuilder sb = new StringBuilder();
+        if (rois == null) return sb.toString();
+        for (Roi roi : rois) {
+            if (!isUsableRoiType(roi)) continue;
+            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            sb.append(roi.getGroup()).append(':').append(position).append(';');
+        }
+        return sb.toString();
+    }
+
     /** label for a group, e.g. "3 (nucleus)" or "3" if the group has no name. */
     public static String formatGroupLabel(int groupId) {
         String name = Roi.getGroupName(groupId);
@@ -234,29 +237,20 @@ public class RoiPromptExtractor {
     }
 
     /** Result of scanning the RoiManager selection for usable ROIs. */
-    public static final class RoiSelectionResult {
-        private final int firstFramePosition; // 1-indexed, matches Roi.getZPosition()/getTPosition()
-        private final List<Roi> roisAtFirstFrame;
+    public static final class RoiGroupIdsScanResult {
         private final TreeSet<Integer> uniqueGroups;
         private final int firstUnusedGroupId;
 
-        private RoiSelectionResult(int firstFramePosition, List<Roi> roisAtFirstFrame,
-                                   TreeSet<Integer> uniqueGroups, int firstUnusedGroupId) {
-            this.firstFramePosition = firstFramePosition;
-            this.roisAtFirstFrame = Collections.unmodifiableList(roisAtFirstFrame);
+        private RoiGroupIdsScanResult(TreeSet<Integer> uniqueGroups, int firstUnusedGroupId) {
             this.uniqueGroups = uniqueGroups;
             this.firstUnusedGroupId = firstUnusedGroupId;
         }
 
-        private static RoiSelectionResult none() {
-            return new RoiSelectionResult(1, Collections.emptyList(), new TreeSet<>(), 1);
+        private static RoiGroupIdsScanResult none() {
+            return new RoiGroupIdsScanResult(new TreeSet<>(), 1);
         }
 
         public boolean hasUsableRois() { return !uniqueGroups.isEmpty(); }
-        public int getFirstFramePosition() { return firstFramePosition; }
-        public List<Roi> getRoisAtFirstFrame() { return roisAtFirstFrame; }
-        public TreeSet<Integer> getUniqueGroups() { return uniqueGroups; }
-        public int getGroupCount() { return uniqueGroups.size(); }
         public int getFirstUnusedGroupId() { return firstUnusedGroupId; }
     }
 
