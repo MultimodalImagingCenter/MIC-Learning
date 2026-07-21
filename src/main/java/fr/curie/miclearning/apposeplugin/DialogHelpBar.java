@@ -57,6 +57,8 @@ public class DialogHelpBar {
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
     private static final int MAX_LINES = 2;
+    private static final Font HELP_BAR_FONT = new Font(Font.SANS_SERIF, Font.ITALIC, 11);
+    private static final int LINE_HEIGHT_PX = 16; // approx height of one HELP_BAR_FONT line
 
     private HelpBarMode helpBarMode;
 
@@ -109,6 +111,7 @@ public class DialogHelpBar {
         for (int i = 0; i < MAX_LINES; i++) {
             Label line = new Label(" ");
             line.setForeground(DEFAULT_BLANK_COLOR);
+            line.setFont(HELP_BAR_FONT);
             panel.add(line);
             lines.add(line);
         }
@@ -118,6 +121,15 @@ public class DialogHelpBar {
     /** The panel to add to the dialog */
     public Panel getPanel() {
         return panel;
+    }
+
+    /**
+     * Caps the help bar's preferred width to {@code width} so that a long hover-hint or
+     * notification can't grow the dialog wider than it already is - call once, right before
+     * {@code gd.showDialog()}, after every other section has been added.
+     */
+    public void lockWidth(int width) {
+        panel.setPreferredSize(new Dimension(width, MAX_LINES * LINE_HEIGHT_PX));
     }
 
     // ==== HELP (hover) ====

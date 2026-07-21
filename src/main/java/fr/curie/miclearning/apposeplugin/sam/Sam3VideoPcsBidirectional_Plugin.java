@@ -10,12 +10,10 @@ import fr.curie.miclearning.tools.detection.MultiFrameDataManager;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.Macro;
-import ij.gui.DialogListener;
-import ij.gui.GenericDialog;
-import ij.gui.NonBlockingGenericDialog;
-import ij.gui.Roi;
+import ij.gui.*;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageConverter;
 import org.apposed.appose.BuildException;
 import org.apposed.appose.TaskException;
 
@@ -45,7 +43,6 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private static final String NO_OPTION_OWNER = "noOptionSelected";
 
     private static final String PREF_LAST_DETECT_MODEL_KEY = "miclearning.lastmodeldir.sam3";
-    private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml";
     private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-video-bidirectional.py";
 
@@ -83,10 +80,12 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             return;
         }
 
-        if (!imp.isRGB()) {
-            IJ.error("Only RGB images are supported.");
-            return;
+        if (!imp.isRGB()){
+            ImageConverter impConverter = new ImageConverter(imp);
+            impConverter.convertToRGB();
         }
+
+        ProgressBar progressBar = IJ.getInstance().getProgressBar();
 
         // define time axis
         final int[] dims = imp.getDimensions();
@@ -258,9 +257,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         gd.addMessage("");
 
         // 3- MODEL PATH
+        gd.addMessage("Model", Sam3Dialogs.SECTION_HEADER_FONT);
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
-        gd.addMessage("Optional: you can use a different model for tracking (sam 2 or sam 3)");
-        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_TRACK_MODEL_KEY);
+        Sam3Dialogs.attachFieldHint(gd, helpBar, (TextField) gd.getStringFields().lastElement(),
+                "Path to the SAM3 model checkpoint (.pt file) used for detection.");
 
         // 4- PROMPT(S)
         // 4.1 first define FRAME RANGE SELECTOR (first / prompt / last)
@@ -268,8 +268,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         frameSelector.setPromptFrame(imp.getCurrentSlice());
 
         // 4.2 create checkboxes and panels
+        gd.addMessage("Prompt", Sam3Dialogs.SECTION_HEADER_FONT);
+
         // 4.2.1 text prompt
-        gd.addMessage("__________");
         gd.addCheckbox("Text prompt", true);
         Checkbox textCB = (Checkbox) gd.getCheckboxes().lastElement();
 
@@ -277,7 +278,6 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         textPromptPanel.add(new Label("Please enter a prompt"));
         TextField textPromptField = new TextField(10);
         textPromptPanel.add(textPromptField);
-        gd.addPanel(textPromptPanel);
 
         helpBar.attachHelp(okButton, () ->
                 (textCB.getState() && textPromptField.getText().trim().isEmpty())
@@ -292,7 +292,6 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         final Choice posChoiceList = new Choice();
         posVisualPromptPanel.add(new Label("Select positive group(s):"));
         posVisualPromptPanel.add(posChoiceList);
-        gd.addPanel(posVisualPromptPanel);
         posVisualPromptPanel.setVisible(false);
 
         // 4.2.3 negative visual prompt(s)
@@ -303,9 +302,21 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         final Choice negChoiceList = new Choice();
         negVisualPromptPanel.add(new Label("Select negative group(s):"));
         negVisualPromptPanel.add(negChoiceList);
-        gd.addPanel(negVisualPromptPanel);
         negVisualPromptPanel.setVisible(false);
 
+        // 4.2.4 lay text prompt and visual prompts out as two side-by-side columns.
+        // Moving these already-created components into new wrapper panels only changes where
+        // they're painted - listeners attached above (gd.addCheckbox, attachHelp, the item
+        // listeners set up below) stay attached to the components themselves.
+        Panel textColumn = buildTopAlignedColumn(textCB, textPromptPanel);
+        Panel visualColumn = buildTopAlignedColumn(posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel);
+
+        // wrapped as a single row (rather than 2 addPanel calls via addToSameRow) so the pair is
+        // centered as one unit, each column kept at its own natural width
+        Panel promptColumns = new Panel(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        promptColumns.add(textColumn);
+        promptColumns.add(visualColumn);
+        gd.addPanel(promptColumns, GridBagConstraints.CENTER, new Insets(5, 0, 0, 0));
 
         // 4.3 Update ROIs, groupID lists and checkbox depending on whether the current prompt frame has usable ROI
 
@@ -432,18 +443,18 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         });
 
         // 5 - RANGE SELECTOR
-        gd.addMessage("__________");
-        gd.addMessage("Frame range");
-        gd.addPanel(frameSelector.getPanel());
+        gd.addMessage("Frame range", Sam3Dialogs.SECTION_HEADER_FONT);
+        gd.addPanel(frameSelector.getPanel(), GridBagConstraints.CENTER, new Insets(5, 0, 0, 0));
 
         // 6- PARAMETERS
-        gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
         detectionParams.setNFrameToProcess(nFrames);
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
+        Sam3Dialogs.addVideoBasicParameterDialog(gd, detectionParams, helpBar);
+        gd.addButton("Advanced parameters...", e ->
+                trackingModelPath = Sam3Dialogs.openVideoAdvancedParametersDialog(detectionParams, trackingModelPath));
 
         // 7- OUTPUTS
-        gd.addMessage("__________");
+        gd.addMessage("Outputs", Sam3Dialogs.SECTION_HEADER_FONT);
         Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
 
         // 8- SHOW DIALOG
@@ -457,6 +468,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             }
         });
         roiPollTimer.start();
+        helpBar.lockWidth(gd.getPreferredSize().width);
         try {
             gd.showDialog();
         } finally {
@@ -473,9 +485,8 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         chosenPromptFrame = frameSelector.getPromptFrame();
         chosenLastFrame = frameSelector.getLastFrame();
 
-        // model path
+        // model path (tracking model path, if any, was already applied by the "Advanced parameters..." button)
         detectionModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_DETECT_MODEL_KEY);
-        trackingModelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_TRACK_MODEL_KEY);
 
         // prompt
         // text prompt
@@ -529,9 +540,33 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         if (positiveGroups == null || positiveGroups.isEmpty()) visualPositivePromptUsed = false;
 
         // detection and tracking parameters
-        Sam3Dialogs.getParameters(gd, detectionParams, DetectionUtils.DetectionMode.VIDEO);
+        Sam3Dialogs.getVideoBasicParameters(gd, detectionParams);
         // outputs
         outputOptions = Sam3Dialogs.getOutputAnswer(gd,DetectionUtils.DetectionMode.VIDEO);
+    }
+
+    /**
+     * Stacks {@code rows} vertically, each sized to its own natural height (rather than
+     * {@link GridLayout}'s equal-share division, which would stretch a short row - e.g. a lone
+     * checkbox - to match a taller neighboring column). A trailing zero-weight-x, weight-y=1
+     * filler absorbs any leftover height so the real rows never stretch.
+     */
+    private static Panel buildTopAlignedColumn(Component... rows) {
+        Panel column = new Panel(new GridBagLayout());
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.anchor = GridBagConstraints.CENTER;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.insets = new Insets(0, 0, 2, 0);
+        for (int i = 0; i < rows.length; i++) {
+            c.gridy = i;
+            column.add(rows[i], c);
+        }
+        c.gridy = rows.length;
+        c.weighty = 1;
+        c.fill = GridBagConstraints.BOTH;
+        column.add(new Panel(), c); // invisible filler
+        return column;
     }
 
     /** Live view of all RoiManager ROIs grouped by frame (always re-reads the manager) */

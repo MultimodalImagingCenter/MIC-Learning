@@ -1,5 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sam;
 
+import fr.curie.miclearning.apposeplugin.DialogHelpBar;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.Prefs;
@@ -9,6 +10,8 @@ import ij.gui.YesNoCancelDialog;
 import ij.plugin.frame.RoiManager;
 import org.apache.commons.lang3.math.NumberUtils;
 
+import java.awt.Font;
+import java.awt.TextField;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -23,6 +26,8 @@ public class Sam3Dialogs {
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
     public static final String ALL_ROIS_GROUPS_TXT = "all selected ROIs (except negative group, if any)";
+    public static final Font SECTION_HEADER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 13);
+    private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
 
     public static DetectionMode askStackMode(int nFrames){
         YesNoCancelDialog gd = new YesNoCancelDialog(IJ.getInstance(),
@@ -38,15 +43,15 @@ public class Sam3Dialogs {
     }
 
     public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
-        String defaultPath = null;
-        String lastPath = Prefs.get(lastModelPrefKey, defaultPath);
-        if (lastPath != null && Files.exists(Paths.get(lastPath))) {
-            defaultPath = lastPath;
-        } else {
-            defaultPath = getDefaultSam3ModelPath();
-        }
+        gd.addFileField("Model_Path:", resolveDefaultModelPath(lastModelPrefKey), 60);
+    }
 
-        gd.addFileField("Model_Path:", defaultPath, 60);
+    private static String resolveDefaultModelPath(String lastModelPrefKey) {
+        String lastPath = Prefs.get(lastModelPrefKey, null);
+        if (lastPath != null && Files.exists(Paths.get(lastPath))) {
+            return lastPath;
+        }
+        return getDefaultSam3ModelPath();
     }
 
     public static String getModelPath(GenericDialog gd, String lastModelPrefKey) {
@@ -161,6 +166,133 @@ public class Sam3Dialogs {
             }
             params.setTrackingBoxIouThreshold(trackingBoxIouThreshold);
         }
+    }
+
+    /**
+     * Attaches {@code hint} to both the label and the input field GenericDialog just added
+     * (i.e. call right after an addNumericField/addStringField/addFileField call, before adding
+     * anything else) - hovering either one shows the hint, same as {@link
+     * fr.curie.miclearning.apposeplugin.FrameRangeSelector}'s own fields do.
+     */
+    public static void attachFieldHint(GenericDialog gd, DialogHelpBar helpBar, TextField field, String hint) {
+        helpBar.attachHelp(gd.getLabel(), hint);
+        helpBar.attachHelp(field, hint);
+    }
+
+    /** Video dialog only: the handful of fields worth tuning without opening "Advanced parameters...". */
+    public static void addVideoBasicParameterDialog(GenericDialog gd, Sam3ModelParameters params, DialogHelpBar helpBar) {
+        gd.addMessage("Detection Settings", SECTION_HEADER_FONT);
+        gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum detection probability (0-1) for a new object to be added.");
+
+        gd.addMessage("Tracking Settings", SECTION_HEADER_FONT);
+        gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Run a full detection every N frames; tracking carries objects through the frames in between.");
+    }
+
+    public static void getVideoBasicParameters(GenericDialog gd, Sam3ModelParameters params) {
+        double confThreshold = gd.getNextNumber();
+        if (confThreshold < 0 || confThreshold > 1) {
+            IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
+            confThreshold = params.getConfidenceThreshold();
+        }
+        params.setConfidenceThreshold(confThreshold);
+
+        int nFramesBtwDetec = (int) gd.getNextNumber();
+        if (nFramesBtwDetec <= 0) {
+            nFramesBtwDetec = params.getNFrameToProcess() + 1;
+        }
+        params.setNFrameBtwDetections(nFramesBtwDetec);
+    }
+
+    /**
+     * Opens a secondary dialog for the rarely-tuned detection/tracking parameters plus the
+     * optional tracking model path, and applies the result directly to {@code params} (and
+     * returns the tracking model path) when OK is pressed - same immediate-apply pattern as
+     * {@link fr.curie.miclearning.apposeplugin.DialogHelpBar#openSettingsDialog()}. Leaves
+     * {@code params} untouched, and returns {@code currentTrackingModelPath} unchanged, if the
+     * dialog is canceled.
+     */
+    public static String openVideoAdvancedParametersDialog(Sam3ModelParameters params, String currentTrackingModelPath) {
+        GenericDialog gd = new GenericDialog("Advanced parameters");
+        DialogHelpBar helpBar = new DialogHelpBar(gd, DialogHelpBar.loadSavedMode());
+        gd.addPanel(helpBar.getPanel());
+
+        gd.addMessage("Tracking model", SECTION_HEADER_FONT);
+        gd.addMessage("Optional: use a different model for tracking (SAM2 or SAM3). Leave it as the detection model to use the same one for both.");
+        addModelPathDialog(gd, PREF_LAST_TRACK_MODEL_KEY);
+        attachFieldHint(gd, helpBar, (TextField) gd.getStringFields().lastElement(),
+                "Path to a SAM2 or SAM3 model checkpoint used for tracking instead of the detection model.");
+
+        gd.addMessage("Detection", SECTION_HEADER_FONT);
+        gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum per-pixel mask score (centered on 0) for a pixel to be included in the mask.");
+        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(), 0);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Masks are downsized to at most this side length (pixels) during detection; lower is faster but coarser.");
+
+        gd.addMessage("Tracking", SECTION_HEADER_FONT);
+        gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum presence score for an already-tracked object to be kept.");
+        gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Remove a tracked object from memory after this many consecutive frames without detecting it. 0 or less: never remove.");
+        gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(), 0);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Masks are downsized to at most this side length (pixels) during tracking; lower is faster but coarser.");
+        gd.addNumericField("Box_iou_threshold", params.getTrackingBoxIouThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum IoU between two frames' bounding boxes to consider them the same object.");
+
+        gd.pack(); // realize the dialog so getPreferredSize() below reflects all the fields just added
+        helpBar.lockWidth(gd.getPreferredSize().width);
+        gd.showDialog();
+        if (gd.wasCanceled()) return currentTrackingModelPath;
+
+        String trackingModelPath = getModelPath(gd, PREF_LAST_TRACK_MODEL_KEY);
+
+        double maskThreshold = gd.getNextNumber(); // no check ?
+        params.setMaskScoreThreshold(maskThreshold);
+
+        int maxSideLengthDetect = (int) gd.getNextNumber();
+        if (maxSideLengthDetect <= 0) {
+            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
+            maxSideLengthDetect = params.getMaxSideLengthDetect();
+        }
+        params.setMaxSideLengthDetect(maxSideLengthDetect);
+
+        double trackThreshold = gd.getNextNumber();
+        if (trackThreshold < 0) {
+            IJ.log("Tracking score threshold must be >0. using default value: " + params.getTrackingScoreThreshold());
+            trackThreshold = params.getTrackingScoreThreshold();
+        }
+        params.setTrackingScoreThreshold(trackThreshold);
+
+        int removeAfterNMissed = (int) gd.getNextNumber();
+        if (removeAfterNMissed <= 0) {
+            IJ.log("Detected objects will never be removed from memory.");
+        }
+        params.setRemoveAfterNMissed(removeAfterNMissed);
+
+        int maxSideLengthTrack = (int) gd.getNextNumber();
+        if (maxSideLengthTrack <= 0) {
+            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthTrack());
+            maxSideLengthTrack = params.getMaxSideLengthTrack();
+        }
+        params.setMaxSideLengthTrack(maxSideLengthTrack);
+
+        double trackingBoxIouThreshold = gd.getNextNumber();
+        if (trackingBoxIouThreshold < 0) {
+            IJ.log("tracking box IoU threshold must be >0. using default value: " + params.getTrackingBoxIouThreshold());
+            trackingBoxIouThreshold = params.getTrackingBoxIouThreshold();
+        }
+        params.setTrackingBoxIouThreshold(trackingBoxIouThreshold);
+
+        return trackingModelPath != null ? trackingModelPath : currentTrackingModelPath;
     }
 
     public static void addOutputDialog(GenericDialog gd, DetectionMode mode) {

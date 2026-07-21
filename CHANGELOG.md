@@ -19,8 +19,10 @@
 - Appose: extracted `DetectionArrayParsing`, shared boxes/masks/scores/ids buffer-parsing
   used by all three plugins' result handling.
 
-### Deprecated
-- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py` (replaced by `muggled_sam` implementation)
+### Removed
+- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py`
+- `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` and `Sam3TextDetectionM_Plugin` and `sam3-detection-image-textprompt-m.py` (replaced by multi-image version).
+- `Sam3BoxDetectionHg_Plugin` and `sam3-detection-image-boxprompt-hg.py`
 
 ## [1.2.0] - 2026-07-01
 ### Added

@@ -71,9 +71,9 @@ public class FrameRangeSelector {
         Button promptBtn = new Button("Use current frame");
         Button lastBtn = new Button("Use current frame");
 
-        firstLabel = addRow(c, 0, "First frame:", firstField, firstBtn);
-        Label promptLabel = addRow(c, 1, "Prompt frame:", promptField, promptBtn);
-        Label lastLabel = addRow(c, 2, "Last frame:", lastField, lastBtn);
+        firstLabel = addColumn(c, 0, "First frame:", firstField, firstBtn);
+        Label promptLabel = addColumn(c, 1, "Prompt frame:", promptField, promptBtn);
+        Label lastLabel = addColumn(c, 2, "Last frame:", lastField, lastBtn);
 
         c.gridx = 0;
         c.gridy = 3;
@@ -131,16 +131,16 @@ public class FrameRangeSelector {
         return panel;
     }
 
-    private Label addRow(GridBagConstraints c, int row, String labelText, TextField field, Button button) {
-        c.gridy = row;
+    private Label addColumn(GridBagConstraints c, int col, String labelText, TextField field, Button button) {
+        c.gridx = col;
         c.gridwidth = 1;
-        c.anchor = GridBagConstraints.WEST;
-        c.gridx = 0;
+        c.anchor = GridBagConstraints.CENTER;
+        c.gridy = 0;
         Label label = new Label(labelText);
         panel.add(label, c);
-        c.gridx = 1;
+        c.gridy = 1;
         panel.add(field, c);
-        c.gridx = 2;
+        c.gridy = 2;
         panel.add(button, c);
         return label;
     }

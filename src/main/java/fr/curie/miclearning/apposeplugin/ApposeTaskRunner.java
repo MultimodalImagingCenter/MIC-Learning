@@ -1,6 +1,7 @@
 package fr.curie.miclearning.apposeplugin;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.IJ;
+import ij.gui.ProgressBar;
 import org.apposed.appose.Appose;
 import org.apposed.appose.BuildException;
 import org.apposed.appose.Environment;
@@ -28,6 +29,7 @@ public class ApposeTaskRunner implements AutoCloseable {
     private final String scriptResourcePath;
     private final String envTomlResourcePath;
     private Environment environment;
+    ProgressBar progressBar;
 
     public ApposeTaskRunner(String scriptResourcePath, String envTomlResourcePath) {
         this.scriptResourcePath = scriptResourcePath;
@@ -36,6 +38,7 @@ public class ApposeTaskRunner implements AutoCloseable {
 
     /** Loads the environment TOML and builds the pixi environment. Call once before {@link #runBlocking}. */
     public void initialize() throws IOException, BuildException {
+        progressBar = IJ.getInstance().getProgressBar();
         String envTomlContent = ApposeUtils.getResourceAsString(envTomlResourcePath);
         if (envTomlContent == null) {
             throw new IOException("Unable to load environment resource: " + envTomlResourcePath);
@@ -94,6 +97,7 @@ public class ApposeTaskRunner implements AutoCloseable {
                             Map<String, Object> info = event.info;
                             if (event.current > 0 && event.maximum >0)
                                 System.out.println(" python task: " + event.current + "/" + event.maximum);
+                            progressBar.show(Math.toIntExact(event.current), Math.toIntExact(event.maximum));
                             if (info != null) {
                                 resultsQueue.offer(info);
                             }
