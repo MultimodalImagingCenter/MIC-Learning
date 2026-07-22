@@ -264,7 +264,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
         Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
 
-        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes", String.valueOf(true));
+        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_box_rois", String.valueOf(true));
         if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois", String.valueOf(true));
         if (outputOptions.createStackMask) Recorder.recordOption("create_stack_mask", String.valueOf(true));
         if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));

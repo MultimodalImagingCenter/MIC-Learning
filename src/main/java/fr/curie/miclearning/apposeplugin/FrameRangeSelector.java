@@ -3,6 +3,8 @@ package fr.curie.miclearning.apposeplugin;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
 
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.awt.Button;
@@ -99,8 +101,7 @@ public class FrameRangeSelector {
         addCommitListener(promptField, this::onPromptChanged);
         addCommitListener(lastField, this::onLastChanged);
 
-        // live image feedback as the user types, ahead of the commit (Enter/focus-lost) that
-        // does the real validation/clamping - so the image doesn't lag one field behind
+        // live image feedback as the user types
         addLiveNavigateListener(firstField);
         addLiveNavigateListener(promptField);
         addLiveNavigateListener(lastField);
@@ -176,6 +177,17 @@ public class FrameRangeSelector {
                 navigateImageTo(clamp(Integer.parseInt(field.getText().trim())));
             } catch (NumberFormatException ignored) {
                 // incomplete/invalid input while typing - leave the image where it is
+            }
+        });
+
+        field.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                try {
+                    navigateImageTo(clamp(Integer.parseInt(field.getText().trim())));
+                } catch (NumberFormatException ignored) {
+                    // incomplete/invalid input while typing - leave the image where it is
+                }
             }
         });
     }

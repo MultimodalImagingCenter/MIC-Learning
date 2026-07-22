@@ -12,17 +12,18 @@ import ij.ImagePlus;
 import ij.Macro;
 import ij.gui.*;
 import ij.plugin.PlugIn;
+import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageConverter;
 import org.apposed.appose.BuildException;
 import org.apposed.appose.TaskException;
 
 import java.awt.*;
-import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 import javax.swing.Timer;
 
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.*;
@@ -84,8 +85,6 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             ImageConverter impConverter = new ImageConverter(imp);
             impConverter.convertToRGB();
         }
-
-        ProgressBar progressBar = IJ.getInstance().getProgressBar();
 
         // define time axis
         final int[] dims = imp.getDimensions();
@@ -186,6 +185,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
     private void runSam3(Sam3VideoRunConfig config, MultiFrameDataManager mfdManager, long startTime) {
         // create queue and thread to process results
+        IJ.showStatus("sam3: environment initialization");
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
             Thread t = new Thread(r, "sam3-result-consumer");
@@ -202,12 +202,16 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             Future<Void> consumerResult = executor.submit(consumer);
 
             IJ.log("Executing python script...");
+            IJ.showStatus("sam3: executing python script");
+            IJ.showProgress(0,100);
+
             runner.runBlocking(config, imp, resultsQueue);
 
             // Wait for the consumer to finish draining the queue before generating outputs
             consumerResult.get();
 
             IJ.log(" --- Generating outputs... ");
+            IJ.showStatus("sam3: generating outputs");
             Detection3dUtils.generate3dOutputs(imp, mfdManager, config.getOutputOptions());
 
         } catch (IOException | BuildException e) {
@@ -235,6 +239,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             long endTime = System.nanoTime();
             double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
             IJ.log(" --- SAM3 segmentation and detection complete. Total time= " + totalTimeInSeconds + " sec ---");
+            IJ.showStatus("sam3: segmentation complete");
         }
     }
 
@@ -244,20 +249,13 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         // 1- dynamic HELP SECTION (at the top ? or put at bottom ?)
         DialogHelpBar helpBar = new DialogHelpBar(gd, DialogHelpBar.loadSavedMode());
+        gd.addButton("Settings", e -> helpBar.openSettingsDialog()); // only helpbar setting for, other settings could be added in the future
         gd.addPanel(helpBar.getPanel());
-
         final Button okButton = gd.getButtons()[0]; // ok button is the first one
-
-        // 2- INSTRUCTIONS to download model
-        ActionListener modelInstructionAction = e -> {
-            Sam3Dialogs.addDownloadInstruction();
-        };
-        gd.addButton("Instructions to download SAM3 model", modelInstructionAction);
-        gd.addButton("Help bar settings...", e -> helpBar.openSettingsDialog());
-        gd.addMessage("");
 
         // 3- MODEL PATH
         gd.addMessage("Model", Sam3Dialogs.SECTION_HEADER_FONT);
+        gd.addButton("Instructions to download SAM3 model", e ->Sam3Dialogs.addDownloadInstruction());
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
         Sam3Dialogs.attachFieldHint(gd, helpBar, (TextField) gd.getStringFields().lastElement(),
                 "Path to the SAM3 model checkpoint (.pt file) used for detection.");
@@ -274,10 +272,18 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         gd.addCheckbox("Text prompt", true);
         Checkbox textCB = (Checkbox) gd.getCheckboxes().lastElement();
 
-        Panel textPromptPanel = new Panel(new GridLayout(2, 1));
+        final Panel textPromptPanel = new Panel(new GridLayout(2, 1));
         textPromptPanel.add(new Label("Please enter a prompt"));
         TextField textPromptField = new TextField(10);
         textPromptPanel.add(textPromptField);
+
+        Panel textEmptyCard = new Panel();
+
+        Panel textCardHolder = new Panel(new CardLayout());
+        textCardHolder.add(textEmptyCard, "EMPTY");
+        textCardHolder.add(textPromptPanel, "CONTENT");
+        CardLayout textCardLayout = (CardLayout) textCardHolder.getLayout();
+        textCardLayout.show(textCardHolder, "CONTENT");
 
         helpBar.attachHelp(okButton, () ->
                 (textCB.getState() && textPromptField.getText().trim().isEmpty())
@@ -292,7 +298,13 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         final Choice posChoiceList = new Choice();
         posVisualPromptPanel.add(new Label("Select positive group(s):"));
         posVisualPromptPanel.add(posChoiceList);
-        posVisualPromptPanel.setVisible(false);
+
+        Panel posEmptyCard = new Panel();
+        final Panel posCardHolder = new Panel(new CardLayout());
+        posCardHolder.add(posEmptyCard, "EMPTY");
+        posCardHolder.add(posVisualPromptPanel, "CONTENT");
+        final CardLayout posCardLayout = (CardLayout) posCardHolder.getLayout();
+        posCardLayout.show(posCardHolder, "EMPTY");
 
         // 4.2.3 negative visual prompt(s)
         gd.addCheckbox("Negative visual prompt(s)", false);
@@ -302,22 +314,30 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         final Choice negChoiceList = new Choice();
         negVisualPromptPanel.add(new Label("Select negative group(s):"));
         negVisualPromptPanel.add(negChoiceList);
-        negVisualPromptPanel.setVisible(false);
 
-        // 4.2.4 lay text prompt and visual prompts out as two side-by-side columns.
-        // Moving these already-created components into new wrapper panels only changes where
-        // they're painted - listeners attached above (gd.addCheckbox, attachHelp, the item
-        // listeners set up below) stay attached to the components themselves.
-        Panel textColumn = buildTopAlignedColumn(textCB, textPromptPanel);
-        Panel visualColumn = buildTopAlignedColumn(posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel);
+        Panel negEmptyCard = new Panel();
+        final Panel negCardHolder = new Panel(new CardLayout());
+        negCardHolder.add(negEmptyCard, "EMPTY");
+        negCardHolder.add(negVisualPromptPanel, "CONTENT");
+        final CardLayout negCardLayout = (CardLayout) negCardHolder.getLayout();
+        negCardLayout.show(negCardHolder, "EMPTY");
 
-        // wrapped as a single row (rather than 2 addPanel calls via addToSameRow) so the pair is
-        // centered as one unit, each column kept at its own natural width
-        Panel promptColumns = new Panel(new FlowLayout(FlowLayout.CENTER, 20, 0));
-        promptColumns.add(textColumn);
-        promptColumns.add(visualColumn);
-        gd.addPanel(promptColumns, GridBagConstraints.CENTER, new Insets(5, 0, 0, 0));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.insets = new Insets(5, 10, 5, 10);
 
+        Panel column1 = addColumn(gbc, textCB, textCardHolder);
+        Panel column2 = addColumn(gbc, posVisualPromptCB, posCardHolder);
+        Panel column3 = addColumn(gbc, negVisualPromptCB, negCardHolder);
+
+        Panel twoColumnsPanel = new Panel(new GridLayout(1, 3));
+        twoColumnsPanel.add(column1);
+        twoColumnsPanel.add(column2);
+        twoColumnsPanel.add(column3);
+
+        gd.addPanel(twoColumnsPanel);
         // 4.3 Update ROIs, groupID lists and checkbox depending on whether the current prompt frame has usable ROI
 
         // 4.3.1 "remembered" selections of group IDs
@@ -361,9 +381,9 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         });
 
         // 4.3.2 adapt help text depending on whether ROI(s) are present on the current prompt frame
-        final String requireRoiHint = "No usable ROI on the current prompt frame \n" +
-                "add point/box ROI(s) " +
-                "or pick a different prompt frame, to enable visual prompts.";
+        final String requireRoiHint = "No usable ROI on the current prompt frame. \n" +
+                "To enable visual prompts, add point/box ROI(s) to the ROI manager " +
+                "or pick a different prompt frame.";
         helpBar.attachHelp(posVisualPromptCB, () ->
                 currentRoisByFrame().getOrDefault(frameSelector.getPromptFrame(), Collections.emptyList()).isEmpty()
                         ? new DialogHelpBar.Hint( requireRoiHint, DEFAULT_INSTRUCTION_COLOR)
@@ -391,7 +411,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             if (!anyGroupAtFrame) {
                 if (posVisualPromptCB.getState() || negVisualPromptCB.getState()) {
                     helpBar.showInfo(ROI_AVAILABILITY_OWNER, "Prompt frame " + frame
-                            + " has no usable ROI - visual prompts turned off.", DEFAULT_NOTIFICATION_COLOR);
+                            + " has no usable ROI - visual prompts are turned off.", DEFAULT_INSTRUCTION_COLOR);
                 }
                 posVisualPromptCB.setState(false);
                 rememberedPositiveSelection[0] = NONE_SELECTION;
@@ -401,14 +421,14 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
                 if (posVisualPromptCB.getState()) { // veut un ROI positif
                     if (posMismatch) { // mais il y a mismatch -> visual prompt turned off + rememberedPositiveSelection reset
                         helpBar.showInfo(ROI_AVAILABILITY_OWNER, "The previously selected positive ROI group isn't on frame "
-                                + frame + " - positive visual prompt turned off", DEFAULT_NOTIFICATION_COLOR);
+                                + frame + " - positive visual prompt are turned off", DEFAULT_NOTIFICATION_COLOR);
                         posVisualPromptCB.setState(false);
                         rememberedPositiveSelection[0] = NONE_SELECTION;
                     }
                 }
                 if (negMismatch && negVisualPromptCB.getState()) {
                     helpBar.showInfo(ROI_AVAILABILITY_OWNER, "The previously selected negative ROI group isn't on frame "
-                            + frame + " - negative visual prompt turned off", DEFAULT_NOTIFICATION_COLOR);
+                            + frame + " - negative visual prompt are turned off", DEFAULT_NOTIFICATION_COLOR);
                     negVisualPromptCB.setState(false);
                     rememberedNegativeSelection[0] = NONE_SELECTION;
                 }
@@ -421,7 +441,10 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
             posVisualPromptCB.setForeground(groupColor);
             negVisualPromptCB.setForeground(groupColor);
 
-            checkCBs(textCB, textPromptPanel, posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel, helpBar);
+            checkCBs(textCB, textCardLayout,  textCardHolder,
+                    posVisualPromptCB, posCardLayout,  posCardHolder,
+                    negVisualPromptCB, negCardLayout,  negCardHolder,
+                    helpBar);
             gd.pack();
         };
 
@@ -429,13 +452,15 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         updateVisualPromptState.run(); // initial state, based on the default prompt frame set above
 
         // 4.4 update panels visibility
-
         gd.addDialogListener(new DialogListener() {
             @Override
             public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
                 updateVisualPromptState.run();
 
-               checkCBs(textCB, textPromptPanel, posVisualPromptCB, posVisualPromptPanel, negVisualPromptCB, negVisualPromptPanel, helpBar);
+               checkCBs(textCB, textCardLayout,  textCardHolder,
+                       posVisualPromptCB, posCardLayout,  posCardHolder,
+                       negVisualPromptCB, negCardLayout,  negCardHolder,
+                       helpBar);
 
                 gd.pack();
                 return true;
@@ -446,16 +471,16 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         gd.addMessage("Frame range", Sam3Dialogs.SECTION_HEADER_FONT);
         gd.addPanel(frameSelector.getPanel(), GridBagConstraints.CENTER, new Insets(5, 0, 0, 0));
 
-        // 6- PARAMETERS
+        // 6- OUTPUTS
+        gd.addMessage("Outputs", Sam3Dialogs.SECTION_HEADER_FONT);
+        Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
+        gd.addMessage("");
+        // 7- PARAMETERS
         detectionParams = new Sam3ModelParameters();
         detectionParams.setNFrameToProcess(nFrames);
         Sam3Dialogs.addVideoBasicParameterDialog(gd, detectionParams, helpBar);
         gd.addButton("Advanced parameters...", e ->
                 trackingModelPath = Sam3Dialogs.openVideoAdvancedParametersDialog(detectionParams, trackingModelPath));
-
-        // 7- OUTPUTS
-        gd.addMessage("Outputs", Sam3Dialogs.SECTION_HEADER_FONT);
-        Sam3Dialogs.addOutputDialog(gd, DetectionUtils.DetectionMode.VIDEO);
 
         // 8- SHOW DIALOG
         // poll the RoiManager every 0.5 sec while the dialog is open
@@ -539,34 +564,12 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
         if (positiveGroups == null || positiveGroups.isEmpty()) visualPositivePromptUsed = false;
 
-        // detection and tracking parameters
-        Sam3Dialogs.getVideoBasicParameters(gd, detectionParams);
         // outputs
         outputOptions = Sam3Dialogs.getOutputAnswer(gd,DetectionUtils.DetectionMode.VIDEO);
-    }
 
-    /**
-     * Stacks {@code rows} vertically, each sized to its own natural height (rather than
-     * {@link GridLayout}'s equal-share division, which would stretch a short row - e.g. a lone
-     * checkbox - to match a taller neighboring column). A trailing zero-weight-x, weight-y=1
-     * filler absorbs any leftover height so the real rows never stretch.
-     */
-    private static Panel buildTopAlignedColumn(Component... rows) {
-        Panel column = new Panel(new GridBagLayout());
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
-        c.anchor = GridBagConstraints.CENTER;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        c.insets = new Insets(0, 0, 2, 0);
-        for (int i = 0; i < rows.length; i++) {
-            c.gridy = i;
-            column.add(rows[i], c);
-        }
-        c.gridy = rows.length;
-        c.weighty = 1;
-        c.fill = GridBagConstraints.BOTH;
-        column.add(new Panel(), c); // invisible filler
-        return column;
+        // detection and tracking parameters
+        Sam3Dialogs.getVideoBasicParameters(gd, detectionParams);
+
     }
 
     /** Live view of all RoiManager ROIs grouped by frame (always re-reads the manager) */
@@ -574,22 +577,42 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         return roiPromptExtractor.groupRoisByFrame(getRoiManager().getRoisAsArray(), axis);
     }
 
-    private void checkCBs(Checkbox textCB, Panel textPromptPanel, Checkbox posVisualPromptCB, Panel posVisualPromptPanel,
-                          Checkbox negVisualPromptCB, Panel negVisualPromptPanel, DialogHelpBar helpBar) {
+    private void checkCBs(Checkbox textCB, CardLayout textCardLayout, Panel textCardHolder,
+                          Checkbox posVisualPromptCB, CardLayout posCardLayout, Panel posCardHolder,
+                          Checkbox negVisualPromptCB, CardLayout negCardLayout, Panel negCardHolder,
+                          DialogHelpBar helpBar) {
         boolean textChecked = textCB.getState();
         boolean visualChecked = posVisualPromptCB.getState();
         boolean negativeChecked = negVisualPromptCB.getState();
 
-        textPromptPanel.setVisible(textChecked);
-        posVisualPromptPanel.setVisible(visualChecked);
-        negVisualPromptPanel.setVisible(negativeChecked);
+        textCardLayout.show(textCardHolder, textChecked ? "CONTENT" : "EMPTY");
+        posCardLayout.show(posCardHolder, visualChecked ? "CONTENT" : "EMPTY");
+        negCardLayout.show(negCardHolder, negativeChecked ? "CONTENT" : "EMPTY");
 
         // if no option selected (no box checked) : warning
         if (!textChecked && !visualChecked) {
-            helpBar.warn(NO_OPTION_OWNER, "Please select at least one option to perform prediction.");
+            helpBar.warn(NO_OPTION_OWNER, "Please select at least one positive prompt option (either text or visual) to perform prediction.");
         } else {
             helpBar.clearWarning(NO_OPTION_OWNER);
         }
+    }
+
+    private Panel addColumn(GridBagConstraints gbc, Checkbox cb, Panel cardHolder){
+        Panel column = new Panel(new GridBagLayout());
+        GridBagConstraints gc = (GridBagConstraints) gbc.clone();
+        gc.gridy = 0; gc.weighty = 1; gc.fill = GridBagConstraints.VERTICAL;
+        column.add(new Panel(), gc); // top filler
+        gc = (GridBagConstraints) gbc.clone();
+        gc.gridy = 1;
+        column.add(cb, gc);
+        gc = (GridBagConstraints) gbc.clone();
+        gc.gridy = 2;
+        column.add(cardHolder, gc);
+        gc = (GridBagConstraints) gbc.clone();
+        gc.gridy = 3; gc.weighty = 1; gc.fill = GridBagConstraints.VERTICAL;
+        column.add(new Panel(), gc); // bottom filer
+
+        return column;
     }
 
     /**
@@ -601,7 +624,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
      * @param allowAll whether an "ALL_ROIS_GROUPS_TXT" entry should be offered when there's more
      *                 than one group (true for the positive list, false for the negative one)
      * @return {@code true} if the user had a real remembered choice (a specific group, or ALL)
-     *         that is no longer available on this frame i.e. the caller should warn/uncheck.
+     *         that is no longer available on this frame
      *         {@code false} if there was nothing to remember yet, or the remembered choice is
      *         still honored.
      */
@@ -647,11 +670,117 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
 
     private void parseMacro() {
+        IJ.log("\nSAM3 pcs on macro");
+        String options = Macro.getOptions();
 
+        // model path(s)
+        detectionModelPath = Macro.getValue(options, "model_path", null);
+        if (detectionModelPath == null || detectionModelPath.trim().isEmpty()) {
+            IJ.log("No model path. Closing plug-in.\n");
+            IJ.error("No model path specified.");
+            return;
+        }
+        trackingModelPath = Macro.getValue(options, "tracking_model_path", null);
+        if (trackingModelPath != null && trackingModelPath.trim().isEmpty()) trackingModelPath = null;
+
+        // text prompt
+        textPrompt = Macro.getValue(options, "text_prompt", "");
+        textPromptUsed = !textPrompt.trim().isEmpty();
+        if (!textPromptUsed) textPrompt = "visual";
+
+        // visual prompt - positive group(s), comma-separated RoiManager group IDs
+        String positiveGroupIds = Macro.getValue(options, "positive_group_ids", "");
+        positiveGroups = new ArrayList<>();
+        if (!positiveGroupIds.trim().isEmpty()) {
+            for (String id : positiveGroupIds.split(",")) {
+                positiveGroups.add(Integer.parseInt(id.trim()));
+            }
+        }
+        visualPositivePromptUsed = !positiveGroups.isEmpty();
+
+        // visual prompt - negative group
+        negativeGroup = Integer.parseInt(Macro.getValue(options, "negative_group_id", "-1"));
+        negativePromptUsed = negativeGroup != -1;
+
+        // frame range (1-indexed), same defaults as the dialog: prompt = current slice,
+        // first = prompt (non-bidirectional), last = last frame of the video
+        chosenPromptFrame = clampFrame(Integer.parseInt(Macro.getValue(options, "prompt_frame", String.valueOf(imp.getCurrentSlice()))));
+        chosenLastFrame = Math.max(chosenPromptFrame, clampFrame(Integer.parseInt(Macro.getValue(options, "last_frame", String.valueOf(nFrames)))));
+        chosenFirstFrame = Math.min(chosenPromptFrame, clampFrame(Integer.parseInt(Macro.getValue(options, "first_frame", String.valueOf(chosenPromptFrame)))));
+
+        // detection/tracking parameters
+        detectionParams = new Sam3ModelParameters();
+        double confidenceThreshold = Double.parseDouble(Macro.getValue(options, "confidence", String.valueOf(detectionParams.getConfidenceThreshold())));
+        if (confidenceThreshold < 0 || confidenceThreshold > 1) confidenceThreshold = detectionParams.getConfidenceThreshold();
+        detectionParams.setConfidenceThreshold(confidenceThreshold);
+
+        double maskThreshold = Double.parseDouble(Macro.getValue(options, "mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold())));
+        detectionParams.setMaskScoreThreshold(maskThreshold);
+
+        int maxSideLengthDetect = Integer.parseInt(Macro.getValue(options, "max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect())));
+        if (maxSideLengthDetect <= 0) maxSideLengthDetect = detectionParams.getMaxSideLengthDetect();
+        detectionParams.setMaxSideLengthDetect(maxSideLengthDetect);
+
+        int maxSideLengthTrack = Integer.parseInt(Macro.getValue(options, "max_side_length_track", String.valueOf(detectionParams.getMaxSideLengthTrack())));
+        if (maxSideLengthTrack <= 0) maxSideLengthTrack = detectionParams.getMaxSideLengthTrack();
+        detectionParams.setMaxSideLengthTrack(maxSideLengthTrack);
+
+        int nFramesBtwDetec = Integer.parseInt(Macro.getValue(options, "frames_between_detections", String.valueOf(detectionParams.getNFrameBtwDetections())));
+        if (nFramesBtwDetec <= 0) nFramesBtwDetec = chosenLastFrame - chosenFirstFrame + 1;
+        detectionParams.setNFrameBtwDetections(nFramesBtwDetec);
+
+        double trackingScoreThreshold = Double.parseDouble(Macro.getValue(options, "tracking_score_threshold", String.valueOf(detectionParams.getTrackingScoreThreshold())));
+        detectionParams.setTrackingScoreThreshold(trackingScoreThreshold);
+
+        int removeAfterNMissed = Integer.parseInt(Macro.getValue(options, "remove_after_n_missed", String.valueOf(detectionParams.getRemoveAfterNMissed())));
+        detectionParams.setRemoveAfterNMissed(removeAfterNMissed);
+
+        double boxIouThreshold = Double.parseDouble(Macro.getValue(options, "box_iou_threshold", String.valueOf(detectionParams.getTrackingBoxIouThreshold())));
+        detectionParams.setTrackingBoxIouThreshold(boxIouThreshold);
+
+        // outputs
+        outputOptions = new DetectionUtils.OutputOptions();
+        outputOptions.addToRoiManagerBB = Boolean.parseBoolean(Macro.getValue(options, "add_box_rois", "false"));
+        outputOptions.addToRoiManagerShapes = Boolean.parseBoolean(Macro.getValue(options, "add_shape_rois", "false"));
+        outputOptions.deletePreviousRoi = false;
+        outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false"));
+    }
+
+    private int clampFrame(int value) {
+        return Math.max(1, Math.min(nFrames, value));
     }
 
     private void recordInMacro() {
+        Recorder.setCommand("SAM3 Video PCS");
+        Recorder.recordOption("model_path", detectionModelPath);
+        if (trackingModelPath != null && !trackingModelPath.trim().isEmpty()) {
+            Recorder.recordOption("tracking_model_path", trackingModelPath);
+        }
 
+        if (textPromptUsed) Recorder.recordOption("text_prompt", textPrompt);
+
+        if (visualPositivePromptUsed) {
+            String positiveGroupIds = positiveGroups.stream().map(String::valueOf).collect(Collectors.joining(","));
+            Recorder.recordOption("positive_group_ids", positiveGroupIds);
+        }
+        if (negativePromptUsed) Recorder.recordOption("negative_group_id", String.valueOf(negativeGroup));
+
+        Recorder.recordOption("first_frame", String.valueOf(chosenFirstFrame));
+        Recorder.recordOption("prompt_frame", String.valueOf(chosenPromptFrame));
+        Recorder.recordOption("last_frame", String.valueOf(chosenLastFrame));
+
+        Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
+        Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
+        Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
+        Recorder.recordOption("max_side_length_track", String.valueOf(detectionParams.getMaxSideLengthTrack()));
+        Recorder.recordOption("frames_between_detections", String.valueOf(detectionParams.getNFrameBtwDetections()));
+        Recorder.recordOption("tracking_score_threshold", String.valueOf(detectionParams.getTrackingScoreThreshold()));
+        Recorder.recordOption("remove_after_n_missed", String.valueOf(detectionParams.getRemoveAfterNMissed()));
+        Recorder.recordOption("box_iou_threshold", String.valueOf(detectionParams.getTrackingBoxIouThreshold()));
+
+        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_box_rois", String.valueOf(true));
+        if (outputOptions.addToRoiManagerShapes) Recorder.recordOption("add_shape_rois", String.valueOf(true));
+        if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
     }
 
     private void printParameters(Sam3VideoRunConfig config) {

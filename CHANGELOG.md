@@ -1,7 +1,9 @@
 # Changelog
 ## [1.3.0] - current
 ### Added
-- SAM3 plugins for pcs on video : handle visual (positive and negative) + text prompt to define the same concept
+- SAM3 plugins for pcs on video : 
+  - handle visual (positive and negative) + text prompt to define the same concept
+  - interactive frame selection & ROI selection
 
 ### Changed
 - SAM3 video pcs plugin: 

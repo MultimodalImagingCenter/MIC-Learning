@@ -275,7 +275,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
         Recorder.recordOption("max_side_length", String.valueOf(detectionParams.getMaxSideLengthDetect()));
 
-        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_bounding_boxes");
+        if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_box_rois");
         if (outputOptions.addToRoiManagerShapes)Recorder.recordOption("add_shape_rois");
         if (outputOptions.createStackMask && stackMode == DetectionMode.SINGLE_IMAGE) Recorder.recordOption("create_stack_mask");
         if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask");

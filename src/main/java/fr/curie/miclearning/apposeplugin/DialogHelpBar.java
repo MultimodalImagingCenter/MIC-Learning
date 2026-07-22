@@ -46,19 +46,18 @@ public class DialogHelpBar {
         }
     }
 
-    public static final Color DEFAULT_BLANK_COLOR = Color.BLUE;
-    public static final Color DEFAULT_HELP_COLOR = Color.BLUE;
-    public static final Color DEFAULT_INSTRUCTION_COLOR = Color.ORANGE; // explain why option is disabled and how to enable
-    public static final Color DEFAULT_NOTIFICATION_COLOR = Color.MAGENTA; // FYIs e.g. when "prompt frame moved to N"
-    public static final Color DEFAULT_WARNING_COLOR = Color.RED;
+    public static final Color DEFAULT_BLANK_COLOR = Color.decode("#4248e1");
+    public static final Color DEFAULT_HELP_COLOR = Color.decode("#4248e1");;
+    public static final Color DEFAULT_INSTRUCTION_COLOR = Color.decode("#914fe4"); // explain why option is disabled and how to enable
+    public static final Color DEFAULT_NOTIFICATION_COLOR = Color.decode("#f4634f"); // FYIs e.g. when "prompt frame moved to N"
+    public static final Color DEFAULT_WARNING_COLOR = Color.decode("#e44f4f");
     private static final int DEFAULT_INFO_DURATION_MS = 3700;
-
     private static final String PREF_MODE_KEY = "miclearning.helpbarmode";
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
     private static final int MAX_LINES = 2;
-    private static final Font HELP_BAR_FONT = new Font(Font.SANS_SERIF, Font.ITALIC, 11);
-    private static final int LINE_HEIGHT_PX = 16; // approx height of one HELP_BAR_FONT line
+    private static final int DEFAULT_BASE_FONT_SIZE = 12; // fallback
+    private static final float HELP_BAR_FONT_SCALE = 0.8f; // relative to the dialog's own  font
 
     private HelpBarMode helpBarMode;
 
@@ -68,7 +67,7 @@ public class DialogHelpBar {
         renderCurrent();
     }
 
-    /** Reads the last help-bar level chosen via {@link #openSettingsDialog()}, if any. */
+    /** Reads the last help-bar level chosen via {@link #openSettingsDialog()} */
     public static HelpBarMode loadSavedMode() {
         String saved = Prefs.get(PREF_MODE_KEY, DEFAULT_MODE.name());
         try {
@@ -81,6 +80,9 @@ public class DialogHelpBar {
     private final GenericDialog gd;
     private final List<Label> lines = new ArrayList<>();
     private final Panel panel;
+    private final Font helpBarFont;
+    private final Font warningFont;
+    private final int lineHeightPx;
 
     private boolean hovering = false;
 
@@ -94,16 +96,22 @@ public class DialogHelpBar {
     private Color warningColor;
 
     public DialogHelpBar(GenericDialog gd) {
-        this.gd = gd;
-        this.panel = new Panel(new GridLayout(MAX_LINES, 1));
-        this.helpBarMode = HelpBarMode.HELP;
-        initLines();
+        this(gd, HelpBarMode.HELP);
     }
 
     public DialogHelpBar(GenericDialog gd, HelpBarMode helpBarMode) {
         this.gd = gd;
         this.panel = new Panel(new GridLayout(MAX_LINES, 1));
         this.helpBarMode = helpBarMode;
+
+        // define hel bar size and font size so deriving from GuiScale
+        Font dialogFont = gd.getFont();
+        float baseSize = dialogFont != null ? dialogFont.getSize2D() : DEFAULT_BASE_FONT_SIZE;
+        int helpBarSize = Math.round(baseSize * HELP_BAR_FONT_SCALE);
+        this.helpBarFont = new Font(Font.SANS_SERIF, Font.PLAIN, helpBarSize);
+        this.warningFont = new Font(Font.SANS_SERIF, Font.BOLD, helpBarSize);
+        this.lineHeightPx = Toolkit.getDefaultToolkit().getFontMetrics(helpBarFont).getHeight(); // deprecated, but easiest solution I found ?
+
         initLines();
     }
 
@@ -111,7 +119,7 @@ public class DialogHelpBar {
         for (int i = 0; i < MAX_LINES; i++) {
             Label line = new Label(" ");
             line.setForeground(DEFAULT_BLANK_COLOR);
-            line.setFont(HELP_BAR_FONT);
+            line.setFont(helpBarFont);
             panel.add(line);
             lines.add(line);
         }
@@ -124,12 +132,10 @@ public class DialogHelpBar {
     }
 
     /**
-     * Caps the help bar's preferred width to {@code width} so that a long hover-hint or
-     * notification can't grow the dialog wider than it already is - call once, right before
-     * {@code gd.showDialog()}, after every other section has been added.
+     * Caps the help bar's preferred width to {@code width}
      */
     public void lockWidth(int width) {
-        panel.setPreferredSize(new Dimension(width, MAX_LINES * LINE_HEIGHT_PX));
+        panel.setPreferredSize(new Dimension(width, MAX_LINES * lineHeightPx));
     }
 
     // ==== HELP (hover) ====
@@ -271,7 +277,6 @@ public class DialogHelpBar {
     }
 
     // ==== rendering ====
-
     /** Redraws the label from current state */
     private void renderCurrent() {
 
@@ -282,21 +287,24 @@ public class DialogHelpBar {
             return; // a hover hint is currently displayed - don't touch it
         }
         else if (warningText != null) {
-            show(warningText, warningColor);
+            show(warningText, warningColor, warningFont);
         } else {
             show(" ", DEFAULT_BLANK_COLOR);
         }
     }
 
-    private void show(String text, Color color) {
-        setLines(text, color);
+    private void show(String text, Color color, Font font) {
+        setLines(text, color, font);
         gd.pack();
+    }
+    private void show(String text, Color color) {
+        show(text, color, helpBarFont);
     }
 
     /**
      * Renders {@code text} as one {@link Label} per {@code \n}-separated line,
      */
-    private void setLines(String text, Color color) {
+    private void setLines(String text, Color color, Font font) {
         String[] textLines = text.split("\n", -1);
         for (int i = 0; i < MAX_LINES; i++) {
             String lineText;
@@ -307,6 +315,7 @@ public class DialogHelpBar {
             }
             Label line = lines.get(i);
             line.setText(lineText.isEmpty() ? " " : lineText);
+            line.setFont(font);
             line.setForeground(color);
         }
     }
