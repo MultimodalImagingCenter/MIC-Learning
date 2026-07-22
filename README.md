@@ -5,16 +5,24 @@ Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/url
 
 ## Getting started
 ### Prerequisites
-* **ImageJ or Fiji:** Download it [here](https://imagej.net/ij/download.html).
-* **Java 8:** Standard for Fiji.
+* **ImageJ or Fiji:** Download it [here](https://imagej.net/software/fiji/downloads).
+* **Java 8:** Standard for Fiji, bundled with all Fiji Stable versions (except portable one)
     * *Note: If you wish to use TensorFlow models, you must run ImageJ/Fiji with Java 11.*
 
 ### Installation
+#### From Fiji Update Site
+1. In Fiji, go to `Help>Update...` then to `Manage Update Sites` in the window that opens. 
+2. Use the search bar to find the plugin named `MIC-learning` and check the left side box next to the plug-in name.
+3. Click on `Apply and Close` and then on `Apply Changes`.
+4. Restart Fiji. You will find the plugin under `Plugins > MIC-Learning`.
+
+#### Build from source
+To build the repository from source you will need [Maven](https://maven.apache.org) and Java JDK 8 install on your system and available in your PATH.
 1. **Download and Build:** Clone the repository and compile the plugin using Maven:
    ```bash
    mvn package -f pom.xml
    ```
-2. **Install the JAR:** Locate the `target` folder. Copy the **shaded** JAR file (`MIC-Learning-x.x.x-shaded.jar`) into the `plugins` folder of your ImageJ/Fiji directory.
+2. **Install the JAR:** Locate the `target` folder. Copy the **shaded** JAR file (`MIC-Learning-x.x.x-shaded.jar` or `MIC-Learning-x.x.x-all.jar`) into the `plugins` folder of your ImageJ/Fiji directory.
 3. **Launch:** Restart ImageJ/Fiji. You will find the plugin under `Plugins > MIC-Learning`.
 
 ### Models weights and networks

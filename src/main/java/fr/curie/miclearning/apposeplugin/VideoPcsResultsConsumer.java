@@ -5,9 +5,6 @@ import ij.IJ;
 import ij.ImagePlus;
 import org.apposed.appose.NDArray;
 
-import java.nio.ByteBuffer;
-import java.nio.DoubleBuffer;
-import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,14 +20,14 @@ import fr.curie.miclearning.tools.detection.MaskByte;
 import fr.curie.miclearning.tools.detection.ProcessedDetection;
 
 /**
- * Drains per-frame detection results from a {@link BlockingQueue} (as produced by
- * {@link Sam3PythonRunner}) and registers them into a {@link MultiFrameDataManager}.
+ * Collect per-frame detection results from a {@link BlockingQueue}
+ * convert them into {@link ProcessedDetection}
+ * and save them into a {@link MultiFrameDataManager}
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
-public class DetectionResultConsumer implements Callable<Void> {
+public class VideoPcsResultsConsumer implements Callable<Void> {
 
-    // signal pushed onto the queue exactly once, on every terminal python task outcome. */
     public static final Map<String, Object> END_SIGNAL = Collections.unmodifiableMap(new HashMap<>());
 
     private final BlockingQueue<Map<String, Object>> resultsQueue;
@@ -39,7 +36,7 @@ public class DetectionResultConsumer implements Callable<Void> {
     private final String textPrompt;
     private final ImagePlus imp;
 
-    public DetectionResultConsumer(BlockingQueue<Map<String, Object>> resultsQueue, MultiFrameDataManager mfdManager,
+    public VideoPcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, MultiFrameDataManager mfdManager,
                                    Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
         this.resultsQueue = resultsQueue;
         this.mfdManager = mfdManager;
@@ -83,10 +80,10 @@ public class DetectionResultConsumer implements Callable<Void> {
                     "Missing output arrays (boxes, masks, scores or ids) from Python for frame " + (frameIdx + 1));
         }
 
-        double[][] boxes = extractBoxes(outputBoxes, numResults);
-        byte[][][] masks = extractMasks(outputMasks, numResults);
-        double[] scores = extractScores(outputScores, numResults);
-        int[] ids = extractIds(outputIds, numResults);
+        double[][] boxes = DetectionArrayParsing.extractBoxes(outputBoxes, numResults);
+        byte[][][] masks = DetectionArrayParsing.extractMasks(outputMasks, numResults);
+        double[] scores = DetectionArrayParsing.extractScores(outputScores, numResults);
+        int[] ids = DetectionArrayParsing.extractIntArray(outputIds, numResults);
 
         List<String> classNames = new ArrayList<>(numResults);
         List<Double> probabilities = new ArrayList<>(numResults);
@@ -109,49 +106,5 @@ public class DetectionResultConsumer implements Callable<Void> {
         for (int i = 0; i < numResults; i++) {
             mfdManager.registerDetection(frameIdx, processedDetections.get(i), ids[i], true);
         }
-    }
-
-    private static double[][] extractBoxes(NDArray outputBoxes, int numResults) {
-        // Initialize the 2D array [Number of Boxes][4 Coordinates]
-        double[][] boxesArray = new double[numResults][4];
-        // extract bounding boxes coordinates
-        DoubleBuffer buf = outputBoxes.buffer().asDoubleBuffer();
-        buf.rewind();
-        for (int i = 0; i < numResults; i++) {
-            buf.get(boxesArray[i]);
-        }
-        return boxesArray;
-    }
-
-    private static byte[][][] extractMasks(NDArray outputMasks, int numResults) {
-        long[] shape = outputMasks.shape().toLongArray();
-        int height = shape.length == 2 ? (int) shape[0] : (int) shape[1];
-        int width = shape.length == 2 ? (int) shape[1] : (int) shape[2];
-
-        byte[][][] masksArray = new byte[numResults][height][width];
-        ByteBuffer buf = outputMasks.buffer();
-        buf.rewind();
-        for (int i = 0; i < numResults; i++) {
-            for (int y = 0; y < height; y++) {
-                buf.get(masksArray[i][y]);
-            }
-        }
-        return masksArray;
-    }
-
-    private static double[] extractScores(NDArray outputScores, int numResults) {
-        double[] probaArray = new double[numResults];
-        DoubleBuffer buf = outputScores.buffer().asDoubleBuffer();
-        buf.rewind();
-        buf.get(probaArray);
-        return probaArray;
-    }
-
-    private static int[] extractIds(NDArray outputIds, int numResults) {
-        int[] idsArray = new int[numResults];
-        IntBuffer buf = outputIds.buffer().asIntBuffer();
-        buf.rewind();
-        buf.get(idsArray);
-        return idsArray;
     }
 }

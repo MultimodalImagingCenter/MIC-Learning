@@ -1,16 +1,30 @@
 # Changelog
 ## [1.3.0] - current
 ### Added
-- SAM3 plugins for pcs on video : handle visual (positive and negative) + text prompt to define the same concept
+- SAM3 plugins for pcs on video : 
+  - handle visual (positive and negative) + text prompt to define the same concept
+  - interactive frame selection & ROI selection
 
 ### Changed
-- SAM3 video plugin: 
+- SAM3 video pcs plugin: 
   - refactor implementation for pcs on video to use `muggled_sam`:
-  - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3RunConfig`, `Sam3PythonRunner`, `DetectionResultConsumer`) 
+  - split `Sam3VideoPcs_Plugin` into separate classes (`RoiPromptExtractor`, `Sam3VideoRunConfig`, `Sam3VideoPythonRunner`, `VideoPcsResultsConsumer`) 
   - result consumption now runs on a managed `ExecutorService` thread instead of a raw `Thread`
+  - add possibility to use a second model (sam2 or sam3 model) for the tracking part
+- SAM3 text prompt multi-image pcs plugin (`Sam3TextPromptPcsMultiImg_Plugin`) : reworked along the same pattern as the video plugin (`Sam3TextPromptPcsMultiImgRunConfig`,
+  `Sam3TextPromptPcsMultiImgPythonRunner`, `MultiImagePcsResultsConsumer`)
+- SAM3 geometric-prompt single-image plugin (`Sam3VisualPromptSingleImgPcs_Plugin`): reworked along
+  the same pattern (`Sam3VisualPromptSingleImgRunConfig`, `Sam3VisualPromptSingleImgPythonRunner`,
+  `SingleImagePcsResultParser`).
+- Appose: extracted `ApposeTaskRunner`, a generic environment/task runner shared by all
+    three SAM3 plugins (streaming results via a queue, or single-shot via `task.outputs`)
+- Appose: extracted `DetectionArrayParsing`, shared boxes/masks/scores/ids buffer-parsing
+  used by all three plugins' result handling.
 
-### Deprecated
-- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py` (replaced by `muggled_sam` implementation).
+### Removed
+- `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py`
+- `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` and `Sam3TextDetectionM_Plugin` and `sam3-detection-image-textprompt-m.py` (replaced by multi-image version).
+- `Sam3BoxDetectionHg_Plugin` and `sam3-detection-image-boxprompt-hg.py`
 
 ## [1.2.0] - 2026-07-01
 ### Added
