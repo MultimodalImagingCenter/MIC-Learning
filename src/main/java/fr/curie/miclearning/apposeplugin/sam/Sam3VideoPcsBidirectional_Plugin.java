@@ -60,6 +60,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private boolean negativePromptUsed;
     private List<Integer> positiveGroups;
     private int negativeGroup;
+
     private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
 
@@ -73,7 +74,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
     @Override
     public void run(String s) {
-        // --- 1. get image and ROIs ---
+        // --- 1. get image ---
         // 1.1 get selected image
         imp = IJ.getImage(); // select active image
         if (imp == null) {
@@ -84,6 +85,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         if (!imp.isRGB()){
             ImageConverter impConverter = new ImageConverter(imp);
             impConverter.convertToRGB();
+            IJ.log("image " + imp.getTitle() + " converted to RGB");
         }
 
         // define time axis

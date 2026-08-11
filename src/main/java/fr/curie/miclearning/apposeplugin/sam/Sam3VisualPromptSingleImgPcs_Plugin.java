@@ -12,6 +12,7 @@ import ij.gui.Roi;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageConverter;
 import org.apposed.appose.*;
 
 import java.awt.event.ActionListener;
@@ -64,8 +65,9 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
             return;
         }
         if (!imp.isRGB()){
-            IJ.error("Only RGB images can be used");
-            return;
+            ImageConverter impConverter = new ImageConverter(imp);
+            impConverter.convertToRGB();
+            IJ.log("image " + imp.getTitle() + " converted to RGB");
         }
 
         // 1.2 get selected ROIs list

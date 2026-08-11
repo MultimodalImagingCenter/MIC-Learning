@@ -9,6 +9,7 @@ import ij.gui.GenericDialog;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageConverter;
 import org.apposed.appose.*;
 
 import java.awt.event.ActionListener;
@@ -59,8 +60,9 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         }
 
         if (!imp.isRGB()){
-            IJ.error("Only RGB images are supported.");
-            return;
+            ImageConverter impConverter = new ImageConverter(imp);
+            impConverter.convertToRGB();
+            IJ.log("image " + imp.getTitle() + " converted to RGB");
         }
 
         // 1.2 retrieve parameters (model path, prompt and output options)
