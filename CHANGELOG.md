@@ -5,7 +5,7 @@
   - handle visual (positive and negative) prompts + text prompt to define one concept/class
   - interactive frame selection & ROI selection
   - bidirectional detection and segmentation
-- SAM3 plugin for pcs cross image : visual prompt encoded on 1 reference image, detected run on a different target image
+- SAM3 plugin for pcs cross image : visual prompt encoded on 1 reference image, detection run on a different target image
 
 ### Changed
 - SAM3 video pcs plugin: 
