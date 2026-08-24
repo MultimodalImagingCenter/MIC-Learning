@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
 import fr.curie.miclearning.tools.detection.*;
@@ -18,8 +18,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.askStackMode;
-import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.getClassIdMapFromArrays;
+import static fr.curie.miclearning.apposeplugin.sampcs.Sam3Dialogs.askStackMode;
+import static fr.curie.miclearning.apposeplugin.sampcs.Sam3Dialogs.getClassIdMapFromArrays;
 import static fr.curie.miclearning.tools.appose.ApposeUtils.video2ShmImg;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.*;
 import static ij.plugin.frame.RoiManager.getRoiManager;
@@ -205,7 +205,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
     }
 
     private void parseMacro() {
-        IJ.log("\nSAM3 pcs on macro");
+        IJ.log("\nSAM3 sampcs on macro");
         String options = Macro.getOptions();
 
         // model path

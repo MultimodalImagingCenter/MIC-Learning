@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
 import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;

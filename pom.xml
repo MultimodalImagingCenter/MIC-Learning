@@ -3,15 +3,121 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.scijava</groupId>
+        <artifactId>pom-scijava</artifactId>
+        <version>45.0.0</version>
+        <relativePath />
+    </parent>
 
-    <groupId>fr.curie</groupId>
-    <artifactId>MicLearning</artifactId>
-    <version>1.3.0</version>
+    <groupId>io.github.cmessaoudi</groupId>
+    <artifactId>Mic-Learning</artifactId>
+    <version>1.4.0SNAPSHOT</version>
+
+    <name>MIC-Learning</name>
+    <description>
+        ImageJ/Fiji plugin for deep learning and machine learning workflows.
+    </description>
+    <url> https://github.com/MultimodalImagingCenter/MIC-Learning </url>
+    <inceptionYear>2026</inceptionYear>
+    <organization>
+        <name>Multimodal-Imaging-Center</name>
+        <url>https://institut-curie.org/platform/curiecoretech-multimodal-imaging-center-uar2016-us43</url>
+    </organization>
+    <licenses>
+        <license>
+            <name>Institut Curie Software License</name>
+            <url>https://raw.githubusercontent.com/MultimodalImagingCenter/MIC-Learning/main/LICENSE</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>cmessaoudi</id>
+            <name>Cedric Messaoudi</name>
+            <organization>Institut Curie</organization>
+            <url>https://institut-curie.org/personne/cedric-messaoudi</url>
+            <roles>
+                <role>founder</role>
+                <role>lead</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>reviewer</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
+        <developer>
+            <id>noemie-bozier</id>
+            <name>Noemie Bozier</name>
+            <organization>Institut Curie</organization>
+            <roles>
+                <role>founder</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
+    </developers>
+    <contributors>
+        <contributor>
+            <name>Laetitia Besse</name>
+            <url>https://curie.fr/personne/laetitia-besse</url>
+            <roles>
+                <role>reviewer</role>
+            </roles>
+            <!--properties><id></id></properties-->
+        </contributor>
+        <contributor>
+            <name>Christine Walczak</name>
+            <url>https://curie.fr/personne/christine-walczak</url>
+            <roles>
+                <role>reviewer</role>
+            </roles>
+            <!--properties><id></id></properties-->
+        </contributor>
+    </contributors>
+
+    <mailingLists>
+        <mailingList>
+            <name>Image.sc Forum</name>
+            <archive>https://forum.image.sc/</archive>
+        </mailingList>
+    </mailingLists>
+
+    <scm>
+        <connection>
+            scm:git:git://github.com/MultimodalImagingCenter/MIC-Learning.git
+        </connection>
+        <developerConnection>
+            scm:git:ssh://github.com:MultimodalImagingCenter/MIC-Learning.git
+        </developerConnection>
+        <url>
+            https://github.com/MultimodalImagingCenter/MIC-Learning
+        </url>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/MultimodalImagingCenter/MIC-Learning/issues</url>
+    </issueManagement>
+
+    <ciManagement>
+        <system>GitHub Actions</system>
+        <url>https://github.com/MultimodalImagingCenter/MIC-Learning/actions/new</url>
+    </ciManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
+        <package-name>fr.curie.mic_learning</package-name>
+        <license.licenseName>Institut Curie</license.licenseName>
+        <license.copyrightOwners>Multimodal-Imaging-Center</license.copyrightOwners>
+        <!-- NB: Deploy releases to the SciJava Maven repository. -->
+        <releaseProfiles>sign,deploy-to-scijava</releaseProfiles>
     </properties>
 
     <dependencyManagement>
@@ -82,7 +188,6 @@
             <scope>runtime</scope>
         </dependency>
 
-
         <!-- Runtime TensorFlow -->
         <dependency>
             <groupId>ai.djl.tensorflow</groupId>
@@ -152,6 +257,10 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>all</shadedClassifierName>
+
                             <transformers>
                                 <!-- standard service loader files -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

@@ -295,8 +295,6 @@ public class DialogHelpBar {
 
     private void show(String text, Color color, Font font) {
         setLines(text, color, font);
-        // re-layout only the help bar (fixed-size panel) instead of gd.pack(), which would
-        // snap the whole dialog back to its packed size and undo any manual resize by the user
         panel.validate();
     }
     private void show(String text, Color color) {

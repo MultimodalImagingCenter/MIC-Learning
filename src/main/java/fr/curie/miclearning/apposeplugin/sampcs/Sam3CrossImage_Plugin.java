@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
 import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
@@ -10,7 +10,6 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.Macro;
 import ij.WindowManager;
-import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
 import ij.plugin.PlugIn;
@@ -29,7 +28,7 @@ import java.util.stream.Collectors;
 
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_INSTRUCTION_COLOR;
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_WARNING_COLOR;
-import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
+import static fr.curie.miclearning.apposeplugin.sampcs.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
@@ -289,7 +288,7 @@ public class Sam3CrossImage_Plugin implements PlugIn  {
     }
 
     private void parseMacro() {
-        IJ.log("\nSAM3 cross image pcs on macro");
+        IJ.log("\nSAM3 cross image sampcs on macro");
         String options = Macro.getOptions();
 
         // model path

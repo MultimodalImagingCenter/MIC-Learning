@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
 import fr.curie.miclearning.apposeplugin.FrameRangeSelector;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import javax.swing.Timer;
 
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.*;
-import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
+import static fr.curie.miclearning.apposeplugin.sampcs.Sam3Dialogs.ALL_ROIS_GROUPS_TXT;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
@@ -672,7 +672,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
 
     private void parseMacro() {
-        IJ.log("\nSAM3 pcs on macro");
+        IJ.log("\nSAM3 sampcs on macro");
         String options = Macro.getOptions();
 
         // model path(s)

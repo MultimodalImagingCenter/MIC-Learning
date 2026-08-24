@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import ai.djl.modality.cv.output.BoundingBox;
 import fr.curie.miclearning.apposeplugin.DetectionArrayParsing;

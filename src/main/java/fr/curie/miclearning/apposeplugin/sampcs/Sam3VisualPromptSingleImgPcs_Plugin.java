@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
-import static fr.curie.miclearning.apposeplugin.sam.Sam3Dialogs.*;
+import static fr.curie.miclearning.apposeplugin.sampcs.Sam3Dialogs.*;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.createReverseClassIdMap;
 import static fr.curie.miclearning.tools.detection.DetectionUtils.generateOutputs;
 import static ij.plugin.frame.RoiManager.getRoiManager;
@@ -215,7 +215,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
     }
 
     private void parseMacro() {
-        IJ.log("\nSAM3 pcs on macro");
+        IJ.log("\nSAM3 sampcs on macro");
         String options = Macro.getOptions();
 
         // model path

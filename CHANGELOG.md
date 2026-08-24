@@ -1,4 +1,6 @@
 # Changelog
+## [1.4.0] - current
+
 ## [1.3.0] - 2026-08-24
 ### Added
 - SAM3 plugins for pcs on video : 
