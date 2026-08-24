@@ -4,6 +4,7 @@ public class Sam3ModelParameters {
     // Default values
     public static final double DEFAULT_CONFIDENCE = 0.5;
     public static final double DEFAULT_MASK_THRESHOLD = 0.0;
+    public static final boolean DEFAULT_INCLUDE_COORDINATE_ENCODING = true; // false  will generally degrade performance, but may be useful for cross-image for example
     public static final int DEFAULT_FRAME_BTW_DETECT = 2;
     public static final int DEFAULT_FRAME_IN_MEMORY = 6;
     public static final double DEFAULT_TRACK_SCORE_THRESHOLD = 2;
@@ -17,6 +18,8 @@ public class Sam3ModelParameters {
     private double confidenceThreshold =DEFAULT_CONFIDENCE; // min probability (between 0 and 1) to add new detection
     private double maskScoreThreshold = DEFAULT_MASK_THRESHOLD; // min score (between -inf and +inf, centered on 0) to add pixel to binary mask
 
+    //only useful for cross-detection
+    private boolean includeCoordinateEncoding = DEFAULT_INCLUDE_COORDINATE_ENCODING;
     // for video/tracking
     private int nFrameBtwDetections = DEFAULT_FRAME_BTW_DETECT;
     private int nFrameInMemory = DEFAULT_FRAME_IN_MEMORY; // number of frames in memory for each object (only the last frames where the object was detected)
@@ -33,6 +36,7 @@ public class Sam3ModelParameters {
 
     public double getConfidenceThreshold() {return confidenceThreshold;}
     public double getMaskScoreThreshold() {return maskScoreThreshold;}
+    public boolean isIncludeCoordinateEncoding() {return includeCoordinateEncoding;}
     public int getNFrameBtwDetections() {return nFrameBtwDetections;}
     public int getNFrameInMemory() {return nFrameInMemory;}
     public double getTrackingScoreThreshold() {return trackingScoreThreshold;}
@@ -44,6 +48,7 @@ public class Sam3ModelParameters {
 
     public void setConfidenceThreshold(double confidenceThreshold) {this.confidenceThreshold = confidenceThreshold;}
     public void setMaskScoreThreshold(double maskScoreThreshold) {this.maskScoreThreshold = maskScoreThreshold;}
+    public void setIncludeCoordinateEncoding(boolean includeCoordinateEncoding) {this.includeCoordinateEncoding = includeCoordinateEncoding;}
     public void setNFrameBtwDetections(int nFrameBtwDetections) {this.nFrameBtwDetections = nFrameBtwDetections;}
     public void setNFrameInMemory(int nFrameInMemory) {this.nFrameInMemory = nFrameInMemory;}
     public void setTrackingScoreThreshold(double trackingScoreThreshold) {this.trackingScoreThreshold = trackingScoreThreshold;}
@@ -52,4 +57,5 @@ public class Sam3ModelParameters {
     public void setMaxSideLengthDetect(int maxSideLengthDetect) {this.maxSideLengthDetect = maxSideLengthDetect;}
     public void setMaxSideLengthTrack(int maxSideLengthTrack) {this.maxSideLengthTrack = maxSideLengthTrack;}
     public void setNFrameToProcess(int nFrame) {this.nFrameToProcess = nFrame;}
+
 }

@@ -295,7 +295,7 @@ public class DialogHelpBar {
 
     private void show(String text, Color color, Font font) {
         setLines(text, color, font);
-        gd.pack();
+        panel.validate();
     }
     private void show(String text, Color color) {
         show(text, color, helpBarFont);

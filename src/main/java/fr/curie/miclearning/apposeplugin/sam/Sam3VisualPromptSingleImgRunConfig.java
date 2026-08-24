@@ -9,7 +9,7 @@ import java.util.*;
  * image, with geometric (box/point) visual prompts grouped by ROI group id, plus one
  * optional negative-prompt group.
  */
-public class Sam3VisualPromptSingleImgRunConfig {
+public final class Sam3VisualPromptSingleImgRunConfig {
     private final String modelPath;
     private final Sam3ModelParameters detectionParams;
     private final DetectionUtils.OutputOptions outputOptions;

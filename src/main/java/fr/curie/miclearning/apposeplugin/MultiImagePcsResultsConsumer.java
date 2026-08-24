@@ -13,6 +13,7 @@ import java.util.concurrent.Callable;
 /**
  * Collect per-frame detection results from a {@link BlockingQueue}
  * and save them into a {@code Map<Integer, List<ProcessedDetection>>}.
+ * With a list of processed detection for each frame
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
@@ -32,6 +33,16 @@ public class MultiImagePcsResultsConsumer implements Callable<Void> {
         this.detectionsByFrame = detectionsByFrame;
         this.classIdMap = classIdMap;
         this.textPrompts = textPrompts;
+        this.imp = imp;
+    }
+
+    public MultiImagePcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, Map<Integer, List<ProcessedDetection>> detectionsByFrame,
+                                        Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
+        this.resultsQueue = resultsQueue;
+        this.detectionsByFrame = detectionsByFrame;
+        this.classIdMap = classIdMap;
+        this.textPrompts = new ArrayList<>(1);
+        this.textPrompts.add(textPrompt);
         this.imp = imp;
     }
 
@@ -67,8 +78,8 @@ public class MultiImagePcsResultsConsumer implements Callable<Void> {
         NDArray outputScores = (NDArray) info.get("scores");
         NDArray outputPromptIds = (NDArray) info.get("prompts_ids");
 
-        if (outputBoxes == null || outputMasks == null || outputScores == null || outputPromptIds == null) {
-            IJ.log("Warning : Missing output arrays (boxes, masks, scores or ids) from Python for frame " + frameIdx);
+        if (outputBoxes == null || outputMasks == null || outputScores == null) {
+            IJ.log("Warning : Missing output arrays (boxes, masks or scores) from Python for frame " + frameIdx);
             detectionsByFrame.put(frameIdx, Collections.emptyList());
             return;
         }
@@ -76,7 +87,9 @@ public class MultiImagePcsResultsConsumer implements Callable<Void> {
         double[][] boxes = DetectionArrayParsing.extractBoxes(outputBoxes, numResults);
         byte[][][] masks = DetectionArrayParsing.extractMasks(outputMasks, numResults);
         double[] scores = DetectionArrayParsing.extractScores(outputScores, numResults);
-        int[] promptIds = DetectionArrayParsing.extractIntArray(outputPromptIds, numResults);
+        int[] promptIds;
+        if (outputPromptIds != null) promptIds = DetectionArrayParsing.extractIntArray(outputPromptIds, numResults);
+        else promptIds = new int[scores.length]; // if no prompt id received from python, we assume only one text prompt
 
         List<String> classNames = new ArrayList<>(numResults);
         List<Double> probabilities = new ArrayList<>(numResults);

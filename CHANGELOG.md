@@ -1,9 +1,11 @@
 # Changelog
-## [1.3.0] - current
+## [1.3.0] - 2026-08-24
 ### Added
 - SAM3 plugins for pcs on video : 
-  - handle visual (positive and negative) + text prompt to define the same concept
+  - handle visual (positive and negative) prompts + text prompt to define one concept/class
   - interactive frame selection & ROI selection
+  - bidirectional detection and segmentation
+- SAM3 plugin for pcs cross image : visual prompt encoded on 1 reference image, detection run on a different target image
 
 ### Changed
 - SAM3 video pcs plugin: 
@@ -20,6 +22,9 @@
     three SAM3 plugins (streaming results via a queue, or single-shot via `task.outputs`)
 - Appose: extracted `DetectionArrayParsing`, shared boxes/masks/scores/ids buffer-parsing
   used by all three plugins' result handling.
+
+### Fixed
+- SAM3 video PCS : visual prompts are now encoded only once, on prompt frame (instead of every frame)
 
 ### Removed
 - `Sam3VideoTextDetection_Plugin` and `sam3-detection-video-textprompt-hg.py`
@@ -53,6 +58,7 @@
 - `Sam3MultiTextDetectionHg_Plugin` and `sam3-detection-image-multitextprompt-hg.py` (replaced by `muggled_sam` implementation).
 - `Sam3BoxDetectionHg_Plugin` and `sam3-detection-image-boxprompt-hg.py` (replaced by `muggled_sam` implementation).
 - `Sam3TextDetectionM_Plugin` and `sam3-detection-image-textprompt-m.py` (replaced by multi-image version).
+
 ## [1.1.0] - 2026-03-24
 ### Added
 - SAM3 plugin: single-image detection with multi-text prompts

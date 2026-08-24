@@ -60,6 +60,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
     private boolean negativePromptUsed;
     private List<Integer> positiveGroups;
     private int negativeGroup;
+
     private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
 
@@ -73,7 +74,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
 
     @Override
     public void run(String s) {
-        // --- 1. get image and ROIs ---
+        // --- 1. get image ---
         // 1.1 get selected image
         imp = IJ.getImage(); // select active image
         if (imp == null) {
@@ -84,6 +85,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         if (!imp.isRGB()){
             ImageConverter impConverter = new ImageConverter(imp);
             impConverter.convertToRGB();
+            IJ.log("\nimage " + imp.getTitle() + " converted to RGB");
         }
 
         // define time axis
@@ -247,13 +249,13 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         // NonBlockingGenericDialog (rather than plain GenericDialog): the image window and the RoiManager stay interactive while this dialog is open
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("SAM3 Promptable Concept Segmentation on video");
 
-        // 1- dynamic HELP SECTION (at the top ? or put at bottom ?)
+        // 1- HELP SECTION
         DialogHelpBar helpBar = new DialogHelpBar(gd, DialogHelpBar.loadSavedMode());
-        gd.addButton("Settings", e -> helpBar.openSettingsDialog()); // only helpbar setting for, other settings could be added in the future
+        gd.addButton("Settings", e -> helpBar.openSettingsDialog()); // only helpbar setting for now, other settings could be added in the future
         gd.addPanel(helpBar.getPanel());
         final Button okButton = gd.getButtons()[0]; // ok button is the first one
 
-        // 3- MODEL PATH
+        // 2- MODEL PATH
         gd.addMessage("Model", Sam3Dialogs.SECTION_HEADER_FONT);
         gd.addButton("Instructions to download SAM3 model", e ->Sam3Dialogs.addDownloadInstruction());
         Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
@@ -322,6 +324,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         final CardLayout negCardLayout = (CardLayout) negCardHolder.getLayout();
         negCardLayout.show(negCardHolder, "EMPTY");
 
+        // 4.2.4 add all prompts panel in column
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.anchor = GridBagConstraints.CENTER;
@@ -332,12 +335,13 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
         Panel column2 = addColumn(gbc, posVisualPromptCB, posCardHolder);
         Panel column3 = addColumn(gbc, negVisualPromptCB, negCardHolder);
 
-        Panel twoColumnsPanel = new Panel(new GridLayout(1, 3));
-        twoColumnsPanel.add(column1);
-        twoColumnsPanel.add(column2);
-        twoColumnsPanel.add(column3);
+        Panel promptsColumnsPanel = new Panel(new GridLayout(1, 3));
+        promptsColumnsPanel.add(column1);
+        promptsColumnsPanel.add(column2);
+        promptsColumnsPanel.add(column3);
 
-        gd.addPanel(twoColumnsPanel);
+        gd.addPanel(promptsColumnsPanel);
+
         // 4.3 Update ROIs, groupID lists and checkbox depending on whether the current prompt frame has usable ROI
 
         // 4.3.1 "remembered" selections of group IDs
@@ -434,9 +438,7 @@ public class Sam3VideoPcsBidirectional_Plugin implements PlugIn {
                 }
             }
 
-            // greyed out (not setEnabled(false) - see FrameRangeSelector javadoc for why) when
-            // there's nothing to choose; the checkboxes' own item listeners (below) block
-            // checking them in that state.
+            // greyed out when there's nothing to choose
             Color groupColor = anyGroupAtFrame ? Color.BLACK : Color.GRAY;
             posVisualPromptCB.setForeground(groupColor);
             negVisualPromptCB.setForeground(groupColor);

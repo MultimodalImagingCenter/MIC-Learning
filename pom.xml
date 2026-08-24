@@ -12,7 +12,7 @@
 
     <groupId>io.github.cmessaoudi</groupId>
     <artifactId>Mic-Learning</artifactId>
-    <version>1.3.0-SNAPSHOT</version>
+    <version>1.3.0</version>
 
     <name>MIC-Learning</name>
     <description>
@@ -111,8 +111,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <package-name>fr.curie.mic_learning</package-name>
         <license.licenseName>Institut Curie</license.licenseName>
         <license.copyrightOwners>Multimodal-Imaging-Center</license.copyrightOwners>
@@ -219,6 +219,7 @@
             <artifactId>commons-lang3</artifactId>
             <version>3.18.0</version>
         </dependency>
+
         <dependency>
             <groupId>org.apposed</groupId>
             <artifactId>appose</artifactId>
@@ -230,6 +231,7 @@
             <groupId>net.imglib2</groupId>
             <artifactId>imglib2-appose</artifactId>
             <version>0.4.0</version>
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
@@ -258,7 +260,6 @@
 
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <shadedClassifierName>all</shadedClassifierName>
-
 
                             <transformers>
                                 <!-- standard service loader files -->
@@ -303,6 +304,8 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>models/**</exclude>
+                                        <exclude>images/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>

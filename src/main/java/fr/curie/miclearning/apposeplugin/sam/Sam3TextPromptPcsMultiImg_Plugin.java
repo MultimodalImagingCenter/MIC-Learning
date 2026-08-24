@@ -9,6 +9,7 @@ import ij.gui.GenericDialog;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageConverter;
 import org.apposed.appose.*;
 
 import java.awt.event.ActionListener;
@@ -59,8 +60,9 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         }
 
         if (!imp.isRGB()){
-            IJ.error("Only RGB images are supported.");
-            return;
+            ImageConverter impConverter = new ImageConverter(imp);
+            impConverter.convertToRGB();
+            IJ.log("\nimage " + imp.getTitle() + " converted to RGB");
         }
 
         // 1.2 retrieve parameters (model path, prompt and output options)
@@ -311,7 +313,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, stackMode);
+        Sam3Dialogs.addParameterDialog(gd, detectionParams);
 
         // ask for SAM outputs
         Sam3Dialogs.addOutputDialog(gd, stackMode);
@@ -325,7 +327,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         // retrieve choices
         modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
         classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        Sam3Dialogs.getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        Sam3Dialogs.getParameters(gd, detectionParams);
         outputOptions = Sam3Dialogs.getOutputAnswer(gd, stackMode);
     }
 

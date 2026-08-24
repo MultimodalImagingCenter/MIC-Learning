@@ -10,8 +10,7 @@ import ij.gui.YesNoCancelDialog;
 import ij.plugin.frame.RoiManager;
 import org.apache.commons.lang3.math.NumberUtils;
 
-import java.awt.Font;
-import java.awt.TextField;
+import java.awt.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,7 +24,7 @@ public class Sam3Dialogs {
     public static final int MAX_GROUP_VALUE = 255; // max id for group in ImageJ
     public static final String ONLY_POSITIVE_TXT = "no negative group";
     public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
-    public static final String ALL_ROIS_GROUPS_TXT = "all selected ROIs (except negative group, if any)";
+    public static final String ALL_ROIS_GROUPS_TXT = "all ROIs (except negative group, if any)";
     public static final Font SECTION_HEADER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 13);
     private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
 
@@ -97,23 +96,14 @@ public class Sam3Dialogs {
     }
 
 
-    public static void addParameterDialog(GenericDialog gd, Sam3ModelParameters params, DetectionMode mode) {
-        gd.addMessage("Detection Settings");
+    public static void addParameterDialog(GenericDialog gd, Sam3ModelParameters params) {
+        gd.addMessage("Detection and Segmentation Settings", Sam3Dialogs.SECTION_HEADER_FONT);
         gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
         gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
-        gd.addNumericField("Max_masks_side_length", params.getMaxSideLengthDetect(),0); // advanced parameter
-
-        if (mode == DetectionMode.VIDEO) { // unused, replaced by openVideoAdvancedParametersDialog
-            gd.addMessage("Tracking Settings");
-            gd.addNumericField("Frames_between detections:", params.getNFrameBtwDetections(), 0);
-            gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2); // advanced parameter
-            gd.addNumericField("Remove_after N missed frames", params.getRemoveAfterNMissed(), 0); // advanced parameter
-            gd.addNumericField("Max_masks_side_length_for_tracking", params.getMaxSideLengthTrack(),0); // advanced parameter
-            gd.addNumericField("Box_iou_threshold",  params.getTrackingBoxIouThreshold(), 2); // advanced parameter
-        }
+        gd.addNumericField("Segmentation_masks_side_length", params.getMaxSideLengthDetect(),0); // advanced parameter
     }
 
-    public static void getParameters(GenericDialog gd, Sam3ModelParameters params, DetectionMode mode) {
+    public static void getParameters(GenericDialog gd, Sam3ModelParameters params) {
         double confThreshold = gd.getNextNumber();
         if (confThreshold < 0 || confThreshold > 1) {
             IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
@@ -130,51 +120,62 @@ public class Sam3Dialogs {
             maxSideLengthDetect = params.getMaxSideLengthDetect();
         }
         params.setMaxSideLengthDetect(maxSideLengthDetect);
+    }
 
-        if (mode == DetectionMode.VIDEO) { // unused
-            int nFramesBtwDetec = (int) gd.getNextNumber();
-            if (nFramesBtwDetec <= 0) {
-                //IJ.log("Number of frames between each detection must be >0. using default value: " + params.getNFrameBtwDetections());
-                nFramesBtwDetec = params.getNFrameToProcess() +1;
-            }
-            params.setNFrameBtwDetections(nFramesBtwDetec);
+    public static void addImageBasicParameterDialog(GenericDialog gd, Sam3ModelParameters params,  DialogHelpBar helpBar) {
+        gd.addMessage("Detection Settings", Sam3Dialogs.SECTION_HEADER_FONT);
+        gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum detection probability (0-1) for a object to be added.");
+    }
 
-            double trackThreshold = gd.getNextNumber();
-            if (trackThreshold < 0) {
-                IJ.log("Tracking score threshold must be >0. using default value: " + params.getTrackingScoreThreshold());
-                trackThreshold = params.getTrackingScoreThreshold();
-            }
-            params.setTrackingScoreThreshold(trackThreshold);
-
-            int removeAfterNMissed = (int) gd.getNextNumber();
-            if (removeAfterNMissed <= 0) {
-                IJ.log("Detected objects will never be removed from memory.");
-            }
-            params.setRemoveAfterNMissed(removeAfterNMissed);
-
-            int maxSideLengthTrack = (int) gd.getNextNumber();
-            if (maxSideLengthTrack <= 0) {
-                IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthTrack());
-                maxSideLengthTrack = params.getMaxSideLengthTrack();
-            }
-            params.setMaxSideLengthTrack(maxSideLengthTrack);
-
-            double trackingBoxIouThreshold = gd.getNextNumber();
-            if (trackingBoxIouThreshold < 0) {
-                IJ.log("tracking box IoU threshold must be >0. using default value: " + params.getTrackingBoxIouThreshold());
-                trackingBoxIouThreshold = params.getTrackingBoxIouThreshold();
-            }
-            params.setTrackingBoxIouThreshold(trackingBoxIouThreshold);
+    public static void getImageBasicParameters(GenericDialog gd, Sam3ModelParameters params) {
+        double confThreshold = gd.getNextNumber();
+        if (confThreshold < 0 || confThreshold > 1) {
+            IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
+            confThreshold = params.getConfidenceThreshold();
         }
+        params.setConfidenceThreshold(confThreshold);
     }
 
     /**
-     * Attaches {@code hint} to  the label and the input field GenericDialog just added
+     * Opens a secondary dialog for the rarely-tuned detection parameters.
      */
-    public static void attachFieldHint(GenericDialog gd, DialogHelpBar helpBar, TextField field, String hint) {
-        helpBar.attachHelp(gd.getLabel(), hint);
-        helpBar.attachHelp(field, hint);
+    public static void openImageAdvancedParametersDialog(Sam3ModelParameters params, int minWidth) {
+        GenericDialog gd = new GenericDialog("Advanced parameters");
+        DialogHelpBar helpBar = new DialogHelpBar(gd, DialogHelpBar.loadSavedMode());
+        gd.addPanel(helpBar.getPanel());
+
+        gd.addMessage("Detection Settings", SECTION_HEADER_FONT);
+        gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Minimum per-pixel mask score (centered on 0) for a pixel to be included in the mask.");
+        gd.addNumericField("Segmentation_masks_side_length", params.getMaxSideLengthDetect(), 0);
+        attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
+                "Masks are downsized to at most this side length (pixels) during detection. \n" +
+                        "Lower this value for faster results but coarser segmentation.");
+        gd.addCheckbox("Include_coordinate_encoding", params.isIncludeCoordinateEncoding());
+        // TODO attach hint
+        gd.pack();
+        helpBar.lockWidth(Math.max(gd.getPreferredSize().width, minWidth));
+        gd.pack();
+        gd.showDialog();
+        if (gd.wasCanceled()) return ;
+
+        double maskThreshold = gd.getNextNumber();
+        params.setMaskScoreThreshold(maskThreshold);
+
+        int maxSideLengthDetect = (int) gd.getNextNumber();
+        if (maxSideLengthDetect <= 0) {
+            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
+            maxSideLengthDetect = params.getMaxSideLengthDetect();
+        }
+        params.setMaxSideLengthDetect(maxSideLengthDetect);
+
+        boolean includeCoordinateEncoding = gd.getNextBoolean();
+        params.setIncludeCoordinateEncoding(includeCoordinateEncoding);
     }
+
 
     /** fields for the basic parameters  */
     public static void addVideoBasicParameterDialog(GenericDialog gd, Sam3ModelParameters params, DialogHelpBar helpBar) {
@@ -228,6 +229,8 @@ public class Sam3Dialogs {
         attachFieldHint(gd, helpBar, (TextField) gd.getNumericFields().lastElement(),
                 "Masks are downsized to at most this side length (pixels) during detection. \n" +
                         "Lower this value for faster results but coarser segmentation.");
+        gd.addCheckbox("Include_coordinate_encoding", params.isIncludeCoordinateEncoding());
+        // TODO attach hint
 
         gd.addMessage("Tracking Settings", SECTION_HEADER_FONT);
         gd.addNumericField("Tracking_score_threshold", params.getTrackingScoreThreshold(), 2);
@@ -262,6 +265,9 @@ public class Sam3Dialogs {
             maxSideLengthDetect = params.getMaxSideLengthDetect();
         }
         params.setMaxSideLengthDetect(maxSideLengthDetect);
+
+        boolean includeCoordinateEncoding = gd.getNextBoolean();
+        params.setIncludeCoordinateEncoding(includeCoordinateEncoding);
 
         double trackThreshold = gd.getNextNumber();
         if (trackThreshold < 0) {
@@ -343,6 +349,22 @@ public class Sam3Dialogs {
             }
         }
         return -1; // no negative group
+    }
+
+    /**
+     * Attaches {@code hint} to  the label and the input field GenericDialog just added
+     */
+    public static void attachChoicedHint(GenericDialog gd, DialogHelpBar helpBar, Choice choice, String hint) {
+        helpBar.attachHelp(gd.getLabel(), hint);
+        helpBar.attachHelp(choice, hint);
+    }
+
+    /**
+     * Attaches {@code hint} to  the label and the choice list GenericDialog just added
+     */
+    public static void attachFieldHint(GenericDialog gd, DialogHelpBar helpBar, TextField field, String hint) {
+        helpBar.attachHelp(gd.getLabel(), hint);
+        helpBar.attachHelp(field, hint);
     }
 
     private static String getDefaultSam3ModelPath() {

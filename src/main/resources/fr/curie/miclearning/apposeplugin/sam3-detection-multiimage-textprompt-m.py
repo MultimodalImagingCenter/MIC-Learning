@@ -140,7 +140,7 @@ for frame_idx, img in enumerate(images_bgr) :
         # 6. send results to java via task update
         task.update(
             message=f"   slice {frame_idx+1} - number of objects detected: {slice_total_detection}",
-            current=frame_idx,
+            current=frame_idx+1,
             maximum=n_frames,
             info={
                 "frame_idx": frame_idx,
