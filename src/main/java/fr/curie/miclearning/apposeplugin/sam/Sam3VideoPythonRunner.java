@@ -59,6 +59,7 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         inputs.put("maxSideLengthDetect", params.getMaxSideLengthDetect());
         inputs.put("maxSideLengthTrack", params.getMaxSideLengthTrack());
         inputs.put("trackingBoxIouThreshold", params.getTrackingBoxIouThreshold());
+        inputs.put("includeCoordinateEncoding", params.isIncludeCoordinateEncoding());
 
         inputs.put("nFrameToProcess", config.getFrameCount()); // = lasFrameIndex - firstFrameIndex +1
         inputs.put("biDirectional", config.isBidirectional());

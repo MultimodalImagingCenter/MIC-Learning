@@ -143,7 +143,8 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Collects the usable ROIs (rectangle or point) on the given frame.
+     * Collects the usable ROIs (rectangle or point) on the given frame - 3D image,
+     * only one axis used
      *
      * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
      * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
@@ -156,6 +157,25 @@ public class RoiPromptExtractor {
             if (!isUsableRoiType(roi)) continue;
             int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
             if (position == frame || position == 0) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
+        }
+        return result;
+    }
+
+    /**
+     * Collects the usable ROIs (rectangle or point) on the given frame - 4D image,
+     * only one axis used
+     *
+     * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
+     * @param axis         0
+     * @param slice        1-indexed position along Z axis = Z-position
+     * @param frame        1-indexed position along time axis = T-position
+     */
+    public List<Roi> getRoisAtFrame(Roi[] rois, int axis, int slice, int frame) {
+        List<Roi> result = new ArrayList<>();
+        if (rois == null) return result;
+        for (Roi roi : rois) {
+            if (!isUsableRoiType(roi)) continue;
+            if ((roi.getTPosition() == frame || roi.getTPosition() == 0) && (roi.getZPosition() == slice || roi.getZPosition() == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return result;
     }
@@ -276,6 +296,7 @@ public class RoiPromptExtractor {
 
         public boolean hasUsableRois() { return !uniqueGroups.isEmpty(); }
         public int getFirstUnusedGroupId() { return firstUnusedGroupId; }
+        public TreeSet<Integer> getUniqueGroups() { return uniqueGroups; }
     }
 
     /** Positive/negative ROI coordinates ready to be sent to the Python side. */

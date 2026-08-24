@@ -313,7 +313,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
-        Sam3Dialogs.addParameterDialog(gd, detectionParams, stackMode);
+        Sam3Dialogs.addParameterDialog(gd, detectionParams);
 
         // ask for SAM outputs
         Sam3Dialogs.addOutputDialog(gd, stackMode);
@@ -327,7 +327,7 @@ public class Sam3TextPromptPcsMultiImg_Plugin implements PlugIn {
         // retrieve choices
         modelPath = Sam3Dialogs.getModelPath(gd, PREF_LAST_MODEL_KEY);
         classIdMap = Sam3Dialogs.getMultiTextPrompt(gd);
-        Sam3Dialogs.getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        Sam3Dialogs.getParameters(gd, detectionParams);
         outputOptions = Sam3Dialogs.getOutputAnswer(gd, stackMode);
     }
 

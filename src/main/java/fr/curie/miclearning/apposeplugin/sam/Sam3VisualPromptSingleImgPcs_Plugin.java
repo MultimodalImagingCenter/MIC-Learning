@@ -301,7 +301,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         // ask for parameters
         gd.addMessage("__________");
         detectionParams = new Sam3ModelParameters();
-        addParameterDialog(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        addParameterDialog(gd, detectionParams);
 
         // ask for SAM outputs
         addOutputDialog(gd, DetectionMode.SINGLE_IMAGE);
@@ -315,7 +315,7 @@ public class Sam3VisualPromptSingleImgPcs_Plugin implements PlugIn {
         // retrieve choices
         modelPath = getModelPath(gd, PREF_LAST_MODEL_KEY);
         negativeGroup = getNegativeGroup(gd, groupNumber, ONLY_POSITIVE_TXT, GROUP_ZERO_TXT);
-        getParameters(gd, detectionParams, DetectionMode.SINGLE_IMAGE);
+        getParameters(gd, detectionParams);
         outputOptions = getOutputAnswer(gd, DetectionMode.SINGLE_IMAGE);
 
         negativeGroup = negativeGroup == 0 ? MAX_GROUP_VALUE : negativeGroup;
