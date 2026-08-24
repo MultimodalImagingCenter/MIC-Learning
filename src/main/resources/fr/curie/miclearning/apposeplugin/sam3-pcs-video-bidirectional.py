@@ -137,6 +137,8 @@ mask_threshold = maskThreshold
 # (then divided by a ~3.5 factor internally to get the final mask side length)
 max_side_length_detect = maxSideLengthDetect
 max_side_length_track = maxSideLengthTrack  # Reduce this to increase speed at the cost of mask quality
+# weather to force coordinates encodings to only make use of the associated image data at the given point/box, and not the coordinates themselves
+include_coordinate_encodings = includeCoordinateEncoding
 
 # Bundle re-used data together for ease of use
 imgenc_config_dict_track = {"max_side_length": max_side_length_track, "use_square_sizing": True}
@@ -206,22 +208,20 @@ all_ids_used = []  # list of all used id
 # 3. Per-frame helpers shared by the prompt frame and the tracking loop
 # ============================================================
 
-def run_detection_and_register_new_objects(frame, track_encoded_img, memory_dicts, all_ids_used,
+def run_detection_and_register_new_objects(frame, track_encoded_img, det_exemplars, memory_dicts, all_ids_used,
                                             known_boxes_xywh_norm_list, count_label):
     """
     Run SAM3 detection (text + visual prompts) on `frame`, keep only the detections that don't
     already overlap a currently-tracked box (`known_boxes_xywh_norm_list`), and register each
     surviving detection as a new tracked object.
 
-    Passing an empty `known_boxes_xywh_norm_list` - as done for the prompt frame, where nothing is
-    tracked yet - makes every detection count as "new"
+    Passing an empty `known_boxes_xywh_norm_list` makes every detection count as "new"
 
     Returns the new detections as parallel lists: (masks_uint8, boxes_xywh_norm, scores, ids).
     """
     det_encoded_img = track_encoded_img
     if needs_detect_reencode:
         det_encoded_img = detect_model.encode_image(frame, **imgenc_config_dict_detect)
-    det_exemplars = detect_model.encode_exemplars(det_encoded_img, **detection_prompts_dict)
     det_masks, det_boxes, det_scores, pres_scores = detect_model.generate_detections(
         det_encoded_img, det_exemplars, detection_filter_threshold=detection_score_threshold
     )
@@ -346,11 +346,11 @@ log_to_java("running prediction...")
 frame_idx = prompt_frame_index
 frame = images_bgr[frame_idx]
 
-# Encode image data for tracking (this is the heaviest part of video inference)
+# Encode image data
 encoded_img = track_model.encode_image(frame, **imgenc_config_dict_track)
-
+det_exemplars = detect_model.encode_exemplars(encoded_img, **detection_prompts_dict, include_coordinate_encodings=include_coordinate_encodings,)
 masks_uint8_on_frame, boxes_on_frame, scores_on_frame, ids_on_frame = run_detection_and_register_new_objects(
-    frame, encoded_img,
+    frame, encoded_img, det_exemplars,
     memory_dicts=[memory_per_obj_dict_forward, memory_per_obj_dict_backward],
     all_ids_used=all_ids_used,
     known_boxes_xywh_norm_list=[],  # nothing tracked yet - every detection is new
@@ -419,7 +419,7 @@ for direction_data in ids_and_memories_dicts:
         need_detection = ((frame_idx - prompt_frame_index) % detect_every_n_frames) == 0 or no_tracked_objects
         if need_detection:
             new_masks, new_boxes, new_scores, new_ids = run_detection_and_register_new_objects(
-                frame, encoded_img,
+                frame, encoded_img, det_exemplars,
                 memory_dicts=[memory_dict],
                 all_ids_used=all_ids_used,
                 known_boxes_xywh_norm_list=box_xywh_norm_on_frame,
