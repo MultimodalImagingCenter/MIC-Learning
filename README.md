@@ -11,7 +11,7 @@ Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/url
 
 ### Installation
 #### From Fiji Update Site
-1. In Fiji, go to `Help>Update...` then to `Manage Update Sites` in the window that opens. 
+1. In Fiji, go to `Help>Update...` then to `Manage Update Sites` in the window that opens.
 2. Use the search bar to find the plugin named `MIC-learning` and check the left side box next to the plug-in name.
 3. Click on `Apply and Close` and then on `Apply Changes`.
 4. Restart Fiji. You will find the plugin under `Plugins > MIC-Learning`.
@@ -26,17 +26,19 @@ To build the repository from source you will need [Maven](https://maven.apache.o
 3. **Launch:** Restart ImageJ/Fiji. You will find the plugin under `Plugins > MIC-Learning`.
 
 ### Models weights and networks
-
 This plugin does not bundle models. You can obtain compatible models from:
 1. **MIC-Learner:** Use the module "Model Download" of our companion plug-in, [MIC-Learner](https://github.com/MultimodalImagingCenter/MIC-Learner), to get pre-configured models and sample data.
 2. **Zenodo:** Download models specifically developed for this plugin [here](https://zenodo.org/records/20138094).
 3. **BioImage Model Zoo:** e.g., [Mitochondria Segmentation](https://zenodo.org/records/6406804) or [Nuclei Segmentation](https://zenodo.org/records/6647674).
-4. **Official Deep Java Libraby Models (TorchScript):**
+4. **Official Deep Java Library Models (TorchScript):**
     - [YOLO11 Detection](https://mlrepo.djl.ai/model/cv/object_detection/ai/djl/pytorch/yolo11n/0.0.1/yolo11n.zip)
     - [YOLO11 Segmentation](https://mlrepo.djl.ai/model/cv/instance_segmentation/ai/djl/pytorch/yolo11n-seg/0.0.1/yolo11n-seg.zip)
     - [SAM2 (Hiera-Tiny)](https://mlrepo.djl.ai/model/cv/mask_generation/ai/djl/pytorch/sam2-hiera-tiny/0.0.1/sam2-hiera-tiny.zip)
+5. **[HuggingFace](https://huggingface.co/)**:
+    - [SAM3](https://huggingface.co/facebook/sam3)
 
-#### Important Requirements
+#### Important Requirements for plug-ins using DJL
+Those requirements apply to the plug-ins in section [Inference](#inference).
 * **Format:** Currently supports **TorchScript** (.pt) by default. PyTorch (.pth) files are not supported. Tensorflow models are supported, but they require to run ImageJ/Fiji with Java 11.
 * **Configuration:** Every model requires a `serving.properties` file (DJL format) containing the engine, translator, and input dimensions, and other optional setting.
     * *If missing, the plugin will prompt a **Manual Configuration** window to generate one.*
@@ -47,7 +49,7 @@ This plugin does not bundle models. You can obtain compatible models from:
 ### Inference
 Located under `Plugins > MIC-Learning > Inference`.
 
-These modules allow you to run predictions on your images using pre-trained models. Choose the module that matches your model's architecture and your specific analysis goal:
+These plug-ins allow you to run predictions on your images using pre-trained models. Choose the module that matches your model's architecture and your specific analysis goal:
 
 * **Classification:** Whole-image categorization : processes an input image and returns a list of probabilities for each predefined class.
 * **U-Net Models:** Take an input image and generate one or more output images (such as probability maps or binary masks).
@@ -59,6 +61,14 @@ These modules allow you to run predictions on your images using pre-trained mode
 1. Select the Model Path.
 2. Select/Create the Configuration file.
 3. Adjust specific parameters (output formats, thresholds) and run.
+
+### Inference with SAM3 model
+Located under `Plugins > MIC-Learning > SAM`.
+These plug-ins allow you to run Promptable Concept Segmentation (PCS) using Metas SAM3 model. Choose the module that matches your image(s) and your prompt(s) format:
+* **Single image(s) - Text prompt(s):** Prompt is one or more short text phrase(s), each one defining one class. If the image is a stack, detection and segmentation are performed independently on every frame of the stack.
+* **Single image - Visual prompt(s):** Prompt is composed of ROI(s) (boxes or points or combination of both), defining one or more class(es). One group (ROI group) can be used as negative prompt. Does not work on stacks.
+* **Cross-image(s) - Visual prompt:** Prompt encoded on 1 reference image, detection is run on a different target image(s). Prompt is composed of ROI(s) (boxes or points or combination of both), defining one class. One group (ROI group) can be used as negative prompt.
+* **Video:** Prompt is composed of ROI(s) (boxes or points or combination of both) and/or one short text phrase, defining one class. One group (ROI group) can be used as negative prompt. Objects are detected and tracked along the video.
 
 ### Tools
 Located under `Plugins > MIC-Learning > Tools`.
