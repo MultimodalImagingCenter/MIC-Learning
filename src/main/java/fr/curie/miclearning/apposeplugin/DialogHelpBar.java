@@ -13,8 +13,8 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * Reusable contextual-help bar for a {@link GenericDialog}: a single {@link Label} whose
- * text/color changes depending on which control the mouse is hovering.
+ * Reusable contextual-help bar for a dialog window ({@link GenericDialog}, {@link javax.swing.JDialog}, ...):
+ * a single {@link Label} whose text/color changes depending on which control the mouse is hovering.
  * <p>
  * Three kinds of messages:
  * <ul>
@@ -77,7 +77,6 @@ public class DialogHelpBar {
         }
     }
 
-    private final GenericDialog gd;
     private final List<Label> lines = new ArrayList<>();
     private final Panel panel;
     private final Font helpBarFont;
@@ -95,17 +94,21 @@ public class DialogHelpBar {
     private String warningText;
     private Color warningColor;
 
-    public DialogHelpBar(GenericDialog gd) {
-        this(gd, HelpBarMode.HELP);
+    public DialogHelpBar(Window dialog) {
+        this(dialog, HelpBarMode.HELP);
     }
 
-    public DialogHelpBar(GenericDialog gd, HelpBarMode helpBarMode) {
-        this.gd = gd;
+    /**
+     * @param dialog the dialog this help bar is attached to (any {@link GenericDialog},
+     *               {@link javax.swing.JDialog}, or other {@link Window}) - used only to derive
+     *               the help bar's font size relative to the dialog's own font.
+     */
+    public DialogHelpBar(Window dialog, HelpBarMode helpBarMode) {
         this.panel = new Panel(new GridLayout(MAX_LINES, 1));
         this.helpBarMode = helpBarMode;
 
         // define hel bar size and font size so deriving from GuiScale
-        Font dialogFont = gd.getFont();
+        Font dialogFont = dialog.getFont();
         float baseSize = dialogFont != null ? dialogFont.getSize2D() : DEFAULT_BASE_FONT_SIZE;
         int helpBarSize = Math.round(baseSize * HELP_BAR_FONT_SCALE);
         this.helpBarFont = new Font(Font.SANS_SERIF, Font.PLAIN, helpBarSize);

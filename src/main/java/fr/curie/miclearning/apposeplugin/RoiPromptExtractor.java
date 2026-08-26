@@ -113,6 +113,46 @@ public class RoiPromptExtractor {
     }
 
     /**
+     * For each ROI group present in {@code rois}, counts how many of {@code frames} contain at
+     * least one usable ROI belonging to that group - e.g. to annotate a group choice with
+     * "8/12 frames" coverage.
+     *
+     * @param rois   ROIs to scan (typically the full RoiManager content)
+     * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frames the frames to check coverage against (1-indexed)
+     */
+    public Map<Integer, Integer> countGroupCoverage(Roi[] rois, int axis, Collection<Integer> frames) {
+        Map<Integer, List<Roi>> roisByFrame = groupRoisByFrame(rois, axis);
+        Map<Integer, Integer> coveredFramesByGroup = new TreeMap<>();
+        for (int frame : frames) {
+            Set<Integer> groupsAtFrame = new TreeSet<>();
+            for (Roi roi : roisByFrame.getOrDefault(frame, Collections.emptyList())) groupsAtFrame.add(roi.getGroup());
+            for (int groupId : groupsAtFrame) coveredFramesByGroup.merge(groupId, 1, Integer::sum);
+        }
+        return coveredFramesByGroup;
+    }
+
+    /**
+     * Which of {@code frames} have no usable ROI belonging to {@code groupId} - e.g. to warn the
+     * user before running that a concept's visual prompt won't fire on some frames.
+     *
+     * @param rois    ROIs to scan (typically the full RoiManager content)
+     * @param axis    3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param groupId the group to check
+     * @param frames  the frames to check (1-indexed)
+     */
+    public List<Integer> findFramesMissingGroup(Roi[] rois, int axis, int groupId, Collection<Integer> frames) {
+        Map<Integer, List<Roi>> roisByFrame = groupRoisByFrame(rois, axis);
+        List<Integer> missing = new ArrayList<>();
+        for (int frame : frames) {
+            boolean present = roisByFrame.getOrDefault(frame, Collections.emptyList()).stream()
+                    .anyMatch(roi -> roi.getGroup() == groupId);
+            if (!present) missing.add(frame);
+        }
+        return missing;
+    }
+
+    /**
      * Checks whether at least one usable ROI (rectangle or point) sits on the given frame.
      *
      * @param roiByFrame map of usable ROIs, grouped by frame

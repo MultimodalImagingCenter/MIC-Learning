@@ -45,7 +45,7 @@ public class Sam3Dialogs {
         gd.addFileField("Model_Path:", resolveDefaultModelPath(lastModelPrefKey), 60);
     }
 
-    private static String resolveDefaultModelPath(String lastModelPrefKey) {
+    static String resolveDefaultModelPath(String lastModelPrefKey) {
         String lastPath = Prefs.get(lastModelPrefKey, null);
         if (lastPath != null && Files.exists(Paths.get(lastPath))) {
             return lastPath;
