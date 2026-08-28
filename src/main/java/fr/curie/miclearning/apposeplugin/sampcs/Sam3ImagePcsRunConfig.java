@@ -14,7 +14,7 @@ import java.util.Objects;
  * (or image stack), with an arbitrary number of independent concepts - each with an optional
  * text prompt and/or an optional positive/negative visual prompt, resolved per frame.
  */
-public final class Sam3ConceptsPcsRunConfig {
+public final class Sam3ImagePcsRunConfig {
 
     private final String modelPath;
     private final Sam3ModelParameters detectionParams;
@@ -25,13 +25,13 @@ public final class Sam3ConceptsPcsRunConfig {
     private final List<String> conceptLabels;
     private final List<String> conceptTexts; // real text prompt, or "visual" placeholder when unused
     private final List<Boolean> conceptTextUsed;
-    private final Map<String, Integer> classIdMap; // concept label -> output/RoiManager group id
+    private final Map<String, Integer> classIdMap; // concept label -> output RoiManager group id (may repeat across concepts)
 
     // one entry per frame, one inner entry per concept (same order as conceptLabels):
     // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
     private final List<List<Map<String, Object>>> framePrompts;
 
-    private Sam3ConceptsPcsRunConfig(Builder b) {
+    private Sam3ImagePcsRunConfig(Builder b) {
         this.modelPath = b.modelPath;
         this.detectionParams = b.detectionParams;
         this.outputOptions = b.outputOptions;
@@ -109,7 +109,7 @@ public final class Sam3ConceptsPcsRunConfig {
             return this;
         }
 
-        public Sam3ConceptsPcsRunConfig build() {
+        public Sam3ImagePcsRunConfig build() {
             Objects.requireNonNull(modelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
@@ -120,7 +120,7 @@ public final class Sam3ConceptsPcsRunConfig {
             if (framePrompts.isEmpty()) {
                 throw new IllegalStateException("At least one frame of prompts must be provided.");
             }
-            return new Sam3ConceptsPcsRunConfig(this);
+            return new Sam3ImagePcsRunConfig(this);
         }
     }
 }

@@ -12,7 +12,7 @@
 
     <groupId>io.github.cmessaoudi</groupId>
     <artifactId>Mic-Learning</artifactId>
-    <version>1.4.0SNAPSHOT</version>
+    <version>1.4.0-SNAPSHOT</version>
 
     <name>MIC-Learning</name>
     <description>
@@ -334,8 +334,8 @@
                         <goals><goal>run</goal></goals>
                         <configuration>
                             <target>
-                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="C:/Users/yepon/Downloads/fiji-stable-win64-jdk/Fiji.app/plugins/mic_learning.jar"
+                                <copy file="${project.build.directory}/${project.build.finalName}-all.jar"
+                                      tofile="/home/noemie/Applications/Fiji.app/plugins/mic_learning.jar"
                                 />
                             </target>
                         </configuration>

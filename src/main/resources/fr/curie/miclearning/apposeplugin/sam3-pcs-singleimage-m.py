@@ -109,7 +109,7 @@ for frame_idx, img in enumerate(images_bgr):
 
         has_positive_visual = len(pos_box_list) > 0 or len(pos_point_list) > 0
         if not text_used and not has_positive_visual:
-            log_to_java(f"   concept '{concept_labels[concept_idx]}': no prompt on frame {frame_idx + 1}, skipped")
+            log_to_java(f"      concept '{concept_labels[concept_idx]}': no prompt on frame {frame_idx + 1}, skipped")
             continue
 
         # encode_exemplars always receives a text value (SAM3 requires one); concepts without a
@@ -128,7 +128,7 @@ for frame_idx, img in enumerate(images_bgr):
         )
 
         n_det = filtered_masks.shape[0]
-        log_to_java("   concept '{}': number of object(s) detected: {} - presence score: {}".format(
+        log_to_java("      concept '{}': number of object(s) detected: {} - presence score: {}".format(
             concept_labels[concept_idx], n_det, *presence_score.tolist()))
 
         if presence_score > 0.5 and n_det > 0:

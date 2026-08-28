@@ -24,15 +24,10 @@ import java.util.concurrent.CountDownLatch;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
- * Non-modal Swing dialog for {@link Sam3SingleImgPcs_Plugin}: lets the user define an arbitrary
- * number of concepts (each with an optional text prompt and/or optional positive/negative visual
- * prompt), plus model path, detection parameters and output options.
- * <p>
- * Uses a plain {@link JDialog} rather than {@code GenericDialog}/{@code NonBlockingGenericDialog}
- * because the concept table has a dynamic row count that {@code GenericDialog}'s fixed
- * {@code addXxxField} API can't express.
+ * Non-modal Swing dialog for {@link Sam3ImagePcs_Plugin}: lets the user define an arbitrary
+ * number of concepts, plus model path, detection parameters and output options.
  */
-public class Sam3ConceptsDialog extends JDialog {
+public class Sam3ImageDialog extends JDialog {
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final int ROI_POLL_INTERVAL_MS = 500;
@@ -72,7 +67,7 @@ public class Sam3ConceptsDialog extends JDialog {
     private DetectionUtils.DetectionMode stackMode;
     private List<Sam3Concept> concepts;
 
-    public Sam3ConceptsDialog(ImagePlus imp, int nFrames, int axis) {
+    public Sam3ImageDialog(ImagePlus imp, int nFrames, int axis) {
         super(IJ.getInstance(), "SAM3 Promptable Concept Segmentation", false);
         this.imp = imp;
         this.nFrames = nFrames;
@@ -94,13 +89,12 @@ public class Sam3ConceptsDialog extends JDialog {
 
     /**
      * Shows the dialog and blocks the calling thread until the user closes it (OK, Cancel, or the
-     * window's own close button) - safe to call from {@link ij.plugin.PlugIn#run}, which normally
-     * runs off the AWT event thread. Must NOT be called from the event dispatch thread itself.
+     * window's own close button)
      *
      * @return {@code true} if the user pressed OK with a valid configuration, {@code false} otherwise
      */
     public boolean showDialogAndWait() {
-        SwingUtilities.invokeLater(() -> {
+    SwingUtilities.invokeLater(() -> {
             refreshGroupOptions();
             startRoiPolling();
             setVisible(true);
@@ -130,8 +124,8 @@ public class Sam3ConceptsDialog extends JDialog {
 
         helpBar = new DialogHelpBar(this, DialogHelpBar.loadSavedMode());
 
-        content.add(buildModelPanel());
         content.add(helpBar.getPanel());
+        content.add(buildModelPanel());
         content.add(Box.createVerticalStrut(8));
         content.add(buildConceptsPanel());
         content.add(Box.createVerticalStrut(8));
@@ -140,8 +134,8 @@ public class Sam3ConceptsDialog extends JDialog {
         if (nFrames > 1) content.add(buildStackModePanel());
         content.add(buildButtonsPanel());
 
-        // start with one empty concept row so the table isn't blank on first open
-        tableModel.addConcept(firstUnusedClassId());
+        // start with one empty concept row
+        tableModel.addConcept();
     }
 
     private JPanel buildModelPanel() {
@@ -182,32 +176,37 @@ public class Sam3ConceptsDialog extends JDialog {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Concepts"));
 
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_GROUP_ID).setCellEditor(positiveGroupEditor);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_GROUP_ID).setCellRenderer(new Sam3GroupIdCellEditor.Renderer(positiveGroupEditor));
-
-        Sam3GroupIdCellEditor.Renderer negativeGroupRenderer = new Sam3GroupIdCellEditor.Renderer(negativeGroupEditor) {
+        // Name column : default foreground color
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 Component comp = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, column);
-                comp.setForeground(tableModel.getConcept(row).isNegativeVisualUsed() ? Color.BLACK : Color.GRAY);
-                return comp;
-            }
-        };
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_GROUP_ID).setCellEditor(negativeGroupEditor);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_GROUP_ID).setCellRenderer(negativeGroupRenderer);
-
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_TEXT_PROMPT).setCellRenderer(new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-                Component comp = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, column);
-                comp.setForeground(tableModel.getConcept(row).isTextPromptUsed() ? Color.BLACK : Color.GRAY);
+                if (!isSelected) comp.setForeground(roiOutputSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
                 return comp;
             }
         });
 
+        // Positive / negative visual: editable group combo, "not used" == null
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setCellEditor(positiveGroupEditor);
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setCellRenderer(new Sam3GroupIdCellEditor.Renderer(positiveGroupEditor));
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_VISUAL).setCellEditor(negativeGroupEditor);
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_VISUAL).setCellRenderer(new Sam3GroupIdCellEditor.Renderer(negativeGroupEditor));
+
+        // Output group: greyed (but still editable) while no ROI output is selected
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_OUTPUT_GROUP).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                Component comp = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, column);
+                if (!isSelected) comp.setForeground(roiOutputSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
+                return comp;
+            }
+        });
+
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setPreferredWidth(100);
         table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_TEXT_PROMPT).setPreferredWidth(150);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_GROUP_ID).setPreferredWidth(160);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_GROUP_ID).setPreferredWidth(160);
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setPreferredWidth(160);
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_VISUAL).setPreferredWidth(160);
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_OUTPUT_GROUP).setPreferredWidth(90);
         table.setRowHeight(22);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 
@@ -216,8 +215,8 @@ public class Sam3ConceptsDialog extends JDialog {
         panel.add(scrollPane, BorderLayout.CENTER);
 
         JButton addButton = new JButton("Add concept");
-        addButton.addActionListener(e -> tableModel.addConcept(firstUnusedClassId()));
-        helpBar.attachHelp(addButton, "Adds a new concept row, defaulting to the first unused RoiManager group id.");
+        addButton.addActionListener(e -> tableModel.addConcept());
+        helpBar.attachHelp(addButton, "Adds a new concept row (no prompt, next unused output group).");
 
         JButton removeButton = new JButton("Remove selected");
         removeButton.addActionListener(e -> {
@@ -275,7 +274,11 @@ public class Sam3ConceptsDialog extends JDialog {
         addShapeRoisCB = new JCheckBox("Add shape ROIs to ROI Manager", true);
         instanceMaskCB = new JCheckBox("Create instance masks (unique value per instance)", false);
         semanticMaskCB = new JCheckBox("Create semantic masks (unique value per class)", false);
-        instanceMaskPerClassCB = new JCheckBox("Create instance mask per class (one slice per class)", false);
+        instanceMaskPerClassCB = new JCheckBox("Create instance mask per class (one slice per class; a per-frame hyperstack for stacks)", false);
+
+        // the "Output group" column is only meaningful for ROI outputs - repaint it when that changes
+        addBoxRoisCB.addItemListener(e -> table.repaint());
+        addShapeRoisCB.addItemListener(e -> table.repaint());
 
         panel.add(addBoxRoisCB);
         panel.add(addShapeRoisCB);
@@ -318,6 +321,10 @@ public class Sam3ConceptsDialog extends JDialog {
     private void startRoiPolling() {
         lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
         roiPollTimer = new Timer(ROI_POLL_INTERVAL_MS, e -> {
+        if (imp.getWindow() == null) { // source image was closed - nothing left to configure
+                onImageClosed();
+                return;
+            }
             String signature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
             if (!signature.equals(lastRoiSignature)) {
                 lastRoiSignature = signature;
@@ -331,6 +338,14 @@ public class Sam3ConceptsDialog extends JDialog {
         List<Sam3GroupOption> options = computeGroupOptions();
         positiveGroupEditor.setAvailableGroups(options);
         negativeGroupEditor.setAvailableGroups(options);
+
+        // for Roi positive & negative prompts columns : update available ROI groups
+        Set<Integer> availableGroupIds = new HashSet<>();
+        for (Sam3GroupOption option : options) availableGroupIds.add(option.getGroupId());
+        tableModel.reconcileVisualGroups(availableGroupIds);
+
+        // for Roi positive & negative prompts columns : switch to unabled if no ROI at all
+        tableModel.setRoiPromptsAvailable(!options.isEmpty());
         table.repaint();
     }
 
@@ -344,7 +359,7 @@ public class Sam3ConceptsDialog extends JDialog {
         return frames;
     }
 
-    /** One option per RoiManager group with a usable ROI on at least one of the current frames, with coverage. */
+    /** One option per roi group with a usable ROI on at least one of the current frames,. */
     private List<Sam3GroupOption> computeGroupOptions() {
         List<Integer> frames = currentFrameRange();
         Map<Integer, Integer> coveredFramesByGroup = roiPromptExtractor.countGroupCoverage(getRoiManager().getRoisAsArray(), axis, frames);
@@ -357,17 +372,10 @@ public class Sam3ConceptsDialog extends JDialog {
         return options;
     }
 
-    /** First group id (1-255) not already claimed by a RoiManager group or by an existing concept row. */
-    private int firstUnusedClassId() {
-        Set<Integer> used = new TreeSet<>();
-        for (Roi roi : getRoiManager().getRoisAsArray()) {
-            if (RoiPromptExtractor.isUsableRoiType(roi)) used.add(roi.getGroup());
-        }
-        for (Sam3Concept concept : tableModel.getConcepts()) used.add(concept.getClassId());
-        for (int candidate = 1; candidate <= 255; candidate++) {
-            if (!used.contains(candidate)) return candidate;
-        }
-        return 1;
+    /** True when at least one ROI output is enabled - the only case where a concept's output group matters. */
+    private boolean roiOutputSelected() {
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected())
+                || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
     }
 
     // ==== OK / Cancel ====
@@ -377,11 +385,22 @@ public class Sam3ConceptsDialog extends JDialog {
         dispose();
     }
 
+    /** Called when the source image is closed while the dialog is still open: cancel like {@link #onCancel()}. */
+    private void onImageClosed() {
+        approved = false;
+        IJ.showStatus("SAM3: source image was closed - dialog cancelled");
+        dispose();
+    }
+
     private void onOk() {
+        if (imp.getWindow() == null) {
+            onImageClosed();
+            return;
+        }
         if (table.isEditing() && !table.getCellEditor().stopCellEditing()) return;
 
         String path = resolveAndValidateModelPath();
-        if (path == null) return;
+        if (path == null) return; // does not close window, because "dispose()" is not called. Usr can try again
 
         List<Sam3Concept> currentConcepts = tableModel.getConcepts();
         List<String> errors = validateConcepts(currentConcepts);
@@ -409,12 +428,16 @@ public class Sam3ConceptsDialog extends JDialog {
             errors.add("At least one concept must be defined.");
             return errors;
         }
+        Set<String> seenNames = new HashSet<>();
         for (Sam3Concept concept : currentConcepts) {
             if (!concept.hasAnyPositivePrompt()) {
-                errors.add("Concept (group " + concept.getClassId() + "): needs a text prompt and/or a positive visual prompt.");
+                errors.add("Concept " + concept.getName() + ": needs a text prompt and/or a positive visual prompt.");
             }
             if (!concept.isNegativeGroupValid()) {
-                errors.add("Concept (group " + concept.getClassId() + "): negative group can't be its own group.");
+                errors.add("Concept " + concept.getName() + ": negative visual can't use the same group as the positive visual.");
+            }
+            if (!seenNames.add(concept.getName())) {
+                errors.add("Duplicate concept name: " + concept.getName());
             }
         }
         return errors;
@@ -468,12 +491,8 @@ public class Sam3ConceptsDialog extends JDialog {
         options.addToRoiManagerShapes = addShapeRoisCB.isSelected();
         options.createInstanceMask = instanceMaskCB.isSelected();
         options.createSemanticMask = semanticMaskCB.isSelected();
-        options.createInstanceMaskPerClass = instanceMaskPerClassCB.isSelected() && stackModeIsSingleImage();
+        options.createInstanceMaskPerClass = instanceMaskPerClassCB.isSelected();
         return options;
-    }
-
-    private boolean stackModeIsSingleImage() {
-        return nFrames <= 1 || !processStackCB.isSelected();
     }
 
     /** Logs, per concept, which of the currently processed frames are missing a usable ROI for an enabled visual prompt. */
@@ -483,10 +502,10 @@ public class Sam3ConceptsDialog extends JDialog {
 
         for (Sam3Concept concept : currentConcepts) {
             if (concept.isPositiveVisualUsed()) {
-                warnIfPartialCoverage(allRois, frames, concept.getClassId(), concept, "positive");
+                warnIfPartialCoverage(allRois, frames, concept.getPositiveVisualGroup(), concept, "positive");
             }
-            if (concept.isNegativeVisualUsed() && concept.getNegativeGroupId() != null) {
-                warnIfPartialCoverage(allRois, frames, concept.getNegativeGroupId(), concept, "negative");
+            if (concept.isNegativeVisualUsed()) {
+                warnIfPartialCoverage(allRois, frames, concept.getNegativeVisualGroup(), concept, "negative");
             }
         }
     }
@@ -494,7 +513,7 @@ public class Sam3ConceptsDialog extends JDialog {
     private void warnIfPartialCoverage(Roi[] allRois, List<Integer> frames, int groupId, Sam3Concept concept, String kind) {
         List<Integer> missingFrames = roiPromptExtractor.findFramesMissingGroup(allRois, axis, groupId, frames);
         if (!missingFrames.isEmpty()) {
-            IJ.log("WARNING: concept (group " + concept.getClassId() + ") - " + kind + " group " + groupId
+            IJ.log("WARNING: concept " + concept.getName() + " - " + kind + " group " + groupId
                     + " has no ROI on frame(s): " + missingFrames);
         }
     }

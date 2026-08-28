@@ -21,25 +21,9 @@ import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
 
 public class Sam3Dialogs {
 
-    public static final int MAX_GROUP_VALUE = 255; // max id for group in ImageJ
-    public static final String ONLY_POSITIVE_TXT = "no negative group";
-    public static final String GROUP_ZERO_TXT = "0 (ROI without group) or 255";
     public static final String ALL_ROIS_GROUPS_TXT = "all ROIs (except negative group, if any)";
     public static final Font SECTION_HEADER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 13);
     private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
-
-    public static DetectionMode askStackMode(int nFrames){
-        YesNoCancelDialog gd = new YesNoCancelDialog(IJ.getInstance(),
-                "SAM segmentation", "Include all "+nFrames+" images?");
-
-        if (gd.cancelPressed()) { // User canceled
-            return null;
-        } else if (gd.yesPressed()) { // user clicked yes
-            return DetectionMode.MULTI_IMAGE;
-        } else { // user clicked no
-            return DetectionMode.SINGLE_IMAGE;
-        }
-    }
 
     public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
         gd.addFileField("Model_Path:", resolveDefaultModelPath(lastModelPrefKey), 60);
@@ -65,61 +49,6 @@ public class Sam3Dialogs {
             IJ.error("Selection Error", "The selected path is not valid:\n" + modelPathString);
             return null;
         }
-    }
-
-    public static void addMultiTextPromptDialog(GenericDialog gd) {
-        gd.addMessage("Prompts: Enter one or more text prompts, separated by commas.\n");
-        gd.addMessage("ROI Group IDs: (Optional) Enter a Group ID for each prompt, separated by commas.\n" +
-                "   ROI Group IDs are int value, between 0 (no group) and 255.\n" +
-                "   If you only provide one ID, it will be assigned to the first prompt, and the following prompts will be numbered sequentially from that starting point." );
-        gd.addStringField("Text_prompt", "", 20);
-        gd.addStringField("Roi_Group_ID", String.valueOf(getFirstUnusedRoiID()), 15);
-    }
-
-
-    public static Map<String, Integer> getMultiTextPrompt(GenericDialog gd) {
-        String prompts = gd.getNextString();
-        if (prompts == null || prompts.trim().isEmpty()) {
-            IJ.log("Prompt empty. Closing plug-in.\n");
-            IJ.error("Please enter a valid prompt.");
-            return null;
-        }
-        String[] promptArray = prompts.split(",");
-
-        String roiIDs = gd.getNextString();
-        if (roiIDs == null || roiIDs.trim().isEmpty()) {
-            roiIDs = String.join("", Collections.nCopies(promptArray.length, "0,"));
-        }
-        String[] roiIDArray = roiIDs.split(",");
-
-        return getClassIdMapFromArrays(promptArray,roiIDArray);
-    }
-
-
-    public static void addParameterDialog(GenericDialog gd, Sam3ModelParameters params) {
-        gd.addMessage("Detection and Segmentation Settings", Sam3Dialogs.SECTION_HEADER_FONT);
-        gd.addNumericField("Confidence_threshold:", params.getConfidenceThreshold(), 2);
-        gd.addNumericField("Mask_score_threshold:", params.getMaskScoreThreshold(), 2);
-        gd.addNumericField("Segmentation_masks_side_length", params.getMaxSideLengthDetect(),0); // advanced parameter
-    }
-
-    public static void getParameters(GenericDialog gd, Sam3ModelParameters params) {
-        double confThreshold = gd.getNextNumber();
-        if (confThreshold < 0 || confThreshold > 1) {
-            IJ.log("Confidence Threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
-            confThreshold = params.getConfidenceThreshold();
-        }
-        params.setConfidenceThreshold(confThreshold);
-
-        double maskThreshold = gd.getNextNumber(); // no check ?
-        params.setMaskScoreThreshold(maskThreshold);
-
-        int maxSideLengthDetect = (int) gd.getNextNumber();
-        if (maxSideLengthDetect <= 0) {
-            IJ.log("Mask side length of masks must be >0. using default value: " + params.getMaxSideLengthDetect());
-            maxSideLengthDetect = params.getMaxSideLengthDetect();
-        }
-        params.setMaxSideLengthDetect(maxSideLengthDetect);
     }
 
     public static void addImageBasicParameterDialog(GenericDialog gd, Sam3ModelParameters params,  DialogHelpBar helpBar) {
@@ -327,30 +256,6 @@ public class Sam3Dialogs {
         return options;
     }
 
-
-    public static void addNegativeGroupDialog(GenericDialog gd, int groupNumber, String[] negativeGroupSelection) {
-        //if multiple ROI groups, ask if one of them corresponds to negative prompts
-        if (groupNumber > 1) {
-            gd.addMessage("One group can be labeled as \"negative\" to exclude specific areas.");
-            gd.addMessage("All ROIs in this group will act as negative prompts across all detection, ensuring they are ignored by the model.");
-            gd.addChoice("negative group ID: ", negativeGroupSelection, negativeGroupSelection[0]);
-        }
-    }
-
-    public static int getNegativeGroup(GenericDialog gd, int groupNumber, String ONLY_POSITIVE_TXT, String GROUP_ZERO_TXT){
-        if (groupNumber > 1) {
-            String negativeGroupName = gd.getNextChoice();
-            if (!Objects.equals(negativeGroupName, ONLY_POSITIVE_TXT)) {
-                if (Objects.equals(negativeGroupName, GROUP_ZERO_TXT)){
-                    return  0;
-                } else {
-                    return Integer.parseInt(negativeGroupName);
-                }
-            }
-        }
-        return -1; // no negative group
-    }
-
     /**
      * Attaches {@code hint} to  the label and the input field GenericDialog just added
      */
@@ -389,79 +294,6 @@ public class Sam3Dialogs {
             //IJ.log("Warning: Could not determine ImageJ installation directory. Defaulting to user home.");
             return IJ.getDirectory("home"); // Fallback to user's home directory
         }
-    }
-
-    public static Map<String, Integer> getClassIdMapFromArrays(String[] promptArray, String[] roiIDArray) {
-        int nPrompts = promptArray.length;
-        int[] roiIds = new int[nPrompts];
-
-        if (roiIDArray.length == 0) {
-            Arrays.fill(roiIds, 0);
-        } else if (!((nPrompts == roiIDArray.length) || roiIDArray.length == 1)) {
-            IJ.log("Invalid number of ROI ID(s) ("+ roiIDArray.length +" ROI ID(s) and "+ nPrompts +" prompt(s)). Closing plug-in.\n");
-            IJ.error("Please provide either 1 ROI group id or as many as prompt(s).");
-            return null;
-        }
-
-        if (roiIDArray.length == 1 && nPrompts != 1) {
-            // 1 ROI-ID given : the following ROI groups are numbered sequentially
-            int initialId = NumberUtils.toInt(roiIDArray[0], 0);
-            if (initialId < 0 || initialId >255) {
-                IJ.log("ROI group ID must be a value between 0 (no group) and 255. Group 0 (no group) will be used for all prompts.");
-                Arrays.fill(roiIds, 0);
-            } else if (initialId == 0){
-                IJ.log("Initial group ID 0 given. Group 0 (no group) will be used for all prompts.");
-                Arrays.fill(roiIds, 0);
-            } else {
-                for (int i = 0; i < nPrompts; i++) {
-                    int id = (initialId +i)%255;
-                    roiIds[i] = id;
-                }
-            }
-        } else {
-            // as many ROI-ID as prompts
-            for (int i = 0; i < nPrompts; i++) {
-                int id = NumberUtils.toInt(roiIDArray[i], 0);
-                if (id < 0 || id >255) {
-                    IJ.log("ROI group ID must be a value between 0 (no group) and 255. " +
-                            "Invalid ROI group ID: " + id + " "+
-                            "Group 0 (no group) will be used.");
-                    id = 0;
-                }
-                roiIds[i] = id;
-            }
-        }
-
-        Map<String, Integer> classIdMap = new LinkedHashMap<>();
-        for (int i = 0; i < nPrompts; i++) {
-            String prompt = promptArray[i];
-            if (!prompt.trim().isEmpty()) {
-                classIdMap.put(prompt.trim(), roiIds[i]);
-            }
-        }
-
-        return classIdMap;
-    }
-
-    public static int getFirstUnusedRoiID(){
-        // create id-name map list
-        // get ROIs list
-        RoiManager roiManager = getRoiManager();
-        Roi[] roiList = roiManager.getRoisAsArray();
-        // get ROI groups IDs
-        Set<Integer> uniqueGroups = new TreeSet<>();
-        for (Roi roi : roiList) {
-            uniqueGroups.add(roi.getGroup());
-        }
-        if (uniqueGroups.isEmpty()) return 1; {}
-
-        // find first unused roi ID
-        for (int roiID = 1; roiID <= 255; roiID++) {
-            if (!uniqueGroups.contains(roiID)) {
-                return roiID;
-            }
-        }
-        return 0; // if no value available, no group
     }
 
     public static void addDownloadInstruction() {

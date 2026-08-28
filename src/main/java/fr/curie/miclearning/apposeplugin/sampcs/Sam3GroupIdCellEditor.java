@@ -3,31 +3,44 @@ package fr.curie.miclearning.apposeplugin.sampcs;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JTable;
+import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
+import java.awt.Color;
 import java.awt.Component;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Editable combo-box cell editor for a "group id" column of the concept table (either the
- * positive/class group id, or the negative group id)
+ * Editable combo-box cell editor for a visual-prompt group column of the concept table (the
+ * positive or the negative visual group).
+ *
+ * <p>The cell value is an {@link Integer} RoiManager group id, or {@code null} when the prompt is
+ * unused - shown as a greyed-out {@value #NOT_USED_LABEL}. The user can pick a group from the
+ * dropdown or type an id directly.
  */
 public class Sam3GroupIdCellEditor extends DefaultCellEditor {
 
+    static final String NOT_USED_LABEL = "not used";
+    static final Color NOT_USED_COLOR = Color.GRAY;
+
+    /** Background for a cell that can't be edited at all (no ROI to point at), vs. a merely greyed-out one. */
+    static final Color DISABLED_BG = UIManager.getColor("TextField.inactiveBackground") != null
+            ? UIManager.getColor("TextField.inactiveBackground")
+            : new Color(0xEC, 0xEC, 0xEC);
+
     private final JComboBox<String> comboBox;
-    private final boolean excludeOwnRowGroup;
+    private final boolean excludeOwnRowPositiveGroup; // true for the "negative prompt"
     private List<Sam3GroupOption> availableGroups = new ArrayList<>();
-    private Integer editingValue; // value the cell held when editing started - fallback if the typed text can't be parsed
+    private Integer editingValue; // cell value when editing started (fallback)
 
     /**
-     * @param excludeOwnRowGroup if true, the row's own class/group id (from {@link Sam3ConceptTableModel})
-     *                           is left out of the dropdown (used for the "negative group" column, since
-     *                           a concept can't use its own group as its negative prompt)
+     * @param excludeOwnRowPositiveGroup if true, the row's own positive visual group is left out of
+     *                                   the dropdown (used for the "negative visual" column)
      */
-    public Sam3GroupIdCellEditor(boolean excludeOwnRowGroup) {
+    public Sam3GroupIdCellEditor(boolean excludeOwnRowPositiveGroup) {
         super(createComboBox());
         this.comboBox = castComponent();
-        this.excludeOwnRowGroup = excludeOwnRowGroup;
+        this.excludeOwnRowPositiveGroup = excludeOwnRowPositiveGroup;
     }
 
     private static JComboBox<String> createComboBox() {
@@ -41,23 +54,25 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
         return (JComboBox<String>) getComponent();
     }
 
-    /** Replaces the candidate groups shown in the dropdown (does not affect an edit already in progress). */
+    /** Replaces the candidate groups shown in the dropdown */
     public void setAvailableGroups(List<Sam3GroupOption> options) {
         this.availableGroups = new ArrayList<>(options);
     }
 
+    /** Populate comboBox with all Roi groups available, except the positive id to exclude, if any */
     @Override
     public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
         editingValue = (Integer) value;
 
-        Integer ownRowGroupId = null;
-        if (excludeOwnRowGroup && table.getModel() instanceof Sam3ConceptTableModel) {
-            ownRowGroupId = ((Sam3ConceptTableModel) table.getModel()).getConcept(row).getClassId();
+        Integer excludedGroupId = null;
+        if (excludeOwnRowPositiveGroup && table.getModel() instanceof Sam3ConceptTableModel) {
+            excludedGroupId = ((Sam3ConceptTableModel) table.getModel()).getConcept(row).getPositiveVisualGroup();
         }
 
         comboBox.removeAllItems();
+        comboBox.addItem(NOT_USED_LABEL);
         for (Sam3GroupOption option : availableGroups) {
-            if (ownRowGroupId != null && option.getGroupId() == ownRowGroupId) continue;
+            if (excludedGroupId != null && option.getGroupId() == excludedGroupId) continue;
             comboBox.addItem(option.toString());
         }
 
@@ -67,20 +82,31 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
     @Override
     public Object getCellEditorValue() {
         Object raw = super.getCellEditorValue();
-        Integer parsed = parseGroupId(raw == null ? null : raw.toString());
-        return parsed != null ? parsed : editingValue;
+        String text = raw == null ? "" : raw.toString().trim();
+        if (text.isEmpty() || NOT_USED_LABEL.equals(text)) return null; // cell seen as empty if content is "not used"
+
+        Integer parsed = parseGroupId(text);
+        if (parsed != null && isAvailableGroup(parsed)) return parsed;
+        return editingValue; // typed value isn't a known group - keep the previous choice
     }
 
-    /** Matches {@code groupId} against the current dropdown entries; falls back to the bare number if unregistered. */
-    private String findLabel(Integer groupId) {
-        if (groupId == null) return "";
+    private boolean isAvailableGroup(int groupId) {
+        for (Sam3GroupOption option : availableGroups) {
+            if (option.getGroupId() == groupId) return true;
+        }
+        return false;
+    }
+
+    /** Formats {@code groupId} for display: the full option label if known, {@value #NOT_USED_LABEL} if null. */
+    String findLabel(Integer groupId) {
+        if (groupId == null) return NOT_USED_LABEL;
         for (Sam3GroupOption option : availableGroups) {
             if (option.getGroupId() == groupId) return option.toString();
         }
         return String.valueOf(groupId);
     }
 
-    /** Reads back the leading integer of a selected/typed entry, e.g. "3 (nucleus) — 8/12 frames" -> 3. */
+    /** Reads back the leading integer of a selected/typed entry, e.g. "3 (nucleus) - 8/12 frames" -> 3. */
     private static Integer parseGroupId(String text) {
         if (text == null) return null;
         text = text.trim();
@@ -103,7 +129,14 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                          boolean hasFocus, int row, int column) {
-            return super.getTableCellRendererComponent(table, editor.findLabel((Integer) value), isSelected, hasFocus, row, column);
+            Integer groupId = (Integer) value;
+            Component comp = super.getTableCellRendererComponent(
+                    table, editor.findLabel(groupId), isSelected, hasFocus, row, column);
+            if (!isSelected) {
+                comp.setForeground(groupId == null ? NOT_USED_COLOR : table.getForeground());
+                comp.setBackground(table.isCellEditable(row, column) ? table.getBackground() : DISABLED_BG);
+            }
+            return comp;
         }
     }
 }

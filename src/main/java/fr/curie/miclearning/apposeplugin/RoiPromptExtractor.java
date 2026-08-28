@@ -96,7 +96,6 @@ public class RoiPromptExtractor {
 
     /**
      * Groups the usable ROIs (rectangle or point) in {@code selectedRois} by frame position,
-     * in a single pass.
      *
      * @param selectedRois ROIs currently selected in the RoiManager
      * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
@@ -107,6 +106,7 @@ public class RoiPromptExtractor {
         for (Roi roi : selectedRois) {
             if (!isUsableRoiType(roi)) continue;
             int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            if (position==0) position=1;
             byFrame.computeIfAbsent(position, k -> new ArrayList<>()).add(roi);
         }
         return byFrame;
@@ -114,10 +114,9 @@ public class RoiPromptExtractor {
 
     /**
      * For each ROI group present in {@code rois}, counts how many of {@code frames} contain at
-     * least one usable ROI belonging to that group - e.g. to annotate a group choice with
-     * "8/12 frames" coverage.
+     * least one usable ROI belonging to that group
      *
-     * @param rois   ROIs to scan (typically the full RoiManager content)
+     * @param rois   ROIs to scan
      * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
      * @param frames the frames to check coverage against (1-indexed)
      */

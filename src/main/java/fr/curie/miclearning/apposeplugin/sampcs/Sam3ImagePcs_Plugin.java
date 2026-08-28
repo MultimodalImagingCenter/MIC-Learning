@@ -31,7 +31,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * text prompt stays constant across frames, but its visual prompt is re-resolved from the
  * RoiManager on every frame.
  */
-public class Sam3SingleImgPcs_Plugin implements PlugIn {
+public class Sam3ImagePcs_Plugin implements PlugIn {
     protected static ImagePlus imp;
     private int nFrames;
     private int axis; // 3 = Z axis, 4 = Time axis (matches ImagePlus.getDimensions() indexing)
@@ -48,7 +48,7 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
     private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
 
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml"; // inside the resources folder
-    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-detection-image-concepts-m.py"; // inside the resources folder
+    private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-singleimage-m.py"; // inside the resources folder
 
     @Override
     public void run(String s) {
@@ -92,16 +92,17 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
             imp = new ImagePlus(imp.getTitle(), imp.getProcessor());
         }
 
-        // --- 3. build concept labels/texts/classIdMap + per-frame prompts ---
+        // --- 3. build concept names/texts/classIdMap + per-frame prompts ---
+        // the concept name is the unique key (classIdMap) and the class name carried on every detection
         List<String> conceptLabels = new ArrayList<>();
         List<String> conceptTexts = new ArrayList<>();
         List<Boolean> conceptTextUsed = new ArrayList<>();
         Map<String, Integer> classIdMap = new HashMap<>();
         for (Sam3Concept concept : concepts) {
-            conceptLabels.add(concept.getLabel());
+            conceptLabels.add(concept.getName());
             conceptTexts.add(concept.isTextPromptUsed() ? concept.getTextPrompt() : "visual");
             conceptTextUsed.add(concept.isTextPromptUsed());
-            classIdMap.put(concept.getLabel(), concept.getClassId());
+            classIdMap.put(concept.getName(), concept.getOutputGroup());
         }
 
         Roi[] allRois = roiManager.getRoisAsArray();
@@ -118,9 +119,9 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on concepts ---");
         printParameters();
 
-        Sam3ConceptsPcsRunConfig config;
+        Sam3ImagePcsRunConfig config;
         try {
-            config = new Sam3ConceptsPcsRunConfig.Builder()
+            config = new Sam3ImagePcsRunConfig.Builder()
                     .modelPath(modelPath)
                     .detectionParams(detectionParams)
                     .outputOptions(outputOptions)
@@ -145,8 +146,8 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Sam3Concept concept : concepts) {
             List<Integer> positiveGroups = concept.isPositiveVisualUsed()
-                    ? Collections.singletonList(concept.getClassId()) : Collections.emptyList();
-            Integer negativeGroup = concept.isNegativeVisualUsed() ? concept.getNegativeGroupId() : null;
+                    ? Collections.singletonList(concept.getPositiveVisualGroup()) : Collections.emptyList();
+            Integer negativeGroup = concept.getNegativeVisualGroup();
             RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, positiveGroups, negativeGroup);
 
             Map<String, Object> entry = new HashMap<>();
@@ -157,7 +158,7 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         return result;
     }
 
-    private void runSam3(Sam3ConceptsPcsRunConfig config, long startTime) {
+    private void runSam3(Sam3ImagePcsRunConfig config, long startTime) {
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
             Thread t = new Thread(r, "sam3-concepts-consumer");
@@ -166,7 +167,7 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         };
         ExecutorService executor = Executors.newSingleThreadExecutor(consumerThreadFactory);
 
-        try (Sam3ConceptsPcsPythonRunner runner = new Sam3ConceptsPcsPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
+        try (Sam3ImagePcsPythonRunner runner = new Sam3ImagePcsPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
             MultiImagePcsResultsConsumer consumer = new MultiImagePcsResultsConsumer(
@@ -210,7 +211,7 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         }
     }
 
-    private void generateOutputs(Sam3ConceptsPcsRunConfig config) {
+    private void generateOutputs(Sam3ImagePcsRunConfig config) {
         DetectionUtils.OutputOptions options = config.getOutputOptions();
         DetectionMode mode = config.getStackMode();
 
@@ -233,17 +234,21 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
             if (semanticMaskStack != null) semanticMaskStack.show();
         }
 
-        if (mode == DetectionMode.SINGLE_IMAGE && options.createInstanceMaskPerClass) {
-            ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClass(
-                    imp, detectionsByFrame.values().iterator().next(), config.getClassIdMap());
+        if (options.createInstanceMaskPerClass) {
+            ImagePlus instanceMaskPerClass = (mode == DetectionMode.SINGLE_IMAGE)
+                    ? DetectionUtils.createInstanceMaskPerClass(
+                            imp, detectionsByFrame.values().iterator().next(), config.getClassIdMap())
+                    : DetectionUtils.createInstanceMaskPerClassStack(
+                            imp, detectionsByFrame, config.getClassIdMap());
             if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }
 
     private boolean askUser() {
-        Sam3ConceptsDialog dialog = new Sam3ConceptsDialog(imp, nFrames, axis);
-        if (!dialog.showDialogAndWait()) return false;
+        Sam3ImageDialog dialog = new Sam3ImageDialog(imp, nFrames, axis);
+        if (!dialog.showDialogAndWait()) return false; // blocks here, wait for dialog.showDialogAndWait() to give answer
 
+        // only reached after dialog closes (if true, meaning if ok clicked)
         modelPath = dialog.getModelPath();
         detectionParams = dialog.getDetectionParams();
         outputOptions = dialog.getOutputOptions();
@@ -263,40 +268,39 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
             return false;
         }
 
-        String classIdsStr = Macro.getValue(options, "class_ids", "");
-        if (classIdsStr.trim().isEmpty()) {
-            IJ.error("No concept defined.", "Please provide at least one class id (\"class_ids\").");
+        // one entry per concept, index-aligned; "output_groups" defines the concept count
+        String outputGroupsStr = Macro.getValue(options, "output_groups", "");
+        if (outputGroupsStr.trim().isEmpty()) {
+            IJ.error("No concept defined.", "Please provide at least one output group id (\"output_groups\").");
             return false;
         }
-        String[] classIdsArr = classIdsStr.split(",");
-        String[] textsArr = splitAligned(Macro.getValue(options, "texts", ""), classIdsArr.length);
-        String[] positiveVisualArr = splitAligned(Macro.getValue(options, "positive_visual", ""), classIdsArr.length);
-        String[] negativeGroupIdsArr = splitAligned(Macro.getValue(options, "negative_group_ids", ""), classIdsArr.length);
+        String[] outputGroupsArr = outputGroupsStr.split(",");
+        String[] namesArr = splitAligned(Macro.getValue(options, "names", ""), outputGroupsArr.length);
+        String[] textsArr = splitAligned(Macro.getValue(options, "texts", ""), outputGroupsArr.length);
+        String[] positiveVisualArr = splitAligned(Macro.getValue(options, "positive_visual_groups", ""), outputGroupsArr.length);
+        String[] negativeVisualArr = splitAligned(Macro.getValue(options, "negative_visual_groups", ""), outputGroupsArr.length);
 
         concepts = new ArrayList<>();
-        for (int i = 0; i < classIdsArr.length; i++) {
-            int classId = Integer.parseInt(classIdsArr[i].trim());
-            Sam3Concept concept = new Sam3Concept(classId);
+        Set<String> usedNames = new HashSet<>();
+        for (int i = 0; i < outputGroupsArr.length; i++) {
+            int outputGroup = Integer.parseInt(outputGroupsArr[i].trim());
+            Sam3Concept concept = new Sam3Concept(i + 1, outputGroup);
 
-            String text = textsArr[i].trim();
-            concept.setTextPromptUsed(!text.isEmpty());
-            concept.setTextPrompt(text);
+            concept.setTextPrompt(textsArr[i].trim());
+            concept.setPositiveVisualGroup(parseOptionalInt(positiveVisualArr[i]));
+            concept.setNegativeVisualGroup(parseOptionalInt(negativeVisualArr[i]));
 
-            concept.setPositiveVisualUsed(Boolean.parseBoolean(positiveVisualArr[i].trim()));
-
-            String negativeGroupStr = negativeGroupIdsArr[i].trim();
-            int negativeGroup = negativeGroupStr.isEmpty() ? -1 : Integer.parseInt(negativeGroupStr);
-            concept.setNegativeVisualUsed(negativeGroup != -1);
-            concept.setNegativeGroupId(negativeGroup != -1 ? negativeGroup : null);
+            String requestedName = namesArr[i].trim();
+            concept.setName(uniqueName(requestedName.isEmpty() ? concept.getName() : requestedName, usedNames));
+            usedNames.add(concept.getName());
 
             if (!concept.hasAnyPositivePrompt()) {
-                IJ.log("Warning: concept (group " + classId + ") has neither text nor positive visual prompt - skipped.");
+                IJ.log("Warning: concept " + concept.getName() + " has neither text nor positive visual prompt - skipped.");
                 continue;
             }
             if (!concept.isNegativeGroupValid()) {
-                IJ.log("Warning: concept (group " + classId + ") can't use its own group as negative - negative prompt ignored.");
-                concept.setNegativeVisualUsed(false);
-                concept.setNegativeGroupId(null);
+                IJ.log("Warning: concept " + concept.getName() + " uses the same group for positive and negative visual - negative prompt ignored.");
+                concept.setNegativeVisualGroup(null);
             }
             concepts.add(concept);
         }
@@ -325,10 +329,27 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         outputOptions.deletePreviousRoi = false;
         outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false")) || options.contains("create_instance_mask ");
         outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false")) || options.contains("create_semantic_mask ");
-        outputOptions.createInstanceMaskPerClass = (Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false")) || options.contains("create_instance_mask_per_class "))
-                && stackMode == DetectionMode.SINGLE_IMAGE;
+        outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"))
+                || options.contains("create_instance_mask_per_class ");
 
         return true;
+    }
+
+    /** Parses a trimmed integer, or {@code null} when the text is empty. */
+    private Integer parseOptionalInt(String text) {
+        String trimmed = text == null ? "" : text.trim();
+        return trimmed.isEmpty() ? null : Integer.parseInt(trimmed);
+    }
+
+    /** {@code base} trimmed, with "-1", "-2", ... appended until it is absent from {@code taken}. */
+    private String uniqueName(String base, Set<String> taken) {
+        String candidate = base == null ? "" : base.trim();
+        String root = candidate;
+        int suffix = 1;
+        while (taken.contains(candidate)) {
+            candidate = root + "-" + suffix++;
+        }
+        return candidate;
     }
 
     /** Splits a comma-separated macro option into exactly {@code expectedLength} entries (missing entries become ""). */
@@ -346,22 +367,27 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
     }
 
     private void recordInMacro() {
-        Recorder.setCommand("SAM3 PCS Concepts");
+        Recorder.setCommand("SAM3 PCS on Image(s)");
         Recorder.recordOption("model_path", modelPath);
 
-        String classIds = concepts.stream().map(c -> String.valueOf(c.getClassId())).collect(Collectors.joining(","));
-        Recorder.recordOption("class_ids", classIds);
+        String outputGroups = concepts.stream().map(c -> String.valueOf(c.getOutputGroup())).collect(Collectors.joining(","));
+        Recorder.recordOption("output_groups", outputGroups);
+
+        String names = concepts.stream().map(Sam3Concept::getName).collect(Collectors.joining(","));
+        Recorder.recordOption("names", names);
 
         String texts = concepts.stream().map(c -> c.isTextPromptUsed() ? c.getTextPrompt() : "").collect(Collectors.joining(","));
         Recorder.recordOption("texts", texts);
 
-        String positiveVisual = concepts.stream().map(c -> String.valueOf(c.isPositiveVisualUsed())).collect(Collectors.joining(","));
-        Recorder.recordOption("positive_visual", positiveVisual);
-
-        String negativeGroupIds = concepts.stream()
-                .map(c -> String.valueOf(c.isNegativeVisualUsed() && c.getNegativeGroupId() != null ? c.getNegativeGroupId() : -1))
+        String positiveVisualGroups = concepts.stream()
+                .map(c -> c.isPositiveVisualUsed() ? String.valueOf(c.getPositiveVisualGroup()) : "")
                 .collect(Collectors.joining(","));
-        Recorder.recordOption("negative_group_ids", negativeGroupIds);
+        Recorder.recordOption("positive_visual_groups", positiveVisualGroups);
+
+        String negativeVisualGroups = concepts.stream()
+                .map(c -> c.isNegativeVisualUsed() ? String.valueOf(c.getNegativeVisualGroup()) : "")
+                .collect(Collectors.joining(","));
+        Recorder.recordOption("negative_visual_groups", negativeVisualGroups);
 
         Recorder.recordOption("confidence", String.valueOf(detectionParams.getConfidenceThreshold()));
         Recorder.recordOption("mask_threshold", String.valueOf(detectionParams.getMaskScoreThreshold()));
@@ -385,10 +411,12 @@ public class Sam3SingleImgPcs_Plugin implements PlugIn {
         IJ.log("mask score threshold: " + detectionParams.getMaskScoreThreshold());
         IJ.log("number of concept(s): " + concepts.size());
         for (Sam3Concept concept : concepts) {
-            StringBuilder line = new StringBuilder("  - group ").append(concept.getClassId());
-            if (concept.isTextPromptUsed()) line.append(" - text: \"").append(concept.getTextPrompt()).append("\"");
-            if (concept.isPositiveVisualUsed()) line.append(" - positive visual");
-            if (concept.isNegativeVisualUsed()) line.append(" - negative group: ").append(concept.getNegativeGroupId());
+            StringBuilder line = new StringBuilder("  - ").append(concept.getName())
+                    .append(" -> prompt(s):");
+            if (concept.isTextPromptUsed()) line.append("  text: \"").append(concept.getTextPrompt()).append("\"");
+            if (concept.isPositiveVisualUsed()) line.append("  positive visual group: ").append(concept.getPositiveVisualGroup());
+            if (concept.isNegativeVisualUsed()) line.append("  negative visual group: ").append(concept.getNegativeVisualGroup());
+            line.append(" -> output group: ").append(concept.getOutputGroup());
             IJ.log(line.toString());
         }
         IJ.log("----------------------");

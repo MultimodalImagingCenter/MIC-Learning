@@ -1,5 +1,37 @@
 # Changelog
 ## [1.4.0] - current
+### Added
+- **New plugin "SAM3 PCS on Image(s)"** (`Sam3ImagePcs_Plugin`): unifies single-image text-prompt and 
+ visual-prompt promptable-concept-segmentation into one plugin. Run on a single image or a whole stack.
+ Handle multiple concept/classe. Interactive ROI selection.
+  - Concept table: each row is one concept, defined by an optional text prompt and/or an optional
+    positive/negative visual prompt (a RoiManager group), resolved independently on every frame.
+  - Interactive ROI selection: the positive/negative visual-group choices are refreshed from the RoiManager
+    every 0.5 s while the dialog is open.
+  - Macro-recordable
+  - New supporting classes: `Sam3Concept`, `Sam3ConceptTableModel`, `Sam3GroupIdCellEditor`,
+    `Sam3GroupOption`, `Sam3ImageDialog`, `Sam3ImagePcsRunConfig`, `Sam3ImagePcsPythonRunner`,
+    and the `sam3-pcs-singleimage-m.py` script.
+- Output generation for detection: `DetectionUtils.createInstanceMaskPerClassStack`: generate a 4D hyperstack 
+  for image stacks (one time-point per processed frame, one Z-slice per concept, each slice the instance 
+  mask of that concept's detections on that frame).
+
+### Changed
+- Output generation: "Create instance mask per class" is now available for stacks 
+- `DialogHelpBar` now attaches to any AWT `Window` (Swing `JDialog` included), not only `GenericDialog`.
+- Plugins menu: the "SAM3 PCS with Text Prompts" and "SAM3 PCS with Visual Prompts" entries are
+  replaced by a single "SAM3 PCS on Image(s)".
+- `RoiPromptExtractor.groupRoisByFrame`: ROIs with no Z/T position (position 0) are treated as
+  belonging to frame 1 (avoid ignoring ROIs on single frame images)
+
+### Removed
+- `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 
+ `Sam3TextPromptPcsMultiImgRunConfig`) and associated python script (`sam3-detection-multiimage-textprompt-m.py`): 
+ replaced by unified single image plugin.
+- `Sam3VisualPromptSingleImgPcs_Plugin.java` and associated classes (`Sam3VisualPromptSingleImgPythonRunner`, 
+ `Sam3VisualPromptSingleImgRunConfig`, `SingleImagePcsResultParser`) and associated python script 
+ (`sam3-detection-image-geomprompt-m.py`): replaced by unified single image plugin.
+- `sam3-detection-image.toml` (unused Pixi environment file).
 
 ## [1.3.0] - 2026-08-24
 ### Added
@@ -7,6 +39,7 @@
   - handle visual (positive and negative) prompts + text prompt to define one concept/class
   - interactive frame selection & ROI selection
   - bidirectional detection and segmentation
+  - Macro-recordable
 - SAM3 plugin for pcs cross image : visual prompt encoded on 1 reference image, detection run on a different target image
 
 ### Changed

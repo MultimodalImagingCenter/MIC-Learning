@@ -3,7 +3,7 @@ package fr.curie.miclearning.apposeplugin.sampcs;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 
 /**
- * One selectable entry in a group-id combo box: a RoiManager group id, plus how many of the
+ * One selectable entry in a group-id combo box: a RoiManager group id + how many of the
  * frames being processed contain at least one usable ROI belonging to that group.
  */
 public class Sam3GroupOption {
@@ -23,6 +23,6 @@ public class Sam3GroupOption {
 
     @Override
     public String toString() {
-        return RoiPromptExtractor.formatGroupLabel(groupId) + " — " + coveredFrames + "/" + totalFrames + " frames";
+        return RoiPromptExtractor.formatGroupLabel(groupId) + " - " + coveredFrames + "/" + totalFrames + " frames";
     }
 }

@@ -1,62 +1,66 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import java.util.Objects;
+
 /**
- * One row of the concept table for {@link Sam3SingleImgPcs_Plugin}: a single class defined by
+ * One row of the concept table for {@link Sam3ImagePcs_Plugin}: a single class defined by
  * an optional text prompt and/or an optional visual prompt (positive/negative), run
  * independently on every frame of the stack.
  */
 public class Sam3Concept {
 
-    // RoiManager group id. both the source group for the positive visual prompt
-    // (when positiveVisualUsed) and the output group id assigned to this concept's detections
-    private int classId;
+    /* Stable identifier, assigned once by the table model, not displayed in the conceptTable*/
+    private final int id;
 
+    // name given by the user, by default id, should be unique
+    private String name;
     private String textPrompt = "";
-    private boolean textPromptUsed = false;
 
-    // positive visual prompt is always sourced from the RoiManager group == classId
-    private boolean positiveVisualUsed = false;
+    // RoiManager group feeding the positive/negative visual prompt; null == that prompt is unused
+    private Integer positiveVisualGroup = null;
+    private Integer negativeVisualGroup = null;
 
-    private boolean negativeVisualUsed = false;
-    private Integer negativeGroupId = null;
+    // output group id assigned to this concept's detections (independent of the input groups)
+    private int outputGroup;
 
-    public Sam3Concept(int classId) {
-        this.classId = classId;
+    public Sam3Concept(int id, int outputGroup) {
+        this.id = id;
+        this.outputGroup = outputGroup;
+        this.name = id + "";
     }
 
-    public int getClassId() {return classId;}
-    public void setClassId(int classId) {this.classId = classId;}
+    public int getId() {return id;}
+
+    public String getName() {return name;}
+    public void setName(String name) {this.name = name;}
 
     public String getTextPrompt() {return textPrompt;}
-    public void setTextPrompt(String textPrompt) {this.textPrompt = textPrompt;}
+    public void setTextPrompt(String textPrompt) {this.textPrompt = textPrompt == null ? "" : textPrompt;}
+    public boolean isTextPromptUsed() {return !textPrompt.trim().isEmpty();}
 
-    public boolean isTextPromptUsed() {return textPromptUsed;}
-    public void setTextPromptUsed(boolean textPromptUsed) {this.textPromptUsed = textPromptUsed;}
+    public Integer getPositiveVisualGroup() {return positiveVisualGroup;}
+    public void setPositiveVisualGroup(Integer positiveVisualGroup) {this.positiveVisualGroup = positiveVisualGroup;}
+    public boolean isPositiveVisualUsed() {return positiveVisualGroup != null;}
 
-    public boolean isPositiveVisualUsed() {return positiveVisualUsed;}
-    public void setPositiveVisualUsed(boolean positiveVisualUsed) {this.positiveVisualUsed = positiveVisualUsed;}
+    public Integer getNegativeVisualGroup() {return negativeVisualGroup;}
+    public void setNegativeVisualGroup(Integer negativeVisualGroup) {this.negativeVisualGroup = negativeVisualGroup;}
+    public boolean isNegativeVisualUsed() {return negativeVisualGroup != null;}
 
-    public boolean isNegativeVisualUsed() {return negativeVisualUsed;}
-    public void setNegativeVisualUsed(boolean negativeVisualUsed) {this.negativeVisualUsed = negativeVisualUsed;}
+    public int getOutputGroup() {return outputGroup;}
+    public void setOutputGroup(int outputGroup) {this.outputGroup = outputGroup;}
 
-    public Integer getNegativeGroupId() {return negativeGroupId;}
-    public void setNegativeGroupId(Integer negativeGroupId) {this.negativeGroupId = negativeGroupId;}
-
-    /**
-     * Synthetic unique label used as the {@code classIdMap} key sent to
-     * {@code DetectionUtils.processDetections}
-     */
-    public String getLabel() {
-        return "concept_" + classId;
+    /** True while the name still holds its default value (the numeric {@link #id}) (i.e. true if the user never renamed it) */
+    public boolean isNameDefault() {
+        return name.equals(String.valueOf(id));
     }
 
-    /** At least one positive prompt (text or visual) must be defined. */
+    /** At least one positive prompt (text or positive visual) must be defined. */
     public boolean hasAnyPositivePrompt() {
-        return textPromptUsed || positiveVisualUsed;
+        return isTextPromptUsed() || isPositiveVisualUsed();
     }
 
-    /** A concept can't use its own class group as its negative prompt. */
+    /** A concept can't use the same RoiManager group as both its positive and its negative visual prompt. */
     public boolean isNegativeGroupValid() {
-        return !negativeVisualUsed || (negativeGroupId != null && negativeGroupId != classId);
+        return negativeVisualGroup == null || !Objects.equals(negativeVisualGroup, positiveVisualGroup);
     }
 }
