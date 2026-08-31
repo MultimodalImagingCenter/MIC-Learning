@@ -10,11 +10,6 @@ import java.util.Set;
 /**
  * Table model backing the concept table of {@link Sam3ImagePcs_Plugin}'s dialog: one row
  * per {@link Sam3Concept}, one column per editable property.
- *
- * <p>The {@link Sam3ConceptTableModel#COL_NAME name} column defaults to the concept's internal id
- * and is kept unique across rows (colliding names get a "-1", "-2", ... suffix). While a name still
- * holds its default, typing a text prompt copies that prompt into the name; a name the user has
- * edited is left alone.
  */
 public class Sam3ConceptTableModel extends AbstractTableModel {
 
@@ -25,11 +20,12 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     public static final int COL_OUTPUT_GROUP = 4;
 
     private static final String[] COLUMN_NAMES = {
-            "Name", "Text prompt", "Positive visual", "Negative visual", "Output group"
+            "Output name", "Text prompt", "Positive visual", "Negative visual", "Output group"
     };
 
     private static final int MAX_GROUP_ID = 255;
 
+    // list of all concepts registered in the table
     private final List<Sam3Concept> concepts = new ArrayList<>();
     private int nextId = 1; // never reused within a session
 
@@ -66,9 +62,9 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
         if ((columnIndex == COL_POSITIVE_VISUAL || columnIndex == COL_NEGATIVE_VISUAL) && !roiPromptsAvailable) {
-            return false; // no ROI to point at
+            return false; // no ROI to use as prompts
         }
-        return true; // the name and output-group columns stay editable even when greyed out
+        return true; // (the name and output-group columns stay editable even when greyed out)
     }
 
     @Override
@@ -95,7 +91,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
                 String newText = value == null ? "" : value.toString();
                 boolean nameFollowsDefault = concept.isNameDefault();
                 concept.setTextPrompt(newText);
-                // if a text prompt is given and the name is still the default value (i.e. the id): change name to prompt
+                // if a text prompt is given and the name still is the default value (i.e. the id): change name to prompt
                 if (nameFollowsDefault && !newText.trim().isEmpty()) {
                     concept.setName(uniqueName(newText, concept));
                 }

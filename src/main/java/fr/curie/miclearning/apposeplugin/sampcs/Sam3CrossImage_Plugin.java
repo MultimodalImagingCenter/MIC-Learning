@@ -361,9 +361,7 @@ public class Sam3CrossImage_Plugin implements PlugIn  {
         // 2- MODEL PATH
         gd.addMessage("Model", Sam3Dialogs.SECTION_HEADER_FONT);
         gd.addButton("Instructions to download SAM3 model", e ->Sam3Dialogs.addDownloadInstruction());
-        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY);
-        Sam3Dialogs.attachFieldHint(gd, helpBar, (TextField) gd.getStringFields().lastElement(),
-                "Path to the SAM3 model checkpoint (.pt file)");
+        Sam3Dialogs.addModelPathDialog(gd, PREF_LAST_DETECT_MODEL_KEY, helpBar);
 
         // 3- PROMPT(S)
         // 3.1 create checkboxes and panels

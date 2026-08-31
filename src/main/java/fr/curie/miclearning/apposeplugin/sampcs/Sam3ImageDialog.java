@@ -146,11 +146,16 @@ public class Sam3ImageDialog extends JDialog {
         c.fill = GridBagConstraints.HORIZONTAL;
 
         c.gridx = 0; c.gridy = 0;
-        panel.add(new JLabel("Model path:"), c);
+        JLabel modelLabel = new JLabel("Model path:");
+        panel.add(modelLabel, c);
 
         modelPathField = new JTextField(Sam3Dialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY), 40);
         c.gridx = 1; c.weightx = 1;
         panel.add(modelPathField, c);
+
+        String modelPathHint = "Path to the SAM3 model checkpoint (.pt file)";
+        helpBar.attachHelp(modelLabel, modelPathHint);
+        helpBar.attachHelp(modelPathField, modelPathHint);
 
         JButton browseButton = new JButton("Browse...");
         browseButton.addActionListener(e -> {
@@ -216,7 +221,7 @@ public class Sam3ImageDialog extends JDialog {
 
         JButton addButton = new JButton("Add concept");
         addButton.addActionListener(e -> tableModel.addConcept());
-        helpBar.attachHelp(addButton, "Adds a new concept row (no prompt, next unused output group).");
+        helpBar.attachHelp(addButton, "Adds a new concept row.");
 
         JButton removeButton = new JButton("Remove selected");
         removeButton.addActionListener(e -> {

@@ -25,6 +25,10 @@ public class Sam3Dialogs {
     public static final Font SECTION_HEADER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 13);
     private static final String PREF_LAST_TRACK_MODEL_KEY = "miclearning.lastmodeldir.videopcs.trackingmodel";
 
+    public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey, DialogHelpBar helpBar) {
+        addModelPathDialog(gd, lastModelPrefKey);
+        attachFieldHint(gd, helpBar, (TextField) gd.getStringFields().lastElement(),"Path to the SAM3 model checkpoint (.pt file)");
+    }
     public static void addModelPathDialog(GenericDialog gd, String lastModelPrefKey) {
         gd.addFileField("Model_Path:", resolveDefaultModelPath(lastModelPrefKey), 60);
     }
@@ -257,7 +261,7 @@ public class Sam3Dialogs {
     }
 
     /**
-     * Attaches {@code hint} to  the label and the input field GenericDialog just added
+     * Attaches {@code hint} to  the label and the choice list GenericDialog just added
      */
     public static void attachChoicedHint(GenericDialog gd, DialogHelpBar helpBar, Choice choice, String hint) {
         helpBar.attachHelp(gd.getLabel(), hint);
@@ -265,7 +269,7 @@ public class Sam3Dialogs {
     }
 
     /**
-     * Attaches {@code hint} to  the label and the choice list GenericDialog just added
+     * Attaches {@code hint} to  the label and the input field GenericDialog just added
      */
     public static void attachFieldHint(GenericDialog gd, DialogHelpBar helpBar, TextField field, String hint) {
         helpBar.attachHelp(gd.getLabel(), hint);
