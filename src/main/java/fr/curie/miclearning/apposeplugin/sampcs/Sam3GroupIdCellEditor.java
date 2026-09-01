@@ -23,7 +23,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
     static final String NOT_USED_LABEL = "not used";
     static final Color NOT_USED_COLOR = Color.GRAY;
 
-    /** Background for a cell that can't be edited at all (no ROI to point at), vs. a merely greyed-out one. */
+    /** Background for a cell that can't be edited at all (no ROI on any frame) */
     static final Color DISABLED_BG = UIManager.getColor("TextField.inactiveBackground") != null
             ? UIManager.getColor("TextField.inactiveBackground")
             : new Color(0xEC, 0xEC, 0xEC);
@@ -59,7 +59,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
         this.availableGroups = new ArrayList<>(options);
     }
 
-    /** Populate comboBox with all Roi groups available, except the positive id to exclude, if any */
+    /** Populate comboBox with all Roi groups available, except the id to exclude, if any */
     @Override
     public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
         editingValue = (Integer) value;
@@ -133,8 +133,8 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
             Component comp = super.getTableCellRendererComponent(
                     table, editor.findLabel(groupId), isSelected, hasFocus, row, column);
             if (!isSelected) {
-                comp.setForeground(groupId == null ? NOT_USED_COLOR : table.getForeground());
-                comp.setBackground(table.isCellEditable(row, column) ? table.getBackground() : DISABLED_BG);
+                comp.setForeground(groupId == null ? NOT_USED_COLOR : table.getForeground()); // gray text if visual prompt unused
+                comp.setBackground(table.isCellEditable(row, column) ? table.getBackground() : DISABLED_BG); // gray prompt if visual prompt not allowed (no ROI on any frame)
             }
             return comp;
         }

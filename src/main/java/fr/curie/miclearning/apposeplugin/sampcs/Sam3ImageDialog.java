@@ -11,9 +11,12 @@ import ij.gui.Roi;
 import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.util.List;
 import java.util.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -31,6 +34,7 @@ public class Sam3ImageDialog extends JDialog {
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final int ROI_POLL_INTERVAL_MS = 500;
+    private static final String VISUAL_PROMPT_RESET_OWNER = "visualPromptReset";
 
     private final ImagePlus imp;
     private final int nFrames;
@@ -52,6 +56,7 @@ public class Sam3ImageDialog extends JDialog {
     private JCheckBox semanticMaskCB;
     private JCheckBox instanceMaskPerClassCB;
     private JCheckBox processStackCB; // only shown/relevant when nFrames > 1
+    private JButton okButton;
 
     private DialogHelpBar helpBar;
     private Timer roiPollTimer;
@@ -178,15 +183,24 @@ public class Sam3ImageDialog extends JDialog {
     }
 
     private JPanel buildConceptsPanel() {
+        // create table
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Concepts"));
+        panel.setBorder(BorderFactory.createEtchedBorder());
 
-        // Name column : default foreground color
+        JLabel titleLabel = new JLabel("Concepts");
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        helpBar.attachHelp(titleLabel, "A concept = one object class to find. Define it with a text prompt, "
+                + "a visual prompt (ROI in the ROI Manager), or both.");
+        panel.add(titleLabel, BorderLayout.NORTH);
+
+        // set each column renderer (and optional editor)
+        // Name column : greyed (but still editable) while no ROI output is selected
         table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 Component comp = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, column);
-                if (!isSelected) comp.setForeground(roiOutputSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
+                if (!isSelected) comp.setForeground(outputWithNameSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
                 return comp;
             }
         });
@@ -202,11 +216,12 @@ public class Sam3ImageDialog extends JDialog {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 Component comp = super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, column);
-                if (!isSelected) comp.setForeground(roiOutputSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
+                if (!isSelected) comp.setForeground(outputWithRoiGroupSelected() ? t.getForeground() : Sam3GroupIdCellEditor.NOT_USED_COLOR);
                 return comp;
             }
         });
 
+        // set each column preferred width
         table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setPreferredWidth(100);
         table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_TEXT_PROMPT).setPreferredWidth(150);
         table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setPreferredWidth(160);
@@ -215,12 +230,73 @@ public class Sam3ImageDialog extends JDialog {
         table.setRowHeight(22);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 
+        // hover hints per column header, defined with mouse position
+        JTableHeader header = table.getTableHeader();
+        helpBar.attachPositionalHelp(header, point -> {
+            int viewCol = header.columnAtPoint(point);
+            if (viewCol < 0) return null;
+            int modelCol = table.convertColumnIndexToModel(viewCol);
+            String roiGroupNotUsed = outputWithRoiGroupSelected() ? "" : "\nUnused for instance masks.";
+            String nameNotUsed = outputWithNameSelected() ? "" : "\nUnused for instance and semantic masks.";
+            String text;
+            switch (modelCol) {
+                case Sam3ConceptTableModel.COL_NAME:
+                    text = "Name used for this concept's outputs (ROI names, logs). Must be unique."
+                    + nameNotUsed;
+                    break;
+                case Sam3ConceptTableModel.COL_TEXT_PROMPT:
+                    text = "Text description of the object (e.g. 'green cell'). One prompt applies to every processed frame.";
+                    break;
+                case Sam3ConceptTableModel.COL_POSITIVE_VISUAL:
+                    text = "ROI group used as a positive visual prompt. Needs one usable ROI (box or point) in the ROI Manager "
+                            + "on each processed frame.";
+                    break;
+                case Sam3ConceptTableModel.COL_NEGATIVE_VISUAL:
+                    text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (box or point) "
+                            + "on each processed frame; must differ from the Positive visual group.";
+                    break;
+                case Sam3ConceptTableModel.COL_OUTPUT_GROUP:
+                    text = "Id tagging this concept's outputs: the ROI group for added ROIs, and the pixel value for the semantic mask."
+                            + roiGroupNotUsed;
+                    break;
+                default:
+                    return null;
+            }
+            return new DialogHelpBar.Hint(text, DialogHelpBar.DEFAULT_HELP_COLOR);
+        });
+        
+
+        // clicking a disabled positive/negative visual cell explains why (no usable ROI yet)
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int viewCol = table.columnAtPoint(e.getPoint());
+                int row = table.rowAtPoint(e.getPoint());
+                if (viewCol < 0 || row < 0) return;
+                int modelCol = table.convertColumnIndexToModel(viewCol);
+                boolean isVisualColumn = modelCol == Sam3ConceptTableModel.COL_POSITIVE_VISUAL
+                        || modelCol == Sam3ConceptTableModel.COL_NEGATIVE_VISUAL;
+                if (isVisualColumn && !tableModel.isCellEditable(row, modelCol)) {
+                    helpBar.showInfo("visualPromptDisabled",
+                            "No usable ROI (box or point) in the ROI Manager for the frame(s) being processed. "
+                                    + "Add one to enable visual prompts.",
+                            DialogHelpBar.DEFAULT_INSTRUCTION_COLOR);
+                }
+            }
+        });
+
+        // create scroll pane for the table
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setPreferredSize(new Dimension(700, 160));
         panel.add(scrollPane, BorderLayout.CENTER);
 
+        // buttons to add and remove concepts
         JButton addButton = new JButton("Add concept");
-        addButton.addActionListener(e -> tableModel.addConcept());
+        addButton.addActionListener(e -> {
+            tableModel.addConcept();
+            helpBar.clearWarning("promptListEmpty");
+            okButton.setEnabled(true);
+        });
         helpBar.attachHelp(addButton, "Adds a new concept row.");
 
         JButton removeButton = new JButton("Remove selected");
@@ -228,6 +304,11 @@ public class Sam3ImageDialog extends JDialog {
             if (table.isEditing()) table.getCellEditor().cancelCellEditing();
             int row = table.getSelectedRow();
             if (row >= 0) tableModel.removeConcept(row);
+            // if no concept (empty table) : unable okButton + display warning
+            if (tableModel.getConcepts().isEmpty()) {
+                helpBar.warn("promptListEmpty", "Please enter at least one prompt");
+                okButton.setEnabled(false);
+            }
         });
         helpBar.attachHelp(removeButton, "Removes the currently selected concept row.");
 
@@ -285,6 +366,16 @@ public class Sam3ImageDialog extends JDialog {
         addBoxRoisCB.addItemListener(e -> table.repaint());
         addShapeRoisCB.addItemListener(e -> table.repaint());
 
+        helpBar.attachHelp(addBoxRoisCB, "Adds one rectangle ROI per detection, named 'box_' + the concept's output name, "
+                + "placed in the ROI group set by that concept's \"Output group\".");
+        helpBar.attachHelp(addShapeRoisCB, "Adds one shape ROI per detection, named 'mask_' + the concept's output name, "
+                + "placed in the ROI group set by that concept's \"Output group\".");
+        helpBar.attachHelp(instanceMaskCB, "One image where each detected instance gets its own unique pixel value ");
+        helpBar.attachHelp(semanticMaskCB, "One image where each pixel takes the value of its concept's \"Output group\" "
+                + "(0 = background).");
+        helpBar.attachHelp(instanceMaskPerClassCB, "Like instance masks, but one slice per concept ; "
+                + "a per-frame hyperstack for stacks.");
+
         panel.add(addBoxRoisCB);
         panel.add(addShapeRoisCB);
         panel.add(instanceMaskCB);
@@ -309,7 +400,7 @@ public class Sam3ImageDialog extends JDialog {
         JButton settingsButton = new JButton("Help bar settings...");
         settingsButton.addActionListener(e -> helpBar.openSettingsDialog());
 
-        JButton okButton = new JButton("OK");
+        okButton = new JButton("OK");
         okButton.addActionListener(e -> onOk());
 
         JButton cancelButton = new JButton("Cancel");
@@ -347,7 +438,10 @@ public class Sam3ImageDialog extends JDialog {
         // for Roi positive & negative prompts columns : update available ROI groups
         Set<Integer> availableGroupIds = new HashSet<>();
         for (Sam3GroupOption option : options) availableGroupIds.add(option.getGroupId());
-        tableModel.reconcileVisualGroups(availableGroupIds);
+        if (tableModel.reconcileVisualGroups(availableGroupIds)) {
+            helpBar.showInfo(VISUAL_PROMPT_RESET_OWNER, "A previously selected ROI group is no longer available - "
+                    + "visual prompt turned off for the affected concept(s).", DialogHelpBar.DEFAULT_NOTIFICATION_COLOR);
+        }
 
         // for Roi positive & negative prompts columns : switch to unabled if no ROI at all
         tableModel.setRoiPromptsAvailable(!options.isEmpty());
@@ -364,7 +458,7 @@ public class Sam3ImageDialog extends JDialog {
         return frames;
     }
 
-    /** One option per roi group with a usable ROI on at least one of the current frames,. */
+    /** One option per roi group with a usable ROI on at least one of the current frames. */
     private List<Sam3GroupOption> computeGroupOptions() {
         List<Integer> frames = currentFrameRange();
         Map<Integer, Integer> coveredFramesByGroup = roiPromptExtractor.countGroupCoverage(getRoiManager().getRoisAsArray(), axis, frames);
@@ -377,10 +471,18 @@ public class Sam3ImageDialog extends JDialog {
         return options;
     }
 
-    /** True when at least one ROI output is enabled - the only case where a concept's output group matters. */
-    private boolean roiOutputSelected() {
+    /** True when at least an output where a concept's output roi group matters is selected (all outputs except instance masks). */
+    private boolean outputWithRoiGroupSelected() {
         return (addBoxRoisCB != null && addBoxRoisCB.isSelected())
-                || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
+                || (addShapeRoisCB != null && addShapeRoisCB.isSelected()
+                || (semanticMaskCB != null && semanticMaskCB.isSelected()));
+    }
+
+    /** True when at least an output where a concept's output name matters is selected (roi outputs and instance mask per stack). */
+    private boolean outputWithNameSelected() {
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected())
+                || (addShapeRoisCB != null && addShapeRoisCB.isSelected()
+                || (instanceMaskPerClassCB != null && instanceMaskPerClassCB.isSelected()));
     }
 
     // ==== OK / Cancel ====

@@ -10,6 +10,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -173,6 +174,40 @@ public class DialogHelpBar {
                 renderCurrent();
             }
         });
+    }
+
+    /**
+     * Like {@link #attachHelp(Component, Supplier)}, but for a component with several hover zones
+     * (e.g. a table header): the hint is recomputed from the mouse position on every move within {@code c}
+     */
+    public void attachPositionalHelp(Component c, Function<Point, Hint> hintByPosition) {
+        MouseAdapter listener = new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) { update(e.getPoint()); }
+
+            @Override
+            public void mouseMoved(MouseEvent e) { update(e.getPoint()); }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                hovering = false;
+                renderCurrent();
+            }
+
+            private void update(Point p) {
+                if (helpBarMode != HelpBarMode.HELP) return;
+                Hint hint = hintByPosition.apply(p);
+                if (hint == null) {
+                    hovering = false;
+                    renderCurrent();
+                    return;
+                }
+                hovering = true;
+                show(hint.text, hint.color);
+            }
+        };
+        c.addMouseListener(listener);
+        c.addMouseMotionListener(listener);
     }
 
     // ==== INFO (temporary) ====

@@ -154,8 +154,10 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
      * Clears any visual-prompt group that is no longer selectable: a positive or negative group
      * absent from {@code availableGroupIds}, or a negative group that now equals its row's positive
      * group. Fires a table update only when something changed.
+     *
+     * @return {@code true} if at least one concept's positive or negative visual group was cleared
      */
-    public void reconcileVisualGroups(Set<Integer> availableGroupIds) {
+    public boolean reconcileVisualGroups(Set<Integer> availableGroupIds) {
         boolean changed = false;
         for (Sam3Concept concept : concepts) {
             if (concept.getPositiveVisualGroup() != null
@@ -171,6 +173,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
             }
         }
         if (changed) fireTableDataChanged();
+        return changed;
     }
 
     /** Trims {@code desired} (blank -> the concept's numeric id), then appends "-1", "-2", ... until unique among the other rows. */
