@@ -56,7 +56,7 @@ public class DialogHelpBar {
     private static final String PREF_MODE_KEY = "miclearning.helpbarmode";
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
-    private static final int MAX_LINES = 2;
+    private static final int VISIBLE_LINES = 2;
     private static final int DEFAULT_BASE_FONT_SIZE = 12; // fallback
     private static final float HELP_BAR_FONT_SCALE = 0.8f; // relative to the dialog's own  font
 
@@ -67,6 +67,8 @@ public class DialogHelpBar {
         hovering = false; // avoid a stuck hover-hint if we just switched away from HELP
         renderCurrent();
     }
+
+    public HelpBarMode getHelpBarMode() {return helpBarMode;}
 
     /** Reads the last help-bar level chosen via {@link #openSettingsDialog()} */
     public static HelpBarMode loadSavedMode() {
@@ -80,8 +82,8 @@ public class DialogHelpBar {
 
     private final List<Label> lines = new ArrayList<>();
     private final Panel panel;
-    private final Font helpBarFont;
-    private final Font warningFont;
+    private Font helpBarFont;
+    private Font warningFont;
     private final int lineHeightPx;
 
     private boolean hovering = false;
@@ -101,14 +103,14 @@ public class DialogHelpBar {
 
     /**
      * @param dialog the dialog this help bar is attached to (any {@link GenericDialog},
-     *               {@link javax.swing.JDialog}, or other {@link Window}) - used only to derive
+     *               {@link javax.swing.JDialog} ; used only to derive
      *               the help bar's font size relative to the dialog's own font.
      */
     public DialogHelpBar(Window dialog, HelpBarMode helpBarMode) {
-        this.panel = new Panel(new GridLayout(MAX_LINES, 1));
+        this.panel = new Panel(new GridLayout(VISIBLE_LINES, 1));
         this.helpBarMode = helpBarMode;
 
-        // define hel bar size and font size so deriving from GuiScale
+        // define help bar size and font size so deriving from GuiScale
         Font dialogFont = dialog.getFont();
         float baseSize = dialogFont != null ? dialogFont.getSize2D() : DEFAULT_BASE_FONT_SIZE;
         int helpBarSize = Math.round(baseSize * HELP_BAR_FONT_SCALE);
@@ -120,7 +122,7 @@ public class DialogHelpBar {
     }
 
     private void initLines() {
-        for (int i = 0; i < MAX_LINES; i++) {
+        for (int i = 0; i < VISIBLE_LINES; i++) {
             Label line = new Label(" ");
             line.setForeground(DEFAULT_BLANK_COLOR);
             line.setFont(helpBarFont);
@@ -128,7 +130,6 @@ public class DialogHelpBar {
             lines.add(line);
         }
     }
-
 
     /** The panel to add to the dialog */
     public Panel getPanel() {
@@ -139,7 +140,21 @@ public class DialogHelpBar {
      * Caps the help bar's preferred width to {@code width}
      */
     public void lockWidth(int width) {
-        panel.setPreferredSize(new Dimension(width, MAX_LINES * lineHeightPx));
+        panel.setPreferredSize(new Dimension(width, VISIBLE_LINES * lineHeightPx));
+    }
+
+    /**
+     * Rescales this help bar's own fonts by {@code scale}. Needed because {@link #show} always resets
+     * the displayed text to {@link #helpBarFont}/{@link #warningFont} - a generic tree-walk that
+     * directly rescales the {@link Label}s' current font would just get overwritten by the next
+     * hover/info/warning render, so the owning dialog must call this instead to update the source of
+     * truth.
+     */
+    public void rescaleFont(double scale) {
+        if (scale == 1.0) return;
+        helpBarFont = helpBarFont.deriveFont((float) (helpBarFont.getSize2D() * scale));
+        warningFont = warningFont.deriveFont((float) (warningFont.getSize2D() * scale));
+        renderCurrent();
     }
 
     // ==== HELP (hover) ====
@@ -287,6 +302,27 @@ public class DialogHelpBar {
             "Show warnings only"
     };
 
+    /** Labels for the help-level chooser, in display order - for a caller building its own combined settings dialog. */
+    public static String[] helpLevelLabels() {
+        return SETTINGS_MODE_LABELS.clone();
+    }
+
+    /** Index into {@link #helpLevelLabels()} matching {@code mode}. */
+    public static int helpLevelIndex(HelpBarMode mode) {
+        for (int i = 0; i < SETTINGS_MODE_VALUES.length; i++) {
+            if (SETTINGS_MODE_VALUES[i] == mode) return i;
+        }
+        return 1;
+    }
+
+    /** Applies and persists the mode chosen at {@code labelIndex} (see {@link #helpLevelLabels()}). */
+    public void applyHelpLevelChoice(int labelIndex) {
+        HelpBarMode newMode = SETTINGS_MODE_VALUES[labelIndex];
+        setHelpBarMode(newMode);
+        Prefs.set(PREF_MODE_KEY, newMode.name());
+        Prefs.savePreferences();
+    }
+
     /**
      * Opens a small dialog letting the user pick how much guidance this  help bars should show
      */
@@ -344,9 +380,9 @@ public class DialogHelpBar {
      */
     private void setLines(String text, Color color, Font font) {
         String[] textLines = text.split("\n", -1);
-        for (int i = 0; i < MAX_LINES; i++) {
+        for (int i = 0; i < VISIBLE_LINES; i++) {
             String lineText;
-            if (i < MAX_LINES - 1) {
+            if (i < VISIBLE_LINES - 1) {
                 lineText = i < textLines.length ? textLines[i] : " ";
             } else {
                 lineText = i < textLines.length ? String.join(" ", Arrays.asList(textLines).subList(i, textLines.length)) : " ";

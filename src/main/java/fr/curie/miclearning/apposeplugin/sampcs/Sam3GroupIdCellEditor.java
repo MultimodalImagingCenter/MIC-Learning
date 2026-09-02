@@ -3,6 +3,7 @@ package fr.curie.miclearning.apposeplugin.sampcs;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.Color;
@@ -76,7 +77,15 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
             comboBox.addItem(option.toString());
         }
 
-        return super.getTableCellEditorComponent(table, findLabel(editingValue), isSelected, row, column);
+        Component comp = super.getTableCellEditorComponent(table, findLabel(editingValue), isSelected, row, column);
+
+        // select the whole text
+        Component comboEditorComponent = comboBox.getEditor().getEditorComponent();
+        if (comboEditorComponent instanceof JTextField) {
+            ((JTextField) comboEditorComponent).selectAll();
+        }
+
+        return comp;
     }
 
     @Override

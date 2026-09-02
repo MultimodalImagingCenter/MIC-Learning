@@ -6,15 +6,18 @@ import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.Prefs;
+import ij.gui.GenericDialog;
 import ij.gui.Roi;
 
 import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
+import javax.swing.table.TableCellEditor;
 import java.awt.*;
 import java.util.List;
 import java.util.*;
+import java.awt.event.AWTEventListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -35,6 +38,10 @@ public class Sam3ImageDialog extends JDialog {
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final int ROI_POLL_INTERVAL_MS = 500;
     private static final String VISUAL_PROMPT_RESET_OWNER = "visualPromptReset";
+    private static final String PREF_UI_SCALE_KEY = "miclearning.sam3.imagedialog.uiscale";
+    private static final double DEFAULT_UI_SCALE = 1;
+    private static final double MIN_UI_SCALE = 0.25;
+    private static final double MAX_UI_SCALE = 4.0;
 
     private final ImagePlus imp;
     private final int nFrames;
@@ -46,10 +53,11 @@ public class Sam3ImageDialog extends JDialog {
     private final Sam3GroupIdCellEditor positiveGroupEditor = new Sam3GroupIdCellEditor(false);
     private final Sam3GroupIdCellEditor negativeGroupEditor = new Sam3GroupIdCellEditor(true);
 
+    private final Sam3ModelParameters modelParams = new Sam3ModelParameters();
+    private final double uiScale = Prefs.get(PREF_UI_SCALE_KEY, DEFAULT_UI_SCALE);
+
     private JTextField modelPathField;
     private JTextField confidenceField;
-    private JTextField maskThresholdField;
-    private JTextField maxSideLengthField;
     private JCheckBox addBoxRoisCB;
     private JCheckBox addShapeRoisCB;
     private JCheckBox instanceMaskCB;
@@ -88,8 +96,92 @@ public class Sam3ImageDialog extends JDialog {
         });
 
         buildUi();
+        installClickAwayCommit();
+        if (uiScale != 1.0) {
+            rescaleFonts(getContentPane());
+            rescaleFonts(table.getTableHeader());
+            helpBar.rescaleFont(uiScale); // the help bar resets its own font from a cached field on every render - update that field directly
+        }
         pack();
         setLocationRelativeTo(null);
+    }
+
+    /**
+     * Recursively derives every font in {@code comp}'s subtree by {@link #uiScale}, and scales
+     * checkbox icons too
+     * Applied once at construction time - the dialog must be closed and reopened for a new scale to
+     * take effect.
+     */
+    private void rescaleFonts(Component comp) {
+        Font font = comp.getFont();
+        if (font != null) comp.setFont(font.deriveFont((float) (font.getSize2D() * uiScale)));
+        if (comp instanceof JCheckBox && ((JCheckBox) comp).getIcon() == null) {
+            Icon checkIcon = UIManager.getIcon("CheckBox.icon");
+            if (checkIcon != null) ((JCheckBox) comp).setIcon(scaledIcon(checkIcon, uiScale));
+        }
+        if (comp instanceof Container) {
+            for (Component child : ((Container) comp).getComponents()) rescaleFonts(child);
+        }
+    }
+
+    /** Wraps {@code icon}, painting it scaled by {@code scale} (Swing icons have a fixed pixel size). */
+    private static Icon scaledIcon(Icon icon, double scale) {
+        int w = (int) Math.round(icon.getIconWidth() * scale);
+        int h = (int) Math.round(icon.getIconHeight() * scale);
+        return new Icon() {
+            @Override
+            public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.translate(x, y);
+                g2.scale((double) w / icon.getIconWidth(), (double) h / icon.getIconHeight());
+                icon.paintIcon(c, g2, 0, 0);
+                g2.dispose();
+            }
+            @Override public int getIconWidth() {return w;}
+            @Override public int getIconHeight() {return h;}
+        };
+    }
+
+    /** A section-title label matching this dialog's unified heading style: bold, one size bigger than body text. */
+    private JLabel createSectionTitle(String text) {
+        JLabel label = new JLabel(text);
+        Font base = label.getFont();
+        label.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1f));
+        label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        return label;
+    }
+
+    /** Scales a pixel dimension (row height, column width, ...) by {@link #uiScale}. */
+    private int scaled(int pixels) {
+        return (int) Math.round(pixels * uiScale);
+    }
+
+    /**
+     * Any click (even on non focusable area) commit changes made on cells
+     */
+    private void installClickAwayCommit() {
+        AWTEventListener listener = event -> {
+            if (!(event instanceof MouseEvent) || event.getID() != MouseEvent.MOUSE_PRESSED) return;
+
+            if (!table.isEditing()) return;
+            if (MenuSelectionManager.defaultManager().getSelectedPath().length > 0) return; // a popup (e.g. the combo box dropdown) is open
+
+            Component clicked = ((MouseEvent) event).getComponent(); //specific component the mouse press actually landed on
+            Component editorComp = table.getEditorComponent(); // the actual Component currently sitting on top of the cell in edit mode
+            if (clicked == null || editorComp == null) return;
+            if (clicked == editorComp || SwingUtilities.isDescendingFrom(clicked, editorComp)) return; // don't edit if the click is made inside the edited cell
+
+            TableCellEditor editor = table.getCellEditor();
+            if (editor != null) editor.stopCellEditing();
+
+        };
+        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.MOUSE_EVENT_MASK);
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                Toolkit.getDefaultToolkit().removeAWTEventListener(listener);
+            }
+        });
     }
 
     /**
@@ -144,19 +236,22 @@ public class Sam3ImageDialog extends JDialog {
     }
 
     private JPanel buildModelPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Model"));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEtchedBorder());
+        panel.add(createSectionTitle("Model"), BorderLayout.NORTH);
+
+        JPanel fieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(2, 4, 2, 4);
         c.fill = GridBagConstraints.HORIZONTAL;
 
         c.gridx = 0; c.gridy = 0;
         JLabel modelLabel = new JLabel("Model path:");
-        panel.add(modelLabel, c);
+        fieldsPanel.add(modelLabel, c);
 
         modelPathField = new JTextField(Sam3Dialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY), 40);
         c.gridx = 1; c.weightx = 1;
-        panel.add(modelPathField, c);
+        fieldsPanel.add(modelPathField, c);
 
         String modelPathHint = "Path to the SAM3 model checkpoint (.pt file)";
         helpBar.attachHelp(modelLabel, modelPathHint);
@@ -172,13 +267,14 @@ public class Sam3ImageDialog extends JDialog {
             }
         });
         c.gridx = 2; c.weightx = 0;
-        panel.add(browseButton, c);
+        fieldsPanel.add(browseButton, c);
 
         JButton instructionsButton = new JButton("Instructions to download SAM3 model");
         instructionsButton.addActionListener(e -> Sam3Dialogs.addDownloadInstruction());
         c.gridx = 0; c.gridy = 1; c.gridwidth = 3;
-        panel.add(instructionsButton, c);
+        fieldsPanel.add(instructionsButton, c);
 
+        panel.add(fieldsPanel, BorderLayout.CENTER);
         return panel;
     }
 
@@ -187,12 +283,14 @@ public class Sam3ImageDialog extends JDialog {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEtchedBorder());
 
-        JLabel titleLabel = new JLabel("Concepts");
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        JLabel titleLabel = createSectionTitle("Concepts");
         helpBar.attachHelp(titleLabel, "A concept = one object class to find. Define it with a text prompt, "
                 + "a visual prompt (ROI in the ROI Manager), or both.");
         panel.add(titleLabel, BorderLayout.NORTH);
+
+        // replace the default editors so starting to edit a cell selects its whole content
+        table.setDefaultEditor(String.class, createSelectAllTextEditor());
+        table.setDefaultEditor(Integer.class, createSelectAllIntegerEditor());
 
         // set each column renderer (and optional editor)
         // Name column : greyed (but still editable) while no ROI output is selected
@@ -221,13 +319,13 @@ public class Sam3ImageDialog extends JDialog {
             }
         });
 
-        // set each column preferred width
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setPreferredWidth(100);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_TEXT_PROMPT).setPreferredWidth(150);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setPreferredWidth(160);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_VISUAL).setPreferredWidth(160);
-        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_OUTPUT_GROUP).setPreferredWidth(90);
-        table.setRowHeight(22);
+        // set each column preferred width (scaled so bigger fonts still get a comfortable row/column size)
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NAME).setPreferredWidth(scaled(100));
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_TEXT_PROMPT).setPreferredWidth(scaled(150));
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_POSITIVE_VISUAL).setPreferredWidth(scaled(160));
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_NEGATIVE_VISUAL).setPreferredWidth(scaled(160));
+        table.getColumnModel().getColumn(Sam3ConceptTableModel.COL_OUTPUT_GROUP).setPreferredWidth(scaled(90));
+        table.setRowHeight(scaled(22));
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 
         // hover hints per column header, defined with mouse position
@@ -253,7 +351,7 @@ public class Sam3ImageDialog extends JDialog {
                     break;
                 case Sam3ConceptTableModel.COL_NEGATIVE_VISUAL:
                     text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (box or point) "
-                            + "on each processed frame; must differ from the Positive visual group.";
+                            + "on each processed frame; \nmust differ from the Positive visual group.";
                     break;
                 case Sam3ConceptTableModel.COL_OUTPUT_GROUP:
                     text = "Id tagging this concept's outputs: the ROI group for added ROIs, and the pixel value for the semantic mask."
@@ -287,7 +385,7 @@ public class Sam3ImageDialog extends JDialog {
 
         // create scroll pane for the table
         JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setPreferredSize(new Dimension(700, 160));
+        scrollPane.setPreferredSize(new Dimension(scaled(700), scaled(160)));
         panel.add(scrollPane, BorderLayout.CENTER);
 
         // buttons to add and remove concepts
@@ -320,24 +418,67 @@ public class Sam3ImageDialog extends JDialog {
         return panel;
     }
 
+    /** Text-column editor that selects all existing text as soon as editing starts. */
+    private DefaultCellEditor createSelectAllTextEditor() {
+        JTextField textField = new JTextField();
+        return new DefaultCellEditor(textField) {
+            @Override
+            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
+                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
+                textField.selectAll();
+                return c;
+            }
+        };
+    }
+
+    /**
+     * Like {@link #createSelectAllTextEditor()}, but for Integer columns (the "Output group" column):
+     * parses the text back to an Integer, returning {@code null} on invalid input.
+     */
+    private DefaultCellEditor createSelectAllIntegerEditor() {
+        JTextField textField = new JTextField();
+        textField.setHorizontalAlignment(JTextField.RIGHT);
+        return new DefaultCellEditor(textField) {
+            @Override
+            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
+                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
+                textField.selectAll();
+                return c;
+            }
+
+            @Override
+            public Object getCellEditorValue() {
+                try {
+                    return Integer.valueOf(textField.getText().trim());
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+        };
+    }
+
     private JPanel buildParametersPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Detection and segmentation settings"));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEtchedBorder());
+        panel.add(createSectionTitle("Detection and segmentation settings"), BorderLayout.NORTH);
+
+        JPanel fieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(2, 4, 2, 4);
         c.anchor = GridBagConstraints.WEST;
 
         confidenceField = new JTextField(String.valueOf(Sam3ModelParameters.DEFAULT_CONFIDENCE), 6);
-        maskThresholdField = new JTextField(String.valueOf(Sam3ModelParameters.DEFAULT_MASK_THRESHOLD), 6);
-        maxSideLengthField = new JTextField(String.valueOf(Sam3ModelParameters.DEFAULT_MAX_SIDE_LENGTH_DETECT), 6);
 
-        addLabeledField(panel, c, 0, "Confidence threshold:", confidenceField,
+        addLabeledField(fieldsPanel, c, 0, "Confidence threshold:", confidenceField,
                 "Minimum detection probability (0-1) for an object to be added.");
-        addLabeledField(panel, c, 1, "Mask score threshold:", maskThresholdField,
-                "Minimum per-pixel mask score (centered on 0) for a pixel to be included in the mask.");
-        addLabeledField(panel, c, 2, "Segmentation mask side length:", maxSideLengthField,
-                "Masks are downsized to at most this side length (pixels) during detection.");
 
+        JButton advancedButton = new JButton("Advanced parameters...");
+        advancedButton.addActionListener(e -> Sam3Dialogs.openImageAdvancedParametersDialog(modelParams, getWidth()));
+        helpBar.attachHelp(advancedButton, "Mask score threshold, segmentation mask side length, and coordinate encoding ");
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 2;
+        fieldsPanel.add(advancedButton, c);
+
+        panel.add(fieldsPanel, BorderLayout.CENTER);
         return panel;
     }
 
@@ -352,9 +493,12 @@ public class Sam3ImageDialog extends JDialog {
     }
 
     private JPanel buildOutputPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createTitledBorder("Outputs"));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEtchedBorder());
+        panel.add(createSectionTitle("Outputs"), BorderLayout.NORTH);
+
+        JPanel checkboxesPanel = new JPanel();
+        checkboxesPanel.setLayout(new BoxLayout(checkboxesPanel, BoxLayout.Y_AXIS));
 
         addBoxRoisCB = new JCheckBox("Add bounding boxes to ROI Manager", false);
         addShapeRoisCB = new JCheckBox("Add shape ROIs to ROI Manager", true);
@@ -376,12 +520,13 @@ public class Sam3ImageDialog extends JDialog {
         helpBar.attachHelp(instanceMaskPerClassCB, "Like instance masks, but one slice per concept ; "
                 + "a per-frame hyperstack for stacks.");
 
-        panel.add(addBoxRoisCB);
-        panel.add(addShapeRoisCB);
-        panel.add(instanceMaskCB);
-        panel.add(semanticMaskCB);
-        panel.add(instanceMaskPerClassCB);
+        checkboxesPanel.add(addBoxRoisCB);
+        checkboxesPanel.add(addShapeRoisCB);
+        checkboxesPanel.add(instanceMaskCB);
+        checkboxesPanel.add(semanticMaskCB);
+        checkboxesPanel.add(instanceMaskPerClassCB);
 
+        panel.add(checkboxesPanel, BorderLayout.CENTER);
         return panel;
     }
 
@@ -397,8 +542,8 @@ public class Sam3ImageDialog extends JDialog {
     private JPanel buildButtonsPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 
-        JButton settingsButton = new JButton("Help bar settings...");
-        settingsButton.addActionListener(e -> helpBar.openSettingsDialog());
+        JButton settingsButton = new JButton("Settings...");
+        settingsButton.addActionListener(e -> openSettingsDialog());
 
         okButton = new JButton("OK");
         okButton.addActionListener(e -> onOk());
@@ -410,6 +555,34 @@ public class Sam3ImageDialog extends JDialog {
         panel.add(okButton);
         panel.add(cancelButton);
         return panel;
+    }
+
+    /** Combined settings dialog: help-bar level (applied immediately) and interface scale (applied on next open). */
+    private void openSettingsDialog() {
+        String[] helpLabels = DialogHelpBar.helpLevelLabels();
+        int currentHelpIndex = DialogHelpBar.helpLevelIndex(helpBar.getHelpBarMode());
+
+        GenericDialog gd = new GenericDialog("Settings");
+        gd.addMessage("Choose how much guidance the dialog's help bar should show:");
+        gd.addChoice("Help level:", helpLabels, helpLabels[currentHelpIndex]);
+
+        gd.addMessage("");
+        gd.addNumericField("Interface_scale (%):", uiScale * 100, 0);
+        gd.addMessage("Close and reopen this plugin for a new interface scale to take effect.");
+
+        gd.showDialog();
+        if (gd.wasCanceled()) return;
+
+        helpBar.applyHelpLevelChoice(gd.getNextChoiceIndex());
+
+        double scalePercent = gd.getNextNumber();
+        if (Double.isNaN(scalePercent) || scalePercent < MIN_UI_SCALE * 100 || scalePercent > MAX_UI_SCALE * 100) {
+            IJ.log("Interface scale must be between " + (int) (MIN_UI_SCALE * 100) + "% and "
+                    + (int) (MAX_UI_SCALE * 100) + "%. Keeping the previous value.");
+        } else {
+            Prefs.set(PREF_UI_SCALE_KEY, scalePercent / 100.0);
+            Prefs.savePreferences();
+        }
     }
 
     // ==== live RoiManager refresh ====
@@ -562,25 +735,14 @@ public class Sam3ImageDialog extends JDialog {
     }
 
     private Sam3ModelParameters collectDetectionParams() {
-        Sam3ModelParameters params = new Sam3ModelParameters();
-
-        double confidence = parseDouble(confidenceField.getText(), params.getConfidenceThreshold());
+        double confidence = parseDouble(confidenceField.getText(), modelParams.getConfidenceThreshold());
         if (confidence < 0 || confidence > 1) {
-            IJ.log("Confidence threshold must be between 0 and 1. Using default value: " + params.getConfidenceThreshold());
-            confidence = params.getConfidenceThreshold();
+            IJ.log("Confidence threshold must be between 0 and 1. Using default value: " + modelParams.getConfidenceThreshold());
+            confidence = modelParams.getConfidenceThreshold();
         }
-        params.setConfidenceThreshold(confidence);
+        modelParams.setConfidenceThreshold(confidence);
 
-        params.setMaskScoreThreshold(parseDouble(maskThresholdField.getText(), params.getMaskScoreThreshold()));
-
-        int maxSideLength = (int) parseDouble(maxSideLengthField.getText(), params.getMaxSideLengthDetect());
-        if (maxSideLength <= 0) {
-            IJ.log("Mask side length must be > 0. Using default value: " + params.getMaxSideLengthDetect());
-            maxSideLength = params.getMaxSideLengthDetect();
-        }
-        params.setMaxSideLengthDetect(maxSideLength);
-
-        return params;
+        return modelParams;
     }
 
     private double parseDouble(String text, double fallback) {

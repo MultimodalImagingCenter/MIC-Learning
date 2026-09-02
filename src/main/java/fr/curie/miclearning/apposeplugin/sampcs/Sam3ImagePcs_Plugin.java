@@ -413,9 +413,9 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         for (Sam3Concept concept : concepts) {
             StringBuilder line = new StringBuilder("  - ").append(concept.getName())
                     .append(" -> prompt(s):");
-            if (concept.isTextPromptUsed()) line.append("  text: \"").append(concept.getTextPrompt()).append("\"");
-            if (concept.isPositiveVisualUsed()) line.append("  positive visual group: ").append(concept.getPositiveVisualGroup());
-            if (concept.isNegativeVisualUsed()) line.append("  negative visual group: ").append(concept.getNegativeVisualGroup());
+            if (concept.isTextPromptUsed()) line.append("  text=\"").append(concept.getTextPrompt()).append("\"");
+            if (concept.isPositiveVisualUsed()) line.append("  positive visual group=").append(concept.getPositiveVisualGroup());
+            if (concept.isNegativeVisualUsed()) line.append("  negative visual group=").append(concept.getNegativeVisualGroup());
             line.append(" -> output group: ").append(concept.getOutputGroup());
             IJ.log(line.toString());
         }

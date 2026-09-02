@@ -306,9 +306,9 @@ public class Sam3Dialogs {
                 "To download them, you need to:\n" +
                 "   1/ Create a Hugging Face account\n" +
                 "   2/ Request access\n" +
-                "     The authorization process usually takes no more than an hour.\n" +
+                "     The authorization process usually takes no more than one hour.\n" +
                 "   3/ Once your access request is approved, you can download the \"sam3.pt\" file.\n" +
-                "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and place the model file inside it.");
+                "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and copy the model file inside it.");
         gd.hideCancelButton();
         gd.showDialog();
     }
