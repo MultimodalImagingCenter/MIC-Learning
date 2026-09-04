@@ -36,7 +36,7 @@ public class DetectionUtils {
 
     // --- User Output Selection ---
     public static class OutputOptions {
-        public boolean addToRoiManagerBB = true;
+        public boolean addToRoiManagerBB = false;
         public boolean addToRoiManagerShapes = false;
         public boolean createStackMask = false;
         public boolean createInstanceMask = false;
@@ -45,6 +45,10 @@ public class DetectionUtils {
         public boolean showDetectionResultTables = false;
         public boolean deletePreviousRoi = false;
         public boolean deletePreviousRT = false; // delete previous result table
+
+        public boolean noOutputSelected() {
+            return !addToRoiManagerBB && !addToRoiManagerShapes && !createStackMask && !createInstanceMask && !createSemanticMask && !createInstanceMaskPerClass;
+        }
     }
 
 
@@ -1221,15 +1225,15 @@ public class DetectionUtils {
     }
 
     /**
-     * Stack-aware version of {@link #createInstanceMaskPerClass}: builds a 4D hyperstack with one
-     * time-point per processed frame and, within each time-point, one Z-slice per class (from
-     * {@code classIdMap}, ordered by group id then name). Each Z-slice is the instance mask
+     * Stack version of {@link #createInstanceMaskPerClass}: builds a 4D hyperstack with one
+     * time-point per processed frame and, within each time-point, one channel per class (from
+     * {@code classIdMap}, ordered by group id then name). Each channel is the instance mask
      * (unique pixel value per instance) of that class's detections on that frame; a class with no
-     * detection on a frame gets an empty slice so the hyperstack stays rectangular.
+     * detection on a frame gets an empty channel.
 
      * @param imp               source image
      * @param detectionsByFrame frame index (0-based) -> detections on that frame
-     * @param classIdMap        class name -> output group id; defines the Z slices and their order
+     * @param classIdMap        class name -> output group id; defines the channel slices and their order
      * @return a hyperstack ImagePlus (channels = 1, slices = nClasses, frames = nFrames), or
      *         {@code null} when there is nothing to build
      */
@@ -1250,7 +1254,7 @@ public class DetectionUtils {
         int width = imp.getWidth();
         int height = imp.getHeight();
 
-        // classes (name, groupId) ordered by groupId then name - defines the Z axis
+        // classes (name, groupId) ordered by groupId then name - defines the C axis
         List<Map.Entry<String, Integer>> classes = new ArrayList<>(classIdMap.entrySet());
         classes.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()));
 
@@ -1261,9 +1265,10 @@ public class DetectionUtils {
         ImageStack originalStack = imp.getStack();
         ImageStack stack = new ImageStack(width, height);
 
-        // ImageJ hyperstack order is czt (channel fastest, then slice, then frame); channels = 1,
-        // so for each frame we append one slice per class.
+        // hyperstack order is czt (channel, then slice, then frame)
+        // for each frame append one channel per class.
         for (int frameKey : frameKeys) {
+            // create list of valid detection (with shape ROI) by class
             Map<String, List<ProcessedDetection>> byClassName = new HashMap<>();
             for (ProcessedDetection det : detectionsByFrame.getOrDefault(frameKey, Collections.emptyList())) {
                 if (!det.hasShapeRoi()) continue;
@@ -1285,7 +1290,7 @@ public class DetectionUtils {
         }
 
         ImagePlus result = new ImagePlus(imp.getTitle() + " - instance mask per class", stack);
-        result.setDimensions(1, classes.size(), frameKeys.size());
+        result.setDimensions(classes.size(), 1, frameKeys.size());
         result.setOpenAsHyperStack(true);
         IJ.log("Instance-mask-per-class hyperstack created (" + classes.size() + " class(es) x "
                 + frameKeys.size() + " frame(s)).");
@@ -1449,6 +1454,4 @@ public class DetectionUtils {
         }
         return classIdMap;
     }
-
-
 }

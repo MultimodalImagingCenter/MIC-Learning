@@ -13,8 +13,7 @@
     `Sam3GroupOption`, `Sam3ImageDialog`, `Sam3ImagePcsRunConfig`, `Sam3ImagePcsPythonRunner`,
     and the `sam3-pcs-singleimage-m.py` script.
 - Output generation for detection: `DetectionUtils.createInstanceMaskPerClassStack`: generate a 4D hyperstack 
-  for image stacks (one time-point per processed frame, one Z-slice per concept, each slice the instance 
-  mask of that concept's detections on that frame).
+  for image stacks (one time-point per processed frame, one channel per concept).
 
 ### Changed
 - Output generation: "Create instance mask per class" is now available for stacks 
