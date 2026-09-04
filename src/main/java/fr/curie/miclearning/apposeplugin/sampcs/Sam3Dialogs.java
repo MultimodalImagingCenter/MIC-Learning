@@ -313,12 +313,4 @@ public class Sam3Dialogs {
         gd.showDialog();
     }
 
-    public static void addBoxGroupInstructions(GenericDialog gd ,int roiNumber, int groupNumber){
-        gd.addMessage("Only rectangle and point ROIs, selected in the ROI manager, will be processed.");
-        gd.addMessage("   number of selected ROI(s): " + roiNumber);
-        gd.addMessage("   number of group(s): " + groupNumber);
-        gd.addMessage("Assign the same group ID to ROIs that belong to the same semantic category. \n" +
-                "The system will launch a separate detection for each group, using all ROIs within that group as input.\n " +
-                "Note: Group \"0\" will be internally remapped to \"255\" for processing.\n");
-    }
 }

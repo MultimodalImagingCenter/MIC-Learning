@@ -20,7 +20,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     public static final int COL_OUTPUT_GROUP = 4;
 
     private static final String[] COLUMN_NAMES = {
-            "Output name", "Text prompt", "Positive visual", "Negative visual", "Output group"
+            "Output name", "Text prompt", "Positive visual prompt", "Negative visual prompt", "Output ROI group"
     };
 
     private static final int MAX_GROUP_ID = 255;

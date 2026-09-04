@@ -58,7 +58,7 @@ public class DialogHelpBar {
 
     private static final int VISIBLE_LINES = 2;
     private static final int DEFAULT_BASE_FONT_SIZE = 12; // fallback
-    private static final float HELP_BAR_FONT_SCALE = 0.8f; // relative to the dialog's own  font
+    private static final float HELP_BAR_FONT_SCALE = 0.9f; // relative to the dialog's own  font
 
     private HelpBarMode helpBarMode;
 
@@ -117,7 +117,6 @@ public class DialogHelpBar {
         this.helpBarFont = new Font(Font.SANS_SERIF, Font.PLAIN, helpBarSize);
         this.warningFont = new Font(Font.SANS_SERIF, Font.BOLD, helpBarSize);
         this.lineHeightPx = Toolkit.getDefaultToolkit().getFontMetrics(helpBarFont).getHeight(); // deprecated, but easiest solution I found ?
-
         initLines();
     }
 
