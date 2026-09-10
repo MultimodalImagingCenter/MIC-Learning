@@ -33,7 +33,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * Non-modal Swing dialog for {@link Sam3ImagePcs_Plugin}: lets the user define an arbitrary
  * number of concepts, plus model path, detection parameters and output options.
  */
-public class Sam3ImageDialog extends JDialog {
+public class Sam3ImageDialogOld extends JDialog {
 
     private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     private static final int ROI_POLL_INTERVAL_MS = 500;
@@ -72,16 +72,15 @@ public class Sam3ImageDialog extends JDialog {
 
     private final CountDownLatch closedLatch = new CountDownLatch(1);
 
-    private boolean approved = false; // true if user pressed OK and no error
-
     // populated only once the user presses OK
+    private boolean approved = false;
     private String modelPath;
     private Sam3ModelParameters detectionParams;
     private DetectionUtils.OutputOptions outputOptions;
     private DetectionUtils.DetectionMode stackMode;
     private List<Sam3Concept> concepts;
 
-    public Sam3ImageDialog(ImagePlus imp, int nFrames, int axis) {
+    public Sam3ImageDialogOld(ImagePlus imp, int nFrames, int axis) {
         super(IJ.getInstance(), "SAM3 Promptable Concept Segmentation", false);
         this.imp = imp;
         this.nFrames = nFrames;
@@ -192,7 +191,7 @@ public class Sam3ImageDialog extends JDialog {
      * @return {@code true} if the user pressed OK with a valid configuration, {@code false} otherwise
      */
     public boolean showDialogAndWait() {
-    SwingUtilities.invokeLater(() -> {
+        SwingUtilities.invokeLater(() -> {
             refreshGroupOptions();
             startRoiPolling();
             setVisible(true);
@@ -217,21 +216,18 @@ public class Sam3ImageDialog extends JDialog {
     private void buildUi() {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         setContentPane(content);
 
         helpBar = new DialogHelpBar(this, DialogHelpBar.loadSavedMode());
 
         content.add(helpBar.getPanel());
-        content.add(Box.createVerticalStrut(8));
         content.add(buildModelPanel());
         content.add(Box.createVerticalStrut(8));
         content.add(buildConceptsPanel());
         content.add(Box.createVerticalStrut(8));
         content.add(buildParametersPanel());
-        content.add(Box.createVerticalStrut(8));
         content.add(buildOutputPanel());
-        content.add(Box.createVerticalStrut(8));
         if (nFrames > 1) content.add(buildStackModePanel());
         content.add(buildButtonsPanel());
 
@@ -275,8 +271,7 @@ public class Sam3ImageDialog extends JDialog {
 
         JButton instructionsButton = new JButton("Instructions to download SAM3 model");
         instructionsButton.addActionListener(e -> Sam3Dialogs.addDownloadInstruction());
-        c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.NONE;
-        c.gridx = 0; c.gridy = 1; c.gridwidth = 3; c.weightx = 0;
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 3;
         fieldsPanel.add(instructionsButton, c);
 
         panel.add(fieldsPanel, BorderLayout.CENTER);
@@ -345,19 +340,18 @@ public class Sam3ImageDialog extends JDialog {
             switch (modelCol) {
                 case Sam3ConceptTableModel.COL_NAME:
                     text = "Name used for this concept's outputs (ROI names, logs). Must be unique."
-                    + nameNotUsed;
+                            + nameNotUsed;
                     break;
                 case Sam3ConceptTableModel.COL_TEXT_PROMPT:
                     text = "Text description of the object (e.g. 'green cell'). One prompt applies to every processed frame.";
                     break;
                 case Sam3ConceptTableModel.COL_POSITIVE_VISUAL:
                     text = "ROI group used as a positive visual prompt. Needs one usable ROI (box or point) in the ROI Manager "
-                            + "on each processed frame." +
-                            "\nEach frame will be processed independently.";
+                            + "on each processed frame.";
                     break;
                 case Sam3ConceptTableModel.COL_NEGATIVE_VISUAL:
                     text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (box or point) "
-                            + "on each processed frame. \nMust differ from the Positive visual group.";
+                            + "on each processed frame; \nmust differ from the Positive visual group.";
                     break;
                 case Sam3ConceptTableModel.COL_OUTPUT_GROUP:
                     text = "Id tagging this concept's outputs: the ROI group for added ROIs, and the pixel value for the semantic mask."
@@ -368,7 +362,7 @@ public class Sam3ImageDialog extends JDialog {
             }
             return new DialogHelpBar.Hint(text, DialogHelpBar.DEFAULT_HELP_COLOR);
         });
-        
+
 
         // clicking a disabled positive/negative visual cell explains why (no usable ROI yet)
         table.addMouseListener(new MouseAdapter() {
@@ -471,23 +465,17 @@ public class Sam3ImageDialog extends JDialog {
         JPanel fieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(2, 4, 2, 4);
-
-        JLabel jLabel = new JLabel("Confidence threshold:");
         c.anchor = GridBagConstraints.WEST;
-        c.gridx = 0; c.gridy = 0;
-        fieldsPanel.add(jLabel, c);
+
         confidenceField = new JTextField(String.valueOf(Sam3ModelParameters.DEFAULT_CONFIDENCE), 6);
-        c.gridx = 1;
-        fieldsPanel.add(confidenceField, c);
-        String confidenceHint = "Minimum detection probability (0-1) for an object to be added.";
-        helpBar.attachHelp(jLabel, confidenceHint);
-        helpBar.attachHelp(confidenceField, confidenceHint);
+
+        addLabeledField(fieldsPanel, c, 0, "Confidence threshold:", confidenceField,
+                "Minimum detection probability (0-1) for an object to be added.");
 
         JButton advancedButton = new JButton("Advanced parameters...");
         advancedButton.addActionListener(e -> Sam3Dialogs.openImageAdvancedParametersDialog(modelParams, getWidth()));
         helpBar.attachHelp(advancedButton, "Mask score threshold, segmentation mask side length, and coordinate encoding ");
-        c.anchor = GridBagConstraints.EAST;
-        c.gridx = 2; c.weightx = 1.0;
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 2;
         fieldsPanel.add(advancedButton, c);
 
         panel.add(fieldsPanel, BorderLayout.CENTER);
@@ -545,8 +533,7 @@ public class Sam3ImageDialog extends JDialog {
     private JPanel buildStackModePanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         processStackCB = new JCheckBox("Process entire stack (" + nFrames + " frames)", true);
-        helpBar.attachHelp(processStackCB, "If unchecked, only the current frame is processed." +
-                "\nif checked, each frame of the stack will be processed independently.");
+        helpBar.attachHelp(processStackCB, "If unchecked, only the current slice is processed.");
         processStackCB.addItemListener(e -> refreshGroupOptions());
         panel.add(processStackCB);
         return panel;
@@ -570,7 +557,7 @@ public class Sam3ImageDialog extends JDialog {
         return panel;
     }
 
-    /** Combined settings dialog: help-bar level and interface scale. */
+    /** Combined settings dialog: help-bar level (applied immediately) and interface scale (applied on next open). */
     private void openSettingsDialog() {
         String[] helpLabels = DialogHelpBar.helpLevelLabels();
         int currentHelpIndex = DialogHelpBar.helpLevelIndex(helpBar.getHelpBarMode());
@@ -603,7 +590,7 @@ public class Sam3ImageDialog extends JDialog {
     private void startRoiPolling() {
         lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
         roiPollTimer = new Timer(ROI_POLL_INTERVAL_MS, e -> {
-        if (imp.getWindow() == null) { // source image was closed - nothing left to configure
+            if (imp.getWindow() == null) { // source image was closed - nothing left to configure
                 onImageClosed();
                 return;
             }
@@ -652,7 +639,7 @@ public class Sam3ImageDialog extends JDialog {
         List<Sam3GroupOption> options = new ArrayList<>();
         int totalFrames = frames.size();
         for (Map.Entry<Integer, Integer> entry : coveredFramesByGroup.entrySet()) {
-            options.add(new Sam3GroupOption(entry.getKey(), entry.getValue(), totalFrames));
+            options.add(new Sam3GroupOptionImage(entry.getKey(), entry.getValue(), totalFrames));
         }
         return options;
     }
@@ -695,33 +682,17 @@ public class Sam3ImageDialog extends JDialog {
         String path = resolveAndValidateModelPath();
         if (path == null) return; // does not close window, because "dispose()" is not called. Usr can try again
 
-        // check concept validity
         List<Sam3Concept> currentConcepts = tableModel.getConcepts();
         List<String> errors = validateConcepts(currentConcepts);
-
         if (!errors.isEmpty()) {
-            JOptionPane.showMessageDialog(this, String.join("\n", errors), "Invalid concept(s)", JOptionPane.ERROR_MESSAGE);
+            IJ.error("Invalid concept(s)", String.join("\n", errors));
             return;
-        }
-
-        // if no output is selected, print warning
-        outputOptions = collectOutputOptions();
-        if (outputOptions.noOutputSelected()) {
-            int choice = JOptionPane.showOptionDialog(this,
-                    "No output is selected (no ROI, no mask). The plugin will run but produce nothing except logs.\n"
-                            + "Do you want to continue anyway?",
-                    "No output selected",
-                    JOptionPane.DEFAULT_OPTION,
-                    JOptionPane.WARNING_MESSAGE,
-                    null,
-                    new Object[]{"Continue", "Return"},
-                    "Return");
-            if  (choice != 0) return; // 0 = the user clicked on "Continue"
         }
 
         modelPath = path;
         concepts = new ArrayList<>(currentConcepts);
         detectionParams = collectDetectionParams();
+        outputOptions = collectOutputOptions();
         stackMode = (nFrames > 1 && processStackCB.isSelected())
                 ? DetectionUtils.DetectionMode.MULTI_IMAGE : DetectionUtils.DetectionMode.SINGLE_IMAGE;
 

@@ -138,11 +138,14 @@ public class Sam3Dialogs {
         params.setNFrameBtwDetections(nFramesBtwDetec);
     }
 
+    public static String openVideoAdvancedParametersDialog(Sam3ModelParameters params, String currentTrackingModelPath){
+        return openVideoAdvancedParametersDialog( params,  currentTrackingModelPath, 0);
+    }
     /**
      * Opens a secondary dialog for the rarely-tuned detection/tracking parameters
      * plus the optional tracking model path
      */
-    public static String openVideoAdvancedParametersDialog(Sam3ModelParameters params, String currentTrackingModelPath) {
+    public static String openVideoAdvancedParametersDialog(Sam3ModelParameters params, String currentTrackingModelPath, int minWidth) {
         GenericDialog gd = new GenericDialog("Advanced parameters");
         DialogHelpBar helpBar = new DialogHelpBar(gd, DialogHelpBar.loadSavedMode());
         gd.addPanel(helpBar.getPanel());
@@ -183,8 +186,10 @@ public class Sam3Dialogs {
                         "Lower this value if objects move a lot between frames.");
 
         gd.pack();
-        helpBar.lockWidth(gd.getPreferredSize().width);
+        if (minWidth > 0)  helpBar.lockWidth(Math.max(gd.getPreferredSize().width, minWidth));
+        else helpBar.lockWidth(gd.getPreferredSize().width);
         gd.showDialog();
+
         if (gd.wasCanceled()) return currentTrackingModelPath;
 
         String trackingModelPath = getModelPath(gd, PREF_LAST_TRACK_MODEL_KEY);

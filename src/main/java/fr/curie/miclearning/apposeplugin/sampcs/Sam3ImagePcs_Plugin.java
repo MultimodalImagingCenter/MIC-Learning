@@ -245,12 +245,12 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     }
 
     private boolean askUser() {
-        Sam3ImageDialog dialog = new Sam3ImageDialog(imp, nFrames, axis);
+        Sam3ImageDialogNew dialog = new Sam3ImageDialogNew(imp, nFrames, axis);
         if (!dialog.showDialogAndWait()) return false; // blocks here, wait for dialog.showDialogAndWait() to give answer
 
         // only reached after dialog closes (if true, meaning if ok clicked)
         modelPath = dialog.getModelPath();
-        detectionParams = dialog.getDetectionParams();
+        detectionParams = dialog.getFinalModelParam();
         outputOptions = dialog.getOutputOptions();
         stackMode = dialog.getStackMode();
         concepts = dialog.getConcepts();

@@ -3,7 +3,8 @@ package fr.curie.miclearning.apposeplugin.sampcs;
 import java.util.Objects;
 
 /**
- * One row of the concept table for {@link Sam3ImagePcs_Plugin}: a single class defined by
+ * One row of the concept table for {@link Sam3ImagePcs_Plugin} and
+ * {@link Sam3VideoPcs_Plugin}: a single class defined by
  * an optional text prompt and/or an optional visual prompt (positive/negative), run
  * independently on every frame of the stack.
  */

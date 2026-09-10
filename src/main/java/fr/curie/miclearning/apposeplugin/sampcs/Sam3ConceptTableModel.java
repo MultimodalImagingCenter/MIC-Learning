@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Table model backing the concept table of {@link Sam3ImagePcs_Plugin}'s dialog: one row
+ * Table model backing the concept table of {@link Sam3ImagePcs_Plugin} and 's dialog: one row
  * per {@link Sam3Concept}, one column per editable property.
  */
 public class Sam3ConceptTableModel extends AbstractTableModel {
@@ -142,7 +142,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
 
     /**
      * Whether the visual-prompt columns accept input (i.e. at least one usable ROI exists on a
-     * processed frame). Fires a table update only when the value actually changes.
+     * processed frame/on the prompt frame). Fires a table update only when the value actually changes.
      */
     public void setRoiPromptsAvailable(boolean available) {
         if (this.roiPromptsAvailable == available) return;

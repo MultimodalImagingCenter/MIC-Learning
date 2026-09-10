@@ -27,7 +27,7 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Scans the selected ROIs and collects the group IDs present on that frame.
+     * Scans the ROI array and collects the group IDs
      *
      * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
      * @return the scan result
@@ -52,7 +52,7 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Scans the selected ROIs and collects the group IDs present on that frame.
+     *  Scans the ROI list and collects the group IDse.
      *
      * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
      * @return the scan result
@@ -201,6 +201,25 @@ public class RoiPromptExtractor {
     }
 
     /**
+     * Collects the groups of the usable ROIs (rectangle or point) on the given frame - 3D image,
+     * only one axis used
+     *
+     * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
+     * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frame        1-indexed frame position to collect ROIs from
+     */
+    public TreeSet<Integer> getRoiGroupAtFrame(Roi[] rois, int axis, int frame) {
+        TreeSet<Integer> groups = new TreeSet<>();
+        if (rois == null) return groups;
+        for (Roi roi : rois) {
+            if (!isUsableRoiType(roi)) continue;
+            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            if (position == frame || position == 0) groups.add(roi.getGroup()); // position == 0 means no specific position, roi defined on all frames of this axis
+        }
+        return groups;
+    }
+
+    /**
      * Collects the usable ROIs (rectangle or point) on the given frame - 4D image,
      * only one axis used
      *
@@ -259,41 +278,6 @@ public class RoiPromptExtractor {
         return new PromptRois(positive, negative);
     }
 
-    /**
-     * Splits ROIs into positive prompt coordinates grouped by each ROI's own group id
-     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs: one {@code [x, y]} per contained point.
-     * Note: Group {@code 0} is normalized to {@code groupZeroReplacement}
-     *
-     * @param rois               the ROIs to split
-     * @param negativeGroupId    group to treat as negative prompt ({@code null} if unused)
-     * @param groupZeroReplacement replacement group id to use in place of group 0
-     */
-    public GroupedPromptRois buildGroupedPromptRois(List<Roi> rois, Integer negativeGroupId,
-                                                     int groupZeroReplacement) {
-        Map<Integer, List<double[]>> positiveByGroup = new HashMap<>(); // positive_rois format: {group_id_2: [[x,y,w,h], [x,y], ...], group_id_2: ... } (absolute values)
-        List<double[]> negative = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
-
-        for (Roi roi : rois) {
-            if (!isUsableRoiType(roi)) continue;
-            int effectiveGroupId = normalizeGroupZero(roi.getGroup(), groupZeroReplacement);
-            boolean isNegativeGroup = negativeGroupId != null && effectiveGroupId == negativeGroupId;
-
-            if (roi.getType() == Roi.RECTANGLE) {
-                Rectangle rect = roi.getBounds();
-                double[] coord = {rect.x, rect.y, rect.width, rect.height};
-                if (isNegativeGroup) negative.add(coord);
-                else positiveByGroup.computeIfAbsent(effectiveGroupId, k -> new ArrayList<>()).add(coord);
-            } else if (roi.getType() == Roi.POINT) {
-                for (Point point : roi.getContainedPoints()) {
-                    double[] coord = {point.getX(), point.getY()};
-                    if (isNegativeGroup) negative.add(coord);
-                    else positiveByGroup.computeIfAbsent(effectiveGroupId, k -> new ArrayList<>()).add(coord);
-                }
-            }
-        }
-
-        return new GroupedPromptRois(positiveByGroup, negative);
-    }
 
     /**
      * fingerprint of the ROI state that matters for prompt selection (group + frame per
