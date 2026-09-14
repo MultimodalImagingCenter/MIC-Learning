@@ -22,7 +22,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * Non-modal Swing dialog for {@link Sam3ImagePcs_Plugin}: lets the user define an arbitrary
  * number of concepts, plus model path, detection parameters and output options.
  */
-public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
+public class Sam3ImageDialog extends Sam3ConceptDialogBase {
 
     private JCheckBox processStackCB; // only shown/relevant when nFrames > 1
 
@@ -32,7 +32,7 @@ public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
     // interface elements
     JTextField confidenceField;
 
-    public Sam3ImageDialogNew(ImagePlus imp, int nFrames, int axis) {
+    public Sam3ImageDialog(ImagePlus imp, int nFrames, int axis) {
         super(imp, nFrames, axis, "SAM3 Promptable Concept Segmentation");
     }
 
@@ -118,6 +118,7 @@ public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
     @Override
     JPanel buildParametersPanel() {
         JPanel panel = super.buildParametersPanel();
+        panel.setLayout(new BorderLayout());
         panel.add(createSectionTitle("Detection and segmentation settings"), BorderLayout.NORTH);
 
         GridBagConstraints c = new GridBagConstraints();
@@ -130,7 +131,7 @@ public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
         addLabeledField(fieldsPanel, c, 0, "Confidence threshold:", confidenceField, confidenceHint);
 
         JButton advancedButton = new JButton("Advanced parameters...");
-        advancedButton.addActionListener(e -> Sam3Dialogs.openImageAdvancedParametersDialog(modelParams, getWidth()));
+        advancedButton.addActionListener(e -> Sam3AdvancedParametersDialog.showForImage(this, modelParams, getWidth()));
         helpBar.attachHelp(advancedButton, "Mask score threshold, segmentation mask side length, and coordinate encoding ");
         c.anchor = GridBagConstraints.EAST;
         c.gridx = 2; c.weightx = 1.0;
@@ -145,7 +146,7 @@ public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         processStackCB = new JCheckBox("Process entire stack (" + nFrames + " frames)", true);
         helpBar.attachHelp(processStackCB, "If unchecked, only the current frame is processed." +
-                "\nif checked, each frame of the stack will be processed independently.");
+                "\nIf checked, each frame of the stack will be processed independently.");
         processStackCB.addItemListener(e -> refreshGroupOptions());
         panel.add(processStackCB);
         return panel;
@@ -182,7 +183,7 @@ public class Sam3ImageDialogNew extends Sam3ConceptDialogBase {
 
     @Override
     void onOk() {
-        super.onOk();
+        if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
         stackMode = (nFrames > 1 && processStackCB.isSelected())
                 ? DetectionUtils.DetectionMode.MULTI_IMAGE : DetectionUtils.DetectionMode.SINGLE_IMAGE;
 

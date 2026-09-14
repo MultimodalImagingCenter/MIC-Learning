@@ -14,7 +14,7 @@ import java.util.Objects;
  * (or image stack), with an arbitrary number of independent concepts - each with an optional
  * text prompt and/or an optional positive/negative visual prompt, resolved per frame.
  */
-public final class Sam3ImagePcsRunConfig {
+public final class Sam3ImageRunConfig {
 
     private final String modelPath;
     private final Sam3ModelParameters detectionParams;
@@ -27,11 +27,11 @@ public final class Sam3ImagePcsRunConfig {
     private final List<Boolean> conceptTextUsed;
     private final Map<String, Integer> classIdMap; // concept label -> output RoiManager group id (may repeat across concepts)
 
-    // one entry per frame, one inner entry per concept (same order as conceptLabels):
+    // one entry per frame, one inner entry per concept :
     // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
-    private final List<List<Map<String, Object>>> framePrompts;
+    private final List<List<Map<String, List<double[]>>>> framePrompts;
 
-    private Sam3ImagePcsRunConfig(Builder b) {
+    private Sam3ImageRunConfig(Builder b) {
         this.modelPath = b.modelPath;
         this.detectionParams = b.detectionParams;
         this.outputOptions = b.outputOptions;
@@ -51,7 +51,7 @@ public final class Sam3ImagePcsRunConfig {
     public List<String> getConceptTexts() {return conceptTexts;}
     public List<Boolean> getConceptTextUsed() {return conceptTextUsed;}
     public Map<String, Integer> getClassIdMap() {return classIdMap;}
-    public List<List<Map<String, Object>>> getFramePrompts() {return framePrompts;}
+    public List<List<Map<String, List<double[]>>>> getFramePrompts() {return framePrompts;}
 
     public static final class Builder {
         private String modelPath;
@@ -62,7 +62,7 @@ public final class Sam3ImagePcsRunConfig {
         private List<String> conceptTexts = new ArrayList<>();
         private List<Boolean> conceptTextUsed = new ArrayList<>();
         private Map<String, Integer> classIdMap = new HashMap<>();
-        private List<List<Map<String, Object>>> framePrompts = new ArrayList<>();
+        private List<List<Map<String, List<double[]>>>> framePrompts = new ArrayList<>();
 
         public Builder modelPath(String modelPath) {
             this.modelPath = modelPath;
@@ -104,12 +104,12 @@ public final class Sam3ImagePcsRunConfig {
             return this;
         }
 
-        public Builder framePrompts(List<List<Map<String, Object>>> framePrompts) {
+        public Builder framePrompts(List<List<Map<String, List<double[]>>>> framePrompts) {
             this.framePrompts = framePrompts != null ? framePrompts : new ArrayList<>();
             return this;
         }
 
-        public Sam3ImagePcsRunConfig build() {
+        public Sam3ImageRunConfig build() {
             Objects.requireNonNull(modelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
@@ -120,7 +120,7 @@ public final class Sam3ImagePcsRunConfig {
             if (framePrompts.isEmpty()) {
                 throw new IllegalStateException("At least one frame of prompts must be provided.");
             }
-            return new Sam3ImagePcsRunConfig(this);
+            return new Sam3ImageRunConfig(this);
         }
     }
 }

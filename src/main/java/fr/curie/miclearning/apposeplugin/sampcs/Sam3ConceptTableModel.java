@@ -20,7 +20,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     public static final int COL_OUTPUT_GROUP = 4;
 
     private static final String[] COLUMN_NAMES = {
-            "Output name", "Text prompt", "Positive visual prompt", "Negative visual prompt", "Output ROI group"
+            "Output name", "Text prompt", "Positive visual prompt", "Negative visual prompt", "Output value"
     };
 
     private static final int MAX_GROUP_ID = 255;
@@ -89,10 +89,9 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
                 break;
             case COL_TEXT_PROMPT: {
                 String newText = value == null ? "" : value.toString();
-                boolean nameFollowsDefault = concept.isNameDefault();
                 concept.setTextPrompt(newText);
                 // if a text prompt is given and the name still is the default value (i.e. the id): change name to prompt
-                if (nameFollowsDefault && !newText.trim().isEmpty()) {
+                if (concept.isNameDefault() && !newText.trim().isEmpty()) {
                     concept.setName(uniqueName(newText, concept));
                 }
                 break;
@@ -102,6 +101,11 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
                 // the negative prompt can't reuse the positive group - drop it if it now collides
                 if (Objects.equals(concept.getNegativeVisualGroup(), concept.getPositiveVisualGroup())) {
                     concept.setNegativeVisualGroup(null);
+                }
+                // if a group for the visual positive prompt is given and the output group is still the default value (i.e. the id):
+                // change output group to input group (even if output group already exist)
+                if (concept.isOutputGroupDefault() && (concept.getPositiveVisualGroup()!=null) && (concept.getPositiveVisualGroup() != 0)) {
+                    concept.setOutputGroup((Integer) value);
                 }
                 break;
             case COL_NEGATIVE_VISUAL:
@@ -118,7 +122,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
 
     /** Appends a new concept row with a fresh id and the first output group not used by another row. */
     public void addConcept() {
-        Sam3Concept concept = new Sam3Concept(nextId++, firstUnusedOutputGroup());
+        Sam3Concept concept = new Sam3Concept(nextId++);
         concepts.add(concept);
         int row = concepts.size() - 1;
         fireTableRowsInserted(row, row);
@@ -193,18 +197,6 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
             if (concept != self && concept.getName().equals(name)) return true;
         }
         return false;
-    }
-
-    /** Lowest group id in [1, {@value #MAX_GROUP_ID}] not already assigned as another row's output group. */
-    private int firstUnusedOutputGroup() {
-        for (int candidate = 1; candidate <= MAX_GROUP_ID; candidate++) {
-            boolean taken = false;
-            for (Sam3Concept concept : concepts) {
-                if (concept.getOutputGroup() == candidate) { taken = true; break; }
-            }
-            if (!taken) return candidate;
-        }
-        return 1;
     }
 
     private static int clampGroupId(Integer value, int fallback) {

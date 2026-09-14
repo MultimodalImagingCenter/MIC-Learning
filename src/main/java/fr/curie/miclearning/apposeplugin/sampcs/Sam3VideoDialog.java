@@ -37,7 +37,8 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
         setContentPane(content);
         helpBar = new DialogHelpBar(this, DialogHelpBar.loadSavedMode());
-        finalModelParam.setNFrameToProcess(nFrames);
+        modelParams.setNFrameToProcess(nFrames);
+        modelParams.setIncludeCoordinateEncoding(false);
         frameSelector = new FrameRangeSelector(imp, nFrames, helpBar);
         frameSelector.setPromptFrame(imp.getCurrentSlice());
         frameSelector.addPromptFrameListener(this::onScopeChanged);
@@ -48,17 +49,18 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
         content.add(Box.createVerticalStrut(8));
         content.add(buildConceptsPanel());
         content.add(Box.createVerticalStrut(8));
+        content.add(buildScopePanel());
+        content.add(Box.createVerticalStrut(8));
         content.add(buildParametersPanel());
         content.add(Box.createVerticalStrut(8));
         content.add(buildOutputPanel());
 
-    }
+        content.add(buildButtonsPanel());
 
-    JPanel buildFrameRangePanel() {
-        JPanel panel = super.buildConceptsPanel();
-        return panel;
-    }
+        // start with one empty concept row
+        tableModel.addConcept();
 
+    }
 
     @Override
     JPanel buildConceptsPanel() {
@@ -87,7 +89,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
             return new DialogHelpBar.Hint(text, DialogHelpBar.DEFAULT_HELP_COLOR);
         });
 
-        // hint text specific to video...
+        // hint texts specific to video
         // clicking a disabled positive/negative visual cell explains why (no usable ROI yet)
         table.addMouseListener(new MouseAdapter() {
             @Override
@@ -124,12 +126,14 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
 
     @Override
     JPanel buildParametersPanel() {
-        JPanel panel = super.buildParametersPanel();
+        JPanel outer = super.buildParametersPanel();
+        outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
+
         // detection settings
+        JPanel detectionSection = new JPanel(new BorderLayout());
         JLabel detectionTitleLabel = createSectionTitle("Detection settings");
         helpBar.attachHelp(detectionTitleLabel, "Settings for the detection of new objects.");
-        panel.add(detectionTitleLabel, BorderLayout.NORTH);
-
+        detectionSection.add(detectionTitleLabel, BorderLayout.NORTH);
 
         JPanel detectionFieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c1 = new GridBagConstraints();
@@ -140,12 +144,14 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
         String confidenceHint = "Minimum detection probability (0-1) for an object to be added.";
         addLabeledField(detectionFieldsPanel, c1, 0, "Confidence threshold:", confidenceField, confidenceHint);
 
-        panel.add(detectionFieldsPanel, BorderLayout.CENTER);
+        detectionSection.add(detectionFieldsPanel, BorderLayout.WEST);
+        outer.add(detectionSection);
 
         // tracking settings
+        JPanel trackingSection = new JPanel(new BorderLayout());
         JLabel trackingTitleLabel = createSectionTitle("Tracking settings");
         helpBar.attachHelp(trackingTitleLabel, "Settings for the tracking of already detected objects.");
-        panel.add(trackingTitleLabel, BorderLayout.NORTH);
+        trackingSection.add(trackingTitleLabel, BorderLayout.NORTH);
 
         JPanel trackingFieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c2 = new GridBagConstraints();
@@ -157,13 +163,15 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
         addLabeledField(trackingFieldsPanel, c2, 0, "Frames between detections:", frameBtwField, frameBtwHint);
 
         JButton advancedButton = new JButton("Advanced parameters...");
-        advancedButton.addActionListener(e -> trackingModelPath = Sam3Dialogs.openVideoAdvancedParametersDialog(modelParams, trackingModelPath, getWidth()));
+        advancedButton.addActionListener(e -> trackingModelPath = Sam3AdvancedParametersDialog.showForVideo(this, modelParams, trackingModelPath, getWidth()));
         c2.anchor = GridBagConstraints.EAST;
-        c2.gridx = 2; c2.gridy =1; c2.weightx = 1.0;
+        c2.gridx = 2; c2.weightx = 1.0;
         trackingFieldsPanel.add(advancedButton, c2);
 
-        panel.add(trackingFieldsPanel, BorderLayout.CENTER);
-        return panel;
+        trackingSection.add(trackingFieldsPanel, BorderLayout.CENTER);
+        outer.add(trackingSection);
+
+        return outer;
     }
 
     // ==== live RoiManager refresh ====
@@ -188,9 +196,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
 
     @Override
     void onOk() {
-        super.onOk();
-
-        modelParams.
+        if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
 
         approved = true;
         dispose();
@@ -206,6 +212,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
 
         int nFrameBtwDetec = parseInt(frameBtwField.getText(), modelParams.getNFrameBtwDetections());
         if (nFrameBtwDetec <= 0) {nFrameBtwDetec = modelParams.getNFrameToProcess()+1;}
+        modelParams.setNFrameBtwDetections(nFrameBtwDetec);
 
         return modelParams;
     }

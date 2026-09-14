@@ -29,9 +29,8 @@ import java.util.concurrent.CountDownLatch;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
- * Non-modal Swing dialog base for {@link Sam3ImageDialogOld} and {@link Sam3VideoDialog} :
- * lets the user define an arbitrary
- * number of concepts, plus model path, detection parameters and output options.
+ * Non-modal Swing dialog base for {@link Sam3ImageDialog} and {@link Sam3VideoDialog} :
+ * lets the user define an arbitrary number of concepts, plus model path, detection parameters and output options.
  */
 public abstract class Sam3ConceptDialogBase extends JDialog {
     protected static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
@@ -99,8 +98,8 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         buildUi();
         installClickAwayCommit();
         if (uiScale != 1.0) {
-            rescaleFonts(getContentPane());
-            rescaleFonts(table.getTableHeader());
+            rescaleFonts(getContentPane(), uiScale);
+            rescaleFonts(table.getTableHeader(), uiScale);
             helpBar.rescaleFont(uiScale); // the help bar resets its own font from a cached field on every render - update that field directly
         }
         pack();
@@ -137,12 +136,13 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     }
 
     /**
-     * Recursively derives every font in {@code comp}'s subtree by {@link #uiScale}, and scales
-     * checkbox icons too
+     * Recursively derives every font in {@code comp}'s subtree by {@code uiScale}, and scales
+     * checkbox icons too. Shared with other dialogs in this package (e.g. {@link Sam3AdvancedParametersDialog})
+     * so they honor the same {@link #PREF_UI_SCALE_KEY} preference.
      * Applied once at construction time  (the dialog must be closed and reopened for a new scale to
      * take effect)
      */
-    private void rescaleFonts(Component comp) {
+    public static void rescaleFonts(Component comp, double uiScale) {
         Font font = comp.getFont();
         if (font != null) comp.setFont(font.deriveFont((float) (font.getSize2D() * uiScale)));
         if (comp instanceof JCheckBox && ((JCheckBox) comp).getIcon() == null) {
@@ -150,7 +150,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
             if (checkIcon != null) ((JCheckBox) comp).setIcon(scaledIcon(checkIcon, uiScale));
         }
         if (comp instanceof Container) {
-            for (Component child : ((Container) comp).getComponents()) rescaleFonts(child);
+            for (Component child : ((Container) comp).getComponents()) rescaleFonts(child, uiScale);
         }
     }
 
@@ -418,13 +418,13 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     }
 
     JPanel buildParametersPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
+        JPanel panel = new JPanel();
         panel.setBorder(BorderFactory.createEtchedBorder());
         return panel;
     }
 
     /**
-     * create a row with a label and a textfield (e.g. for parameters in {@link Sam3ImageDialogOld ()}
+     * create a row with a label and a textfield (e.g. for parameters in {@link Sam3ImageDialog}
      * and {@link Sam3VideoDialog} parameters panel)
      */
     void addLabeledField(JPanel panel, GridBagConstraints c, int row, String label,
@@ -450,7 +450,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         addShapeRoisCB = new JCheckBox("Add shape ROIs to ROI Manager", true);
         instanceMaskCB = new JCheckBox("Create instance masks (unique value per instance)", false);
         semanticMaskCB = new JCheckBox("Create semantic masks (unique value per class)", false);
-        instanceMaskPerClassCB = new JCheckBox("Create instance mask per class (one slice per class; a per-frame hyperstack for stacks)", false);
+        instanceMaskPerClassCB = new JCheckBox("Create instance mask per class (one channel per class; a per-frame hyperstack for stacks)", false);
 
         // the "Output group" column is only meaningful for ROI outputs - repaint it when that changes
         addBoxRoisCB.addItemListener(e -> table.repaint());
@@ -597,15 +597,25 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         dispose();
     }
 
-    void onOk() {
+    /**
+     * Runs the validation/collection shared by both dialogs, populating {@link #modelPath},
+     * {@link #concepts}, {@link #finalModelParam} and {@link #outputOptions} on success.
+     * Does NOT close the dialog or set {@link #approved} - that decision belongs to each
+     * subclass's {@link #onOk()}, since the caller must know whether validation actually
+     * succeeded before disposing the window.
+     *
+     * @return {@code true} if everything is valid and the fields above were populated,
+     *         {@code false} if the dialog should stay open so the user can fix something
+     */
+    protected boolean validateAndCollect() {
         if (imp.getWindow() == null) {
             onImageClosed();
-            return;
+            return false;
         }
-        if (table.isEditing() && !table.getCellEditor().stopCellEditing()) return;
+        if (table.isEditing() && !table.getCellEditor().stopCellEditing()) return false;
 
         String path = resolveAndValidateModelPath();
-        if (path == null) return; // does not close window, because "dispose()" is not called. Usr can try again
+        if (path == null) return false; // does not close window, because "dispose()" is not called. Usr can try again
 
         // check concept validity
         List<Sam3Concept> currentConcepts = tableModel.getConcepts();
@@ -613,7 +623,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
         if (!errors.isEmpty()) {
             JOptionPane.showMessageDialog(this, String.join("\n", errors), "Invalid concept(s)", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
 
         // if no output is selected, print warning
@@ -628,7 +638,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
                     null,
                     new Object[]{"Continue", "Return"},
                     "Return");
-            if (choice != 0) return; // 0 = the user clicked on "Continue"
+            if (choice != 0) return false; // 0 = the user clicked on "Continue"
         }
 
         modelPath = path;
@@ -637,8 +647,12 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
         logWarnings(currentConcepts);
 
-
+        return true;
     }
+
+    /** Called when the user presses OK: must call {@link #validateAndCollect()} and only set
+     * {@link #approved} + {@link #dispose()} if it returned {@code true}. */
+    abstract void onOk();
 
     private String resolveAndValidateModelPath() {
         String path = modelPathField.getText().trim();

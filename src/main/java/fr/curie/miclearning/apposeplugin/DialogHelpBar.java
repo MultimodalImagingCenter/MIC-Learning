@@ -9,7 +9,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -27,7 +29,8 @@ import java.util.function.Supplier;
  *   <li>Warning (persistent) - {@link #warn}/{@link #clearWarning}: a message tied to an {@code owner}
  *   key that stays visible until that owner explicitly clears (i.e. until the underlying problem is resolved).</li>
  * </ul>
- * Rendering priority is always help &gt; info &gt;  warning &gt; blank
+ * Rendering priority is help > info > warning > blank (except at the moment the info is printed,
+ * info > help, otherwise the info would be hidden by help)
  */
 public class DialogHelpBar {
 
@@ -70,7 +73,7 @@ public class DialogHelpBar {
 
     public HelpBarMode getHelpBarMode() {return helpBarMode;}
 
-    /** Reads the last help-bar level chosen via {@link #openSettingsDialog()} */
+    /** Reads the last help-bar level  */
     public static HelpBarMode loadSavedMode() {
         String saved = Prefs.get(PREF_MODE_KEY, DEFAULT_MODE.name());
         try {
@@ -190,38 +193,54 @@ public class DialogHelpBar {
         });
     }
 
+    private final Map<Component, List<Function<Point, Hint>>> positionalHintProviders = new IdentityHashMap<>();
+
     /**
      * Like {@link #attachHelp(Component, Supplier)}, but for a component with several hover zones
-     * (e.g. a table header): the hint is recomputed from the mouse position on every move within {@code c}
+     * (e.g. a table header): the hint is recomputed from the mouse position on every move within {@code c}.
+     * <p>
+     * Can be called several times on the same {@code c} (e.g. once from a base class, once from a
+     * subclass adding more zones): each call only registers an extra hint provider, tried in
+     * registration order.
      */
     public void attachPositionalHelp(Component c, Function<Point, Hint> hintByPosition) {
-        MouseAdapter listener = new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) { update(e.getPoint()); }
+        List<Function<Point, Hint>> providers = positionalHintProviders.get(c);
+        if (providers == null) {
+            providers = new ArrayList<>();
+            positionalHintProviders.put(c, providers);
+            List<Function<Point, Hint>> finalProviders = providers; //final because
 
-            @Override
-            public void mouseMoved(MouseEvent e) { update(e.getPoint()); }
+            MouseAdapter listener = new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) { update(e.getPoint()); }
 
-            @Override
-            public void mouseExited(MouseEvent e) {
-                hovering = false;
-                renderCurrent();
-            }
+                @Override
+                public void mouseMoved(MouseEvent e) { update(e.getPoint()); }
 
-            private void update(Point p) {
-                if (helpBarMode != HelpBarMode.HELP) return;
-                Hint hint = hintByPosition.apply(p);
-                if (hint == null) {
+                @Override
+                public void mouseExited(MouseEvent e) {
                     hovering = false;
                     renderCurrent();
-                    return;
                 }
-                hovering = true;
-                show(hint.text, hint.color);
-            }
-        };
-        c.addMouseListener(listener);
-        c.addMouseMotionListener(listener);
+
+                private void update(Point p) {
+                    if (helpBarMode != HelpBarMode.HELP) return;
+                    for (Function<Point, Hint> provider : finalProviders) {
+                        Hint hint = provider.apply(p);
+                        if (hint != null) {
+                            hovering = true;
+                            show(hint.text, hint.color);
+                            return;
+                        }
+                    }
+                    hovering = false;
+                    renderCurrent();
+                }
+            };
+            c.addMouseListener(listener);
+            c.addMouseMotionListener(listener);
+        }
+        providers.add(hintByPosition);
     }
 
     // ==== INFO (temporary) ====
@@ -270,10 +289,7 @@ public class DialogHelpBar {
 
     /** Shows a warning (DEFAULT_WARNING_COLOR) tied to {@code owner} that stays visible (beneath info/help) until {@link #clearWarning}. */
     public void warn(String owner, String text) {
-        warningOwner = owner;
-        warningText = text;
-        warningColor = DEFAULT_WARNING_COLOR;
-        renderCurrent();
+        warn(owner, text, DEFAULT_WARNING_COLOR);
     }
     /** Shows a warning tied to {@code owner} that stays visible (beneath info/help) until {@link #clearWarning}. */
     public void warn(String owner, String text, Color color) {
@@ -320,33 +336,6 @@ public class DialogHelpBar {
         setHelpBarMode(newMode);
         Prefs.set(PREF_MODE_KEY, newMode.name());
         Prefs.savePreferences();
-    }
-
-    /**
-     * Opens a small dialog letting the user pick how much guidance this  help bars should show
-     */
-    public void openSettingsDialog() {
-        int currentIndex = 1; 
-        for (int i = 0; i < SETTINGS_MODE_VALUES.length; i++) {
-            if (SETTINGS_MODE_VALUES[i] == helpBarMode) currentIndex = i;
-        }
-
-        GenericDialog gd = new GenericDialog("Help bar settings");
-        gd.addMessage("Choose how much guidance the dialog's help bar should show:");
-        gd.addChoice("Help level:", SETTINGS_MODE_LABELS, SETTINGS_MODE_LABELS[currentIndex]);
-        gd.showDialog();
-        if (gd.wasCanceled()) return;
-
-        String chosenLabel = gd.getNextChoice();
-        for (int i = 0; i < SETTINGS_MODE_LABELS.length; i++) {
-            if (SETTINGS_MODE_LABELS[i].equals(chosenLabel)) {
-                HelpBarMode newMode = SETTINGS_MODE_VALUES[i];
-                setHelpBarMode(newMode);
-                Prefs.set(PREF_MODE_KEY, newMode.name());
-                Prefs.savePreferences();
-                break;
-            }
-        }
     }
 
     // ==== rendering ====

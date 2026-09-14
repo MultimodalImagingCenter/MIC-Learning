@@ -52,7 +52,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
 
     @Override
     public void run(String s) {
-        // --- 1. get image ---
+        // --- 1. Get image ---
         imp = IJ.getImage(); // select active image
         if (imp == null) {
             IJ.error("no image opened");
@@ -61,9 +61,10 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         if (!imp.isRGB()) {
             ImageConverter impConverter = new ImageConverter(imp);
             impConverter.convertToRGB();
-            IJ.log("image " + imp.getTitle() + " converted to RGB");
+            IJ.log("\n Warning: image " + imp.getTitle() + " converted to RGB");
         }
 
+        // define major axis
         final int[] dims = imp.getDimensions();
         int numberOfFrame = dims[4];
         int numberOfSlices = dims[3];
@@ -71,16 +72,18 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             IJ.error("Hyperstacks are not supported");
             return;
         }
-        axis = numberOfSlices >= numberOfFrame ? 3 : 4; // just using the axis with multiple images as time axis
+        axis = numberOfSlices >= numberOfFrame ? 3 : 4; // just using the axis with multiple images as major axis
         nFrames = dims[axis];
 
         // make any existing ROIs visible
         RoiManager roiManager = getRoiManager();
         if (roiManager.getCount() > 0) roiManager.runCommand("Show All");
 
-        // --- 2. retrieve parameters (model path, concepts, stack mode, output options) ---
-        boolean ok = Macro.getOptions() != null ? parseMacro() : askUser();
-        if (!ok || outputOptions == null || modelPath == null || detectionParams == null
+        // --- 2. Retrieve parameters (model path, concepts, stack mode, output options) ---
+        // via macro or user interface
+        if (Macro.getOptions() != null) parseMacro();
+        else askUser();
+        if (outputOptions == null || modelPath == null || detectionParams == null
                 || stackMode == null || concepts == null || concepts.isEmpty()) {
             return;
         }
@@ -92,12 +95,21 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             imp = new ImagePlus(imp.getTitle(), imp.getProcessor());
         }
 
-        // --- 3. build concept names/texts/classIdMap + per-frame prompts ---
-        // the concept name is the unique key (classIdMap) and the class name carried on every detection
+        // --- 3. Prepare prompts, define config ---
+        // 3.1 prepare prompts
+        // for each concept :
+        // - a name = unique key in classIdMap
+        // - an output group / group id (value in the classIdMap)
+        // - a combination of prompts, defined once :
+        //   - a text prompt ("visual" placeholder if null)
+        //   - visual prompt(s) (positive and/or negative), defined on each frame (optional)
+
         List<String> conceptLabels = new ArrayList<>();
         List<String> conceptTexts = new ArrayList<>();
         List<Boolean> conceptTextUsed = new ArrayList<>();
         Map<String, Integer> classIdMap = new HashMap<>();
+
+        // register each concept
         for (Sam3Concept concept : concepts) {
             conceptLabels.add(concept.getName());
             conceptTexts.add(concept.isTextPromptUsed() ? concept.getTextPrompt() : "visual");
@@ -105,23 +117,28 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             classIdMap.put(concept.getName(), concept.getOutputGroup());
         }
 
-        Roi[] allRois = roiManager.getRoisAsArray();
-        List<List<Map<String, Object>>> framePrompts = new ArrayList<>();
+        // extract ROIs
+        Roi[] allRois = roiManager.getRoisAsArray(); // all ROIs in the RoiManager when the user presses "ok"
+
+        // one entry per frame, one inner entry per concept :
+        // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
+        List<List<Map<String, List<double[]>>>> framePrompts = new ArrayList<>();
         if (stackMode == DetectionMode.SINGLE_IMAGE) {
-            framePrompts.add(buildFrameConceptPrompts(allRois, current_slice));
+            framePrompts.add(buildFrameConceptPrompts(roiPromptExtractor.getRoisAtFrame(allRois, current_slice, nFrames)));
         } else {
+            Map<Integer, List<Roi>> roisByFrame = roiPromptExtractor.groupRoisByFrame(allRois, axis); // roi grouped by frame
+            // for each frame,
+            // for each concept, extract positive and negative ROI
             for (int frame = 1; frame <= nFrames; frame++) {
-                framePrompts.add(buildFrameConceptPrompts(allRois, frame));
+                framePrompts.add(buildFrameConceptPrompts(roisByFrame.getOrDefault(frame, Collections.emptyList())));
             }
         }
 
-        recordInMacro();
-        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation - on concepts ---");
-        printParameters();
-
-        Sam3ImagePcsRunConfig config;
+        // 3.2 prepare config
+        // prepare model and run configuration
+        Sam3ImageRunConfig config;
         try {
-            config = new Sam3ImagePcsRunConfig.Builder()
+            config = new Sam3ImageRunConfig.Builder()
                     .modelPath(modelPath)
                     .detectionParams(detectionParams)
                     .outputOptions(outputOptions)
@@ -137,20 +154,22 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             return;
         }
 
+        // record macro, print parameters in log
+        recordInMacro();
+        IJ.log("\n   --- Starting SAM Promptable Concept Segmentation ---");
+        printParameters();
+
+        // --- 4. Run ---
         runSam3(config, startTime);
     }
 
-    /** Resolves each concept's positive/negative visual prompt from the RoiManager, at {@code frame}. */
-    private List<Map<String, Object>> buildFrameConceptPrompts(Roi[] allRois, int frame) {
-        List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(allRois, axis, frame);
-        List<Map<String, Object>> result = new ArrayList<>();
+    /** Resolves each concept's positive/negative visual prompt from a list of ROI (from a specific frame). */
+    private List<Map<String, List<double[]>>> buildFrameConceptPrompts(List<Roi> roisAtFrame) {
+        List<Map<String, List<double[]>>> result = new ArrayList<>();
         for (Sam3Concept concept : concepts) {
-            List<Integer> positiveGroups = concept.isPositiveVisualUsed()
-                    ? Collections.singletonList(concept.getPositiveVisualGroup()) : Collections.emptyList();
-            Integer negativeGroup = concept.getNegativeVisualGroup();
-            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, positiveGroups, negativeGroup);
+            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
 
-            Map<String, Object> entry = new HashMap<>();
+            Map<String, List<double[]>> entry = new HashMap<>();
             entry.put("positive_rois", promptRois.getPositive());
             entry.put("negative_rois", promptRois.getNegative());
             result.add(entry);
@@ -158,16 +177,18 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         return result;
     }
 
-    private void runSam3(Sam3ImagePcsRunConfig config, long startTime) {
+    private void runSam3(Sam3ImageRunConfig config, long startTime) {
+        // create queue and thread to process results
+        IJ.showStatus("sam3: environment initialization");
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
-            Thread t = new Thread(r, "sam3-concepts-consumer");
+            Thread t = new Thread(r, "sam3-image-concepts-consumer");
             t.setDaemon(true);
             return t;
         };
         ExecutorService executor = Executors.newSingleThreadExecutor(consumerThreadFactory);
 
-        try (Sam3ImagePcsPythonRunner runner = new Sam3ImagePcsPythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
+        try (Sam3ImagePythonRunner runner = new Sam3ImagePythonRunner(SCRIPT_PATH, ENV_FILE_PATH)) {
             runner.initialize();
 
             MultiImagePcsResultsConsumer consumer = new MultiImagePcsResultsConsumer(
@@ -175,11 +196,16 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             Future<Void> consumerResult = executor.submit(consumer);
 
             IJ.log("Executing python script...");
+            IJ.showStatus("sam3: executing python script");
+            IJ.showProgress(0,100);
+
             runner.runBlocking(config, imp, resultsQueue);
 
+            // Wait for the consumer to finish draining the queue before generating outputs
             consumerResult.get();
 
             IJ.log(" --- Generating output... ");
+            IJ.showStatus("sam3: generating outputs");
             generateOutputs(config);
 
         } catch (IOException | BuildException e) {
@@ -211,13 +237,13 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         }
     }
 
-    private void generateOutputs(Sam3ImagePcsRunConfig config) {
+    private void generateOutputs(Sam3ImageRunConfig config) {
         DetectionUtils.OutputOptions options = config.getOutputOptions();
         DetectionMode mode = config.getStackMode();
 
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            if (current_slice != 0) detectionsByFrame.put(current_slice - 1, detectionsByFrame.remove(0));
+            if (current_slice != 0) detectionsByFrame.put(current_slice - 1, detectionsByFrame.remove(0)); // if one slice only, move the detections to the current frame
             Detection3dUtils.addTrackedRoisToManager(roiManager, detectionsByFrame,
                     options.addToRoiManagerBB, options.addToRoiManagerShapes, Detection3dUtils.GroupingMethod.BY_CLASS);
             roiManager.setVisible(true);
@@ -244,20 +270,19 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         }
     }
 
-    private boolean askUser() {
-        Sam3ImageDialogNew dialog = new Sam3ImageDialogNew(imp, nFrames, axis);
-        if (!dialog.showDialogAndWait()) return false; // blocks here, wait for dialog.showDialogAndWait() to give answer
+    private void askUser() {
+        Sam3ImageDialog dialog = new Sam3ImageDialog(imp, nFrames, axis);
+        if (!dialog.showDialogAndWait()) return; // blocks here, wait for dialog.showDialogAndWait() to give answer
 
-        // only reached after dialog closes (if true, meaning if ok clicked)
+        // only reached after dialog closes (and if true, e.i. if ok clicked)
         modelPath = dialog.getModelPath();
         detectionParams = dialog.getFinalModelParam();
         outputOptions = dialog.getOutputOptions();
         stackMode = dialog.getStackMode();
         concepts = dialog.getConcepts();
-        return true;
     }
 
-    private boolean parseMacro() {
+    private void parseMacro() {
         IJ.log("\nSAM3 sampcs on macro");
         String options = Macro.getOptions();
 
@@ -265,14 +290,14 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         if (modelPath == null || modelPath.trim().isEmpty()) {
             IJ.log("No model path. Closing plug-in.\n");
             IJ.error("No model path specified.");
-            return false;
+            return;
         }
 
         // one entry per concept, index-aligned; "output_groups" defines the concept count
         String outputGroupsStr = Macro.getValue(options, "output_groups", "");
         if (outputGroupsStr.trim().isEmpty()) {
             IJ.error("No concept defined.", "Please provide at least one output group id (\"output_groups\").");
-            return false;
+            return;
         }
         String[] outputGroupsArr = outputGroupsStr.split(",");
         String[] namesArr = splitAligned(Macro.getValue(options, "names", ""), outputGroupsArr.length);
@@ -306,7 +331,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         }
         if (concepts.isEmpty()) {
             IJ.error("No valid concept defined.");
-            return false;
+            return;
         }
 
         detectionParams = new Sam3ModelParameters();
@@ -332,7 +357,6 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"))
                 || options.contains("create_instance_mask_per_class ");
 
-        return true;
     }
 
     /** Parses a trimmed integer, or {@code null} when the text is empty. */
@@ -412,7 +436,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         IJ.log("number of concept(s): " + concepts.size());
         for (Sam3Concept concept : concepts) {
             StringBuilder line = new StringBuilder("  - ").append(concept.getName())
-                    .append(" -> prompt(s):");
+                    .append(" -> prompt:");
             if (concept.isTextPromptUsed()) line.append("  text=\"").append(concept.getTextPrompt()).append("\"");
             if (concept.isPositiveVisualUsed()) line.append("  positive visual group=").append(concept.getPositiveVisualGroup());
             if (concept.isNegativeVisualUsed()) line.append("  negative visual group=").append(concept.getNegativeVisualGroup());

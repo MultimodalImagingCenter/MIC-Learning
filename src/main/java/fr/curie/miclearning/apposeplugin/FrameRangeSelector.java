@@ -1,30 +1,31 @@
 package fr.curie.miclearning.apposeplugin;
 
 import ij.ImagePlus;
-import ij.gui.GenericDialog;
 
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.util.ArrayList;
-import java.util.List;
-import java.awt.Button;
-import java.awt.Checkbox;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.Label;
-import java.awt.Panel;
-import java.awt.TextField;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_INSTRUCTION_COLOR;
 import static fr.curie.miclearning.apposeplugin.DialogHelpBar.DEFAULT_NOTIFICATION_COLOR;
 
 /**
- * Embeds a "First / Prompt / Last frame" widget in a {@link GenericDialog}: one numeric
- * {@link TextField} plus one "Use current frame" button per bound, kept in sync with the
+ * Embeds a "First / Prompt / Last frame" widget in a Swing dialog: one numeric
+ * {@link JTextField} plus one "Use current frame" button per bound, kept in sync with the
  * image's own position
  */
 public class FrameRangeSelector {
@@ -38,13 +39,13 @@ public class FrameRangeSelector {
     private final int nFrames;
     private final DialogHelpBar helpBar;
 
-    private final Panel panel;
-    private final Label firstLabel;
-    private final TextField firstField;
-    private final Button firstBtn;
-    private final TextField promptField;
-    private final TextField lastField;
-    private final Checkbox bidirectionalCB;
+    private final JPanel panel;
+    private final JLabel firstLabel;
+    private final JTextField firstField;
+    private final JButton firstBtn;
+    private final JTextField promptField;
+    private final JTextField lastField;
+    private final JCheckBox bidirectionalCB;
 
     private final List<Runnable> promptFrameListeners = new ArrayList<>();
 
@@ -60,22 +61,22 @@ public class FrameRangeSelector {
         this.nFrames = nFrames;
         this.helpBar = helpBar;
 
-        panel = new Panel(new GridBagLayout());
+        panel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(2, 4, 2, 4);
 
-        firstField = new TextField("1", 5);
-        promptField = new TextField("1", 5);
-        lastField = new TextField(String.valueOf(nFrames), 5);
-        bidirectionalCB = new Checkbox("Bidirectional", false);
+        firstField = new JTextField("1", 5);
+        promptField = new JTextField("1", 5);
+        lastField = new JTextField(String.valueOf(nFrames), 5);
+        bidirectionalCB = new JCheckBox("Bidirectional", false);
 
-        firstBtn = new Button("Use current frame");
-        Button promptBtn = new Button("Use current frame");
-        Button lastBtn = new Button("Use current frame");
+        firstBtn = new JButton("Use current frame");
+        JButton promptBtn = new JButton("Use current frame");
+        JButton lastBtn = new JButton("Use current frame");
 
         firstLabel = addColumn(c, 0, "First frame:", firstField, firstBtn);
-        Label promptLabel = addColumn(c, 1, "Prompt frame:", promptField, promptBtn);
-        Label lastLabel = addColumn(c, 2, "Last frame:", lastField, lastBtn);
+        JLabel promptLabel = addColumn(c, 1, "Prompt frame:", promptField, promptBtn);
+        JLabel lastLabel = addColumn(c, 2, "Last frame:", lastField, lastBtn);
 
         c.gridx = 0;
         c.gridy = 3;
@@ -85,7 +86,7 @@ public class FrameRangeSelector {
 
 
         firstBtn.addActionListener(e -> {
-            if (!bidirectionalCB.getState()) {
+            if (!bidirectionalCB.isSelected()) {
                 if (helpBar != null) {
                     helpBar.showInfo(INFO_OWNER, "Check \"Bidirectional\" to edit the first frame.", DEFAULT_INSTRUCTION_COLOR);
                 }
@@ -106,7 +107,7 @@ public class FrameRangeSelector {
         addLiveNavigateListener(promptField);
         addLiveNavigateListener(lastField);
 
-        bidirectionalCB.addItemListener(e -> setFirstFrameEditable(bidirectionalCB.getState()));
+        bidirectionalCB.addItemListener(e -> setFirstFrameEditable(bidirectionalCB.isSelected()));
         setFirstFrameEditable(false); // not bidirectional by default
 
 
@@ -128,16 +129,16 @@ public class FrameRangeSelector {
     }
 
     /** The panel to add to the dialog  */
-    public Panel getPanel() {
+    public JPanel getPanel() {
         return panel;
     }
 
-    private Label addColumn(GridBagConstraints c, int col, String labelText, TextField field, Button button) {
+    private JLabel addColumn(GridBagConstraints c, int col, String labelText, JTextField field, JButton button) {
         c.gridx = col;
         c.gridwidth = 1;
         c.anchor = GridBagConstraints.CENTER;
         c.gridy = 0;
-        Label label = new Label(labelText);
+        JLabel label = new JLabel(labelText);
         panel.add(label, c);
         c.gridy = 1;
         panel.add(field, c);
@@ -158,7 +159,7 @@ public class FrameRangeSelector {
     }
 
 
-    private void addCommitListener(TextField field, Runnable onCommit) {
+    private void addCommitListener(JTextField field, Runnable onCommit) {
         field.addActionListener(e -> onCommit.run()); // Enter key
         field.addFocusListener(new FocusAdapter() {
             @Override
@@ -170,13 +171,20 @@ public class FrameRangeSelector {
 
     /**
      * Jumps the image to whatever frame {@code field} currently parses to, on every keystroke
+     * (and on a plain click into the field).
      */
-    private void addLiveNavigateListener(TextField field) {
-        field.addTextListener(e -> {
-            try {
-                navigateImageTo(clamp(Integer.parseInt(field.getText().trim())));
-            } catch (NumberFormatException ignored) {
-                // incomplete/invalid input while typing - leave the image where it is
+    private void addLiveNavigateListener(JTextField field) {
+        field.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { navigate(); }
+            @Override public void removeUpdate(DocumentEvent e) { navigate(); }
+            @Override public void changedUpdate(DocumentEvent e) { navigate(); }
+
+            private void navigate() {
+                try {
+                    navigateImageTo(clamp(Integer.parseInt(field.getText().trim())));
+                } catch (NumberFormatException ignored) {
+                    // incomplete/invalid input while typing - leave the image where it is
+                }
             }
         });
 
@@ -192,14 +200,14 @@ public class FrameRangeSelector {
         });
     }
 
-    private void pullCurrentFrameInto(TextField field, Runnable onCommit) {
+    private void pullCurrentFrameInto(JTextField field, Runnable onCommit) {
         if (imp != null) {
             field.setText(String.valueOf(imp.getCurrentSlice()));
         }
         onCommit.run();
     }
 
-    private int readInt(TextField field, int fallback) {
+    private int readInt(JTextField field, int fallback) {
         try {
             return Integer.parseInt(field.getText().trim());
         } catch (NumberFormatException ex) {
@@ -230,7 +238,7 @@ public class FrameRangeSelector {
             int prompt = readInt(promptField, 1);
             if (value > prompt) {
                 promptField.setText(String.valueOf(value));
-                notice("Prompt frame moved to " + value + " to stay \u2265 first frame.");
+                notice("Prompt frame moved to " + value + " to stay ≥ first frame.");
                 fireLastBound(value);
                 notifyPromptFrameChanged();
             }
@@ -248,11 +256,11 @@ public class FrameRangeSelector {
             int value = clamp(readInt(promptField, 1));
             promptField.setText(String.valueOf(value));
 
-            if (bidirectionalCB.getState()) {
+            if (bidirectionalCB.isSelected()) {
                 int first = readInt(firstField, 1);
                 if (first > value) {
                     firstField.setText(String.valueOf(value));
-                    notice("First frame moved to " + value + " to stay \u2264 prompt frame.");
+                    notice("First frame moved to " + value + " to stay ≤ prompt frame.");
                 }
             } else {
                 firstField.setText(String.valueOf(value));
@@ -278,8 +286,8 @@ public class FrameRangeSelector {
             int prompt = readInt(promptField, 1);
             if (prompt > value) {
                 promptField.setText(String.valueOf(value));
-                notice("Prompt frame moved to " + value + " to stay \u2264 last frame.");
-                if (!bidirectionalCB.getState()) firstField.setText(String.valueOf(value));
+                notice("Prompt frame moved to " + value + " to stay ≤ last frame.");
+                if (!bidirectionalCB.isSelected()) firstField.setText(String.valueOf(value));
                 notifyPromptFrameChanged();
             }
             navigateImageTo(value);
@@ -293,7 +301,7 @@ public class FrameRangeSelector {
         int last = readInt(lastField, nFrames);
         if (last < promptValue) {
             lastField.setText(String.valueOf(promptValue));
-            notice("Last frame moved to " + promptValue + " to stay \u2265 prompt frame.");
+            notice("Last frame moved to " + promptValue + " to stay ≥ prompt frame.");
         }
     }
 
@@ -316,7 +324,7 @@ public class FrameRangeSelector {
     }
 
     public void setBidirectional(boolean bidirectional) {
-        bidirectionalCB.setState(bidirectional);
+        bidirectionalCB.setSelected(bidirectional);
         firstField.setEnabled(bidirectional);
     }
 
@@ -327,7 +335,7 @@ public class FrameRangeSelector {
 
     // --- live, read-only accessors, all 1-indexed ---
     public int getFirstFrame() {
-        return bidirectionalCB.getState() ? readInt(firstField, 1) : readInt(promptField, 1);
+        return bidirectionalCB.isSelected() ? readInt(firstField, 1) : readInt(promptField, 1);
     }
 
     public int getPromptFrame() {
@@ -339,7 +347,7 @@ public class FrameRangeSelector {
     }
 
     public boolean isBidirectional() {
-        return bidirectionalCB.getState();
+        return bidirectionalCB.isSelected();
     }
 
 }

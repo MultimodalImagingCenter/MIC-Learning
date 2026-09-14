@@ -15,8 +15,9 @@ public class Sam3Concept {
 
     // name given by the user, by default id, should be unique
     private String name;
-    private String textPrompt = "";
 
+    //Prompts
+    private String textPrompt = "";
     // RoiManager group feeding the positive/negative visual prompt; null == that prompt is unused
     private Integer positiveVisualGroup = null;
     private Integer negativeVisualGroup = null;
@@ -27,6 +28,12 @@ public class Sam3Concept {
     public Sam3Concept(int id, int outputGroup) {
         this.id = id;
         this.outputGroup = outputGroup;
+        this.name = id + "";
+    }
+
+    public Sam3Concept(int id) {
+        this.id = id;
+        this.outputGroup = id>255 ? (id%255)+1 : id;
         this.name = id + "";
     }
 
@@ -53,6 +60,11 @@ public class Sam3Concept {
     /** True while the name still holds its default value (the numeric {@link #id}) (i.e. true if the user never renamed it) */
     public boolean isNameDefault() {
         return name.equals(String.valueOf(id));
+    }
+
+    /** True while the output value still holds its default value (the numeric {@link #id} ( or id %255 +1 if id>255)) (i.e. true if the user never changed it) */
+    public boolean isOutputGroupDefault() {
+        return outputGroup == (id>255 ? (id%255)+1 : id);
     }
 
     /** At least one positive prompt (text or positive visual) must be defined. */

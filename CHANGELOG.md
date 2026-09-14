@@ -1,23 +1,35 @@
 # Changelog
 ## [1.4.0] - current
 ### Added
-- **New plugin "SAM3 PCS on Image(s)"** (`Sam3ImagePcs_Plugin`): unifies single-image text-prompt and 
- visual-prompt promptable-concept-segmentation into one plugin. Run on a single image or a whole stack.
- Handle multiple concept/classe. Interactive ROI selection.
-  - Concept table: each row is one concept, defined by an optional text prompt and/or an optional
-    positive/negative visual prompt (a RoiManager group), resolved independently on every frame.
-  - Interactive ROI selection: the positive/negative visual-group choices are refreshed from the RoiManager
+- Classes to define and  **"concepts" for Sam3 promptable concept segmentation (PCS)** :
+  - `Sam3Concept` : a concept is defined by a name, an output group and prompts: 
+  one optional text prompt ("visual" by default), optional positive and/or negative visual prompts 
+  (one ROI group per visual prompt).
+  - GUI: `Sam3ConceptTableModel`, `Sam3GroupIdCellEditor`, `Sam3GroupOption` : table where each row is one concept.
+- `Sam3ConceptDialogBase`: base abstract class for plugin dialogs (based on `JDialog` instead of `GenericDialog`):
+  - Non-modal Swing dialog.
+  - Lets the user define an arbitrary number of concepts, model path, detection parameters and output options.
+  - Interactive ROI selection : the positive/negative visual-group choices are refreshed from the RoiManager
     every 0.5 s while the dialog is open.
-  - Macro-recordable
-  - New supporting classes: `Sam3Concept`, `Sam3ConceptTableModel`, `Sam3GroupIdCellEditor`,
-    `Sam3GroupOption`, `Sam3ImageDialog`, `Sam3ImagePcsRunConfig`, `Sam3ImagePcsPythonRunner`,
+- **New plugin "SAM3 PCS on Image(s)"** (`Sam3ImagePcs_Plugin`): unifies single-image text-prompt and 
+ visual-prompt promptable-concept-segmentation into one plugin. 
+  - Run on a single image or a whole stack.
+  - Multi class/concept: each concept's prompt is encoded and resolved independently on every frame (require visual 
+  prompts on every frame).
+  - Macro-recordable.
+  - New supporting classes:`Sam3GroupOptionImage`, `Sam3ImageDialog`, `Sam3ImageRunConfig`, `Sam3ImagePythonRunner`,
     and the `sam3-pcs-singleimage-m.py` script.
+- `Sam3AdvancedParametersDialog`: modal Swing dialog to modify the rarely-tuned SAM3 detection parameters (image and video).
 - Output generation for detection: `DetectionUtils.createInstanceMaskPerClassStack`: generate a 4D hyperstack 
   for image stacks (one time-point per processed frame, one channel per concept).
 
 ### Changed
-- Output generation: "Create instance mask per class" is now available for stacks 
+- **Plugin "SAM3 PCS on Video"** (`Sam3VideoPcs_Plugin`): now accept multiple concept as prompts:
+  - Multi class/concept: each concept's prompt is encoded only on the prompt frame (same prompt frame for all concepts).
+  - New supporting class : `Sam3VideoDialog` (extends `Sam3ConceptDialogBase`).
+- Output generation: "Create instance mask per class" is now available for stacks.
 - `DialogHelpBar` now attaches to any AWT `Window` (Swing `JDialog` included), not only `GenericDialog`.
+- Advanced parameters dialogs (for image and video) are now a separate class (instead of method from `Sam3Dialogs`).
 - Plugins menu: the "SAM3 PCS with Text Prompts" and "SAM3 PCS with Visual Prompts" entries are
   replaced by a single "SAM3 PCS on Image(s)".
 - `RoiPromptExtractor.groupRoisByFrame`: ROIs with no Z/T position (position 0) are treated as
@@ -31,6 +43,7 @@
  `Sam3VisualPromptSingleImgRunConfig`, `SingleImagePcsResultParser`) and associated python script 
  (`sam3-detection-image-geomprompt-m.py`): replaced by unified single image plugin.
 - `sam3-detection-image.toml` (unused Pixi environment file).
+- `Sam3CrossImagePcs_Plugin.java`, associated classes and associated script (unsatisfying results).
 
 ## [1.3.0] - 2026-08-24
 ### Added
