@@ -9,12 +9,15 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * Reusable contextual-help bar for a {@link GenericDialog}: a single {@link Label} whose
- * text/color changes depending on which control the mouse is hovering.
+ * Reusable contextual-help bar for a dialog window ({@link GenericDialog}, {@link javax.swing.JDialog}, ...):
+ * a single {@link Label} whose text/color changes depending on which control the mouse is hovering.
  * <p>
  * Three kinds of messages:
  * <ul>
@@ -26,7 +29,8 @@ import java.util.function.Supplier;
  *   <li>Warning (persistent) - {@link #warn}/{@link #clearWarning}: a message tied to an {@code owner}
  *   key that stays visible until that owner explicitly clears (i.e. until the underlying problem is resolved).</li>
  * </ul>
- * Rendering priority is always help &gt; info &gt;  warning &gt; blank
+ * Rendering priority is help > info > warning > blank (except at the moment the info is printed,
+ * info > help, otherwise the info would be hidden by help)
  */
 public class DialogHelpBar {
 
@@ -55,9 +59,9 @@ public class DialogHelpBar {
     private static final String PREF_MODE_KEY = "miclearning.helpbarmode";
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
-    private static final int MAX_LINES = 2;
+    private static final int VISIBLE_LINES = 2;
     private static final int DEFAULT_BASE_FONT_SIZE = 12; // fallback
-    private static final float HELP_BAR_FONT_SCALE = 0.8f; // relative to the dialog's own  font
+    private static final float HELP_BAR_FONT_SCALE = 0.9f; // relative to the dialog's own  font
 
     private HelpBarMode helpBarMode;
 
@@ -67,7 +71,9 @@ public class DialogHelpBar {
         renderCurrent();
     }
 
-    /** Reads the last help-bar level chosen via {@link #openSettingsDialog()} */
+    public HelpBarMode getHelpBarMode() {return helpBarMode;}
+
+    /** Reads the last help-bar level  */
     public static HelpBarMode loadSavedMode() {
         String saved = Prefs.get(PREF_MODE_KEY, DEFAULT_MODE.name());
         try {
@@ -77,11 +83,10 @@ public class DialogHelpBar {
         }
     }
 
-    private final GenericDialog gd;
     private final List<Label> lines = new ArrayList<>();
     private final Panel panel;
-    private final Font helpBarFont;
-    private final Font warningFont;
+    private Font helpBarFont;
+    private Font warningFont;
     private final int lineHeightPx;
 
     private boolean hovering = false;
@@ -95,28 +100,31 @@ public class DialogHelpBar {
     private String warningText;
     private Color warningColor;
 
-    public DialogHelpBar(GenericDialog gd) {
-        this(gd, HelpBarMode.HELP);
+    public DialogHelpBar(Window dialog) {
+        this(dialog, HelpBarMode.HELP);
     }
 
-    public DialogHelpBar(GenericDialog gd, HelpBarMode helpBarMode) {
-        this.gd = gd;
-        this.panel = new Panel(new GridLayout(MAX_LINES, 1));
+    /**
+     * @param dialog the dialog this help bar is attached to (any {@link GenericDialog},
+     *               {@link javax.swing.JDialog} ; used only to derive
+     *               the help bar's font size relative to the dialog's own font.
+     */
+    public DialogHelpBar(Window dialog, HelpBarMode helpBarMode) {
+        this.panel = new Panel(new GridLayout(VISIBLE_LINES, 1));
         this.helpBarMode = helpBarMode;
 
-        // define hel bar size and font size so deriving from GuiScale
-        Font dialogFont = gd.getFont();
+        // define help bar size and font size so deriving from GuiScale
+        Font dialogFont = dialog.getFont();
         float baseSize = dialogFont != null ? dialogFont.getSize2D() : DEFAULT_BASE_FONT_SIZE;
         int helpBarSize = Math.round(baseSize * HELP_BAR_FONT_SCALE);
         this.helpBarFont = new Font(Font.SANS_SERIF, Font.PLAIN, helpBarSize);
         this.warningFont = new Font(Font.SANS_SERIF, Font.BOLD, helpBarSize);
         this.lineHeightPx = Toolkit.getDefaultToolkit().getFontMetrics(helpBarFont).getHeight(); // deprecated, but easiest solution I found ?
-
         initLines();
     }
 
     private void initLines() {
-        for (int i = 0; i < MAX_LINES; i++) {
+        for (int i = 0; i < VISIBLE_LINES; i++) {
             Label line = new Label(" ");
             line.setForeground(DEFAULT_BLANK_COLOR);
             line.setFont(helpBarFont);
@@ -124,7 +132,6 @@ public class DialogHelpBar {
             lines.add(line);
         }
     }
-
 
     /** The panel to add to the dialog */
     public Panel getPanel() {
@@ -135,7 +142,21 @@ public class DialogHelpBar {
      * Caps the help bar's preferred width to {@code width}
      */
     public void lockWidth(int width) {
-        panel.setPreferredSize(new Dimension(width, MAX_LINES * lineHeightPx));
+        panel.setPreferredSize(new Dimension(width, VISIBLE_LINES * lineHeightPx));
+    }
+
+    /**
+     * Rescales this help bar's own fonts by {@code scale}. Needed because {@link #show} always resets
+     * the displayed text to {@link #helpBarFont}/{@link #warningFont} - a generic tree-walk that
+     * directly rescales the {@link Label}s' current font would just get overwritten by the next
+     * hover/info/warning render, so the owning dialog must call this instead to update the source of
+     * truth.
+     */
+    public void rescaleFont(double scale) {
+        if (scale == 1.0) return;
+        helpBarFont = helpBarFont.deriveFont((float) (helpBarFont.getSize2D() * scale));
+        warningFont = warningFont.deriveFont((float) (warningFont.getSize2D() * scale));
+        renderCurrent();
     }
 
     // ==== HELP (hover) ====
@@ -170,6 +191,56 @@ public class DialogHelpBar {
                 renderCurrent();
             }
         });
+    }
+
+    private final Map<Component, List<Function<Point, Hint>>> positionalHintProviders = new IdentityHashMap<>();
+
+    /**
+     * Like {@link #attachHelp(Component, Supplier)}, but for a component with several hover zones
+     * (e.g. a table header): the hint is recomputed from the mouse position on every move within {@code c}.
+     * <p>
+     * Can be called several times on the same {@code c} (e.g. once from a base class, once from a
+     * subclass adding more zones): each call only registers an extra hint provider, tried in
+     * registration order.
+     */
+    public void attachPositionalHelp(Component c, Function<Point, Hint> hintByPosition) {
+        List<Function<Point, Hint>> providers = positionalHintProviders.get(c);
+        if (providers == null) {
+            providers = new ArrayList<>();
+            positionalHintProviders.put(c, providers);
+            List<Function<Point, Hint>> finalProviders = providers; //final because
+
+            MouseAdapter listener = new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) { update(e.getPoint()); }
+
+                @Override
+                public void mouseMoved(MouseEvent e) { update(e.getPoint()); }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    hovering = false;
+                    renderCurrent();
+                }
+
+                private void update(Point p) {
+                    if (helpBarMode != HelpBarMode.HELP) return;
+                    for (Function<Point, Hint> provider : finalProviders) {
+                        Hint hint = provider.apply(p);
+                        if (hint != null) {
+                            hovering = true;
+                            show(hint.text, hint.color);
+                            return;
+                        }
+                    }
+                    hovering = false;
+                    renderCurrent();
+                }
+            };
+            c.addMouseListener(listener);
+            c.addMouseMotionListener(listener);
+        }
+        providers.add(hintByPosition);
     }
 
     // ==== INFO (temporary) ====
@@ -218,10 +289,7 @@ public class DialogHelpBar {
 
     /** Shows a warning (DEFAULT_WARNING_COLOR) tied to {@code owner} that stays visible (beneath info/help) until {@link #clearWarning}. */
     public void warn(String owner, String text) {
-        warningOwner = owner;
-        warningText = text;
-        warningColor = DEFAULT_WARNING_COLOR;
-        renderCurrent();
+        warn(owner, text, DEFAULT_WARNING_COLOR);
     }
     /** Shows a warning tied to {@code owner} that stays visible (beneath info/help) until {@link #clearWarning}. */
     public void warn(String owner, String text, Color color) {
@@ -249,31 +317,25 @@ public class DialogHelpBar {
             "Show warnings only"
     };
 
-    /**
-     * Opens a small dialog letting the user pick how much guidance this  help bars should show
-     */
-    public void openSettingsDialog() {
-        int currentIndex = 1; 
+    /** Labels for the help-level chooser, in display order - for a caller building its own combined settings dialog. */
+    public static String[] helpLevelLabels() {
+        return SETTINGS_MODE_LABELS.clone();
+    }
+
+    /** Index into {@link #helpLevelLabels()} matching {@code mode}. */
+    public static int helpLevelIndex(HelpBarMode mode) {
         for (int i = 0; i < SETTINGS_MODE_VALUES.length; i++) {
-            if (SETTINGS_MODE_VALUES[i] == helpBarMode) currentIndex = i;
+            if (SETTINGS_MODE_VALUES[i] == mode) return i;
         }
+        return 1;
+    }
 
-        GenericDialog gd = new GenericDialog("Help bar settings");
-        gd.addMessage("Choose how much guidance the dialog's help bar should show:");
-        gd.addChoice("Help level:", SETTINGS_MODE_LABELS, SETTINGS_MODE_LABELS[currentIndex]);
-        gd.showDialog();
-        if (gd.wasCanceled()) return;
-
-        String chosenLabel = gd.getNextChoice();
-        for (int i = 0; i < SETTINGS_MODE_LABELS.length; i++) {
-            if (SETTINGS_MODE_LABELS[i].equals(chosenLabel)) {
-                HelpBarMode newMode = SETTINGS_MODE_VALUES[i];
-                setHelpBarMode(newMode);
-                Prefs.set(PREF_MODE_KEY, newMode.name());
-                Prefs.savePreferences();
-                break;
-            }
-        }
+    /** Applies and persists the mode chosen at {@code labelIndex} (see {@link #helpLevelLabels()}). */
+    public void applyHelpLevelChoice(int labelIndex) {
+        HelpBarMode newMode = SETTINGS_MODE_VALUES[labelIndex];
+        setHelpBarMode(newMode);
+        Prefs.set(PREF_MODE_KEY, newMode.name());
+        Prefs.savePreferences();
     }
 
     // ==== rendering ====
@@ -306,9 +368,9 @@ public class DialogHelpBar {
      */
     private void setLines(String text, Color color, Font font) {
         String[] textLines = text.split("\n", -1);
-        for (int i = 0; i < MAX_LINES; i++) {
+        for (int i = 0; i < VISIBLE_LINES; i++) {
             String lineText;
-            if (i < MAX_LINES - 1) {
+            if (i < VISIBLE_LINES - 1) {
                 lineText = i < textLines.length ? textLines[i] : " ";
             } else {
                 lineText = i < textLines.length ? String.join(" ", Arrays.asList(textLines).subList(i, textLines.length)) : " ";

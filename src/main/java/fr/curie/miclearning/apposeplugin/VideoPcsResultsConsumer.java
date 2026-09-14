@@ -33,15 +33,15 @@ public class VideoPcsResultsConsumer implements Callable<Void> {
     private final BlockingQueue<Map<String, Object>> resultsQueue;
     private final MultiFrameDataManager mfdManager;
     private final Map<String, Integer> classIdMap;
-    private final String textPrompt;
+    private final List<String> conceptLabels;
     private final ImagePlus imp;
 
     public VideoPcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, MultiFrameDataManager mfdManager,
-                                   Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
+                                   Map<String, Integer> classIdMap, List<String> conceptLabels, ImagePlus imp) {
         this.resultsQueue = resultsQueue;
         this.mfdManager = mfdManager;
         this.classIdMap = classIdMap;
-        this.textPrompt = textPrompt;
+        this.conceptLabels = conceptLabels;
         this.imp = imp;
     }
 
@@ -74,6 +74,7 @@ public class VideoPcsResultsConsumer implements Callable<Void> {
         NDArray outputMasks = (NDArray) info.get("masks");
         NDArray outputScores = (NDArray) info.get("scores");
         NDArray outputIds = (NDArray) info.get("object_ids");
+        NDArray outputConceptIds = (NDArray) info.get("prompts_ids");
 
         if (outputBoxes == null || outputMasks == null || outputScores == null || outputIds == null) {
             throw new IllegalStateException(
@@ -84,12 +85,15 @@ public class VideoPcsResultsConsumer implements Callable<Void> {
         byte[][][] masks = DetectionArrayParsing.extractMasks(outputMasks, numResults);
         double[] scores = DetectionArrayParsing.extractScores(outputScores, numResults);
         int[] ids = DetectionArrayParsing.extractIntArray(outputIds, numResults);
+        int[] conceptIds;
+        if (outputConceptIds != null) conceptIds = DetectionArrayParsing.extractIntArray(outputConceptIds, numResults);
+        else conceptIds = new int[numResults]; // if no concept id received from python, we assume only one concept
 
         List<String> classNames = new ArrayList<>(numResults);
         List<Double> probabilities = new ArrayList<>(numResults);
         List<BoundingBox> boundingBoxes = new ArrayList<>(numResults);
         for (int i = 0; i < numResults; i++) {
-            classNames.add(textPrompt);
+            classNames.add(conceptLabels.get(conceptIds[i]));
             double[] coord = boxes[i];
             boundingBoxes.add(new MaskByte(coord[0], coord[1], coord[2], coord[3], masks[i], true));
             probabilities.add(scores[i]);

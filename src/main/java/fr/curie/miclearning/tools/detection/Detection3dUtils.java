@@ -9,6 +9,8 @@ import ij.process.ImageProcessor;
 import ij.process.ShortProcessor;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -42,19 +44,20 @@ public class Detection3dUtils {
             List<ProcessedDetection> detections  = entry.getValue();
             if (detections.isEmpty()) {continue;}
             for (ProcessedDetection det : detections) {
+                int frameIndex = frame+1;// 1-based
                 if (addBb  && det.getBoundingBoxRoi() != null) {
                     Roi roi = (Roi) det.getBoundingBoxRoi().clone();
-                    roi.setPosition(frame + 1);
+                    roi.setPosition(frameIndex);
                     roi.setGroup(getGroupId(det, groupingMethod));
-                    roi.setName(det.getRoiName());
+                    roi.setName(frameIndex + "_" + det.getRoiName());
                     manager.addRoi(roi);
                 }
 
                 if (addShape && det.getShapeRoi() != null) {
                     Roi roi = (Roi) det.getShapeRoi().clone();
-                    roi.setPosition(frame + 1); // 1-based
+                    roi.setPosition(frameIndex); // 1-based
                     roi.setGroup(getGroupId(det, groupingMethod));
-                    roi.setName(det.getRoiName());
+                    roi.setName(frameIndex + "_" + det.getRoiName());
                     manager.addRoi(roi);
                 }
             }
@@ -101,7 +104,6 @@ public class Detection3dUtils {
         return stackImp;
     }
 
-
     private static ImageProcessor createAndFillProcessorWithFixedIds(List<ProcessedDetection> detections, int width, int height) {
         int numInstances = detections.size();
         ImageProcessor processor;
@@ -113,9 +115,8 @@ public class Detection3dUtils {
 
         processor = new ShortProcessor(width, height);
 
-        // Fill the processor with instance IDs
-        // WARNING: id are unique inside a class, but not if multiple classes
-        // TODO : find a solution if multiple classes, while conserving id continuity
+        // Fill the processor with instance IDs (globally unique across every concept/class - see
+        // the shared object-id counter on the python side - so this is safe with multiple classes too)
         for (ProcessedDetection det : detections) {
             if (det.getShapeRoi() != null) {
                 processor.setColor(det.getId()+1); // IDs start from 0 and 0 would fill with black...
@@ -128,19 +129,75 @@ public class Detection3dUtils {
         return processor;
     }
 
+    /**
+     * Stack version of {@link #createInstanceMaskStackWithFixedIds}, split by class: builds a 4D
+     * hyperstack with one time-point per processed frame and, within each time-point, one channel
+     * per class (from {@code classIdMap}, ordered by group id then name). Each channel is that
+     * class's instances, with the same "ID continuity from one frame to the other" as the plain
+     * instance mask (a tracked object keeps the same pixel value in every frame/channel it appears
+     * in); a class with no detection on a frame gets an empty channel.
+     *
+     * @param imp        source image
+     * @param mfdManager registry of tracked detections, by frame and by object id
+     * @param classIdMap class name -> output group id; defines the channel slices and their order
+     * @return a hyperstack ImagePlus (channels = nClasses, slices = 1, frames = nFrames), or
+     *         {@code null} when there is nothing to build
+     */
+    public static ImagePlus createInstanceMaskPerClassStackWithFixedIds(
+            ImagePlus imp, MultiFrameDataManager mfdManager, Map<String, Integer> classIdMap) {
 
-    public static void generate3dOutputs(ImagePlus imp,  MultiFrameDataManager mfdManager, DetectionUtils.OutputOptions options) {
-        // Add to ROI Manager
-        if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
-            RoiManager roiManager = getRoiManager();
-            addTrackedRoisToManager(roiManager, mfdManager, options.addToRoiManagerBB, options.addToRoiManagerShapes);
-            roiManager.setVisible(true);
-            roiManager.runCommand("Show All"); // Make ROIs visible
+        if (classIdMap == null || classIdMap.isEmpty()) {
+            IJ.log("No class ID map provided. Cannot create instance-mask-per-class hyperstack.");
+            return null;
+        }
+        Map<Integer, List<ProcessedDetection>> detectionsByFrame = mfdManager.getDetectionsByFrame();
+        if (detectionsByFrame.isEmpty()) {
+            IJ.log("No detections available. Cannot create instance-mask-per-class hyperstack.");
+            return null;
         }
 
-        if (options.createInstanceMask){
-            ImagePlus stackMask = createInstanceMaskStackWithFixedIds(imp, mfdManager);
-            if (stackMask != null) stackMask.show();
+        int width = imp.getWidth();
+        int height = imp.getHeight();
+
+        // classes (name, groupId) ordered by groupId then name - defines the C axis
+        List<Map.Entry<String, Integer>> classes = new ArrayList<>(classIdMap.entrySet());
+        classes.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()));
+
+        ImageStack originalStack = imp.getStack();
+        ImageStack stack = new ImageStack(width, height);
+
+        // hyperstack order is czt (channel, then slice, then frame): for each frame, append one
+        // channel per class, in the same frame order createInstanceMaskStackWithFixedIds uses.
+        int nFramesBuilt = 0;
+        for (int f = mfdManager.getFirstFrame(); f <= mfdManager.getLastFrame(); f++) {
+            List<ProcessedDetection> detections = detectionsByFrame.getOrDefault(f, Collections.emptyList());
+            Map<String, List<ProcessedDetection>> byClassName = new HashMap<>();
+            for (ProcessedDetection det : detections) {
+                if (det.getShapeRoi() == null) continue;
+                byClassName.computeIfAbsent(det.getClassName(), k -> new ArrayList<>()).add(det);
+            }
+
+            String frameLabel = originalStack.getSliceLabel(f + 1);
+            for (Map.Entry<String, Integer> cls : classes) {
+                List<ProcessedDetection> classDetections = byClassName.getOrDefault(cls.getKey(), Collections.emptyList());
+                ImageProcessor processor = createAndFillProcessorWithFixedIds(classDetections, width, height);
+                stack.addSlice(cls.getKey() + " - " + frameLabel + " (" + classDetections.size() + " instances)", processor);
+            }
+            nFramesBuilt++;
         }
+
+        if (stack.getSize() == 0) {
+            IJ.log("Could not create any slices for the instance-mask-per-class hyperstack.");
+            return null;
+        }
+
+        ImagePlus result = new ImagePlus(imp.getTitle() + " - instance mask per class", stack);
+        result.setDimensions(classes.size(), 1, nFramesBuilt);
+        result.setOpenAsHyperStack(true);
+        IJ.log("Instance-mask-per-class hyperstack created (" + classes.size() + " class(es) x " + nFramesBuilt + " frame(s)).");
+        result.setDisplayRange(0, Math.max(255.0, result.getStatistics().max));
+        setGlasbeyLut(result);
+        return result;
     }
+
 }
