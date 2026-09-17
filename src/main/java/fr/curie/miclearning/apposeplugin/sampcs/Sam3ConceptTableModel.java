@@ -1,5 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import ij.gui.Roi;
+
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -9,7 +11,7 @@ import java.util.Set;
 
 /**
  * Table model backing the concept table of {@link Sam3ImagePcs_Plugin} and 's dialog: one row
- * per {@link Sam3Concept}, one column per editable property.
+ * per {@link PcsConcept}, one column per editable property.
  */
 public class Sam3ConceptTableModel extends AbstractTableModel {
 
@@ -26,7 +28,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     private static final int MAX_GROUP_ID = 255;
 
     // list of all concepts registered in the table
-    private final List<Sam3Concept> concepts = new ArrayList<>();
+    private final List<PcsConcept> concepts = new ArrayList<>();
     private int nextId = 1; // never reused within a session
 
     // false while the RoiManager holds no usable ROI on any processed frame ; driven by the dialog's ROI poll.
@@ -69,7 +71,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-        Sam3Concept concept = concepts.get(rowIndex);
+        PcsConcept concept = concepts.get(rowIndex);
         switch (columnIndex) {
             case COL_NAME: return concept.getName();
             case COL_TEXT_PROMPT: return concept.getTextPrompt();
@@ -82,7 +84,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
 
     @Override
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
-        Sam3Concept concept = concepts.get(rowIndex);
+        PcsConcept concept = concepts.get(rowIndex);
         switch (columnIndex) {
             case COL_NAME:
                 concept.setName(uniqueName(value == null ? "" : value.toString(), concept));
@@ -102,10 +104,20 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
                 if (Objects.equals(concept.getNegativeVisualGroup(), concept.getPositiveVisualGroup())) {
                     concept.setNegativeVisualGroup(null);
                 }
-                // if a group for the visual positive prompt is given and the output group is still the default value (i.e. the id):
-                // change output group to input group (even if output group already exist)
-                if (concept.isOutputGroupDefault() && (concept.getPositiveVisualGroup()!=null) && (concept.getPositiveVisualGroup() != 0)) {
-                    concept.setOutputGroup((Integer) value);
+                // if a group for the visual positive prompt is given
+                if ((concept.getPositiveVisualGroup() != null) && (concept.getPositiveVisualGroup() != 0)) {
+                    // if the output group is still the default value (i.e. the id):
+                    // change output group to input group (even if output group already exist)
+                    if (concept.isOutputGroupDefault()) {
+                        concept.setOutputGroup((Integer) value);
+                    }
+                    //if the group given as positive prompt has a name (saved in ROI manager settings) and the name is still the default value
+                    // change the name to the one of the positive prompt
+                    String name = Roi.getGroupName((Integer) value);
+                    if (concept.isNameDefault() && name!=null && !name.isEmpty()) {
+                        concept.setName(uniqueName(name, concept));
+                    }
+
                 }
                 break;
             case COL_NEGATIVE_VISUAL:
@@ -120,9 +132,9 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
         fireTableRowsUpdated(rowIndex, rowIndex); // repaint the whole row
     }
 
-    /** Appends a new concept row with a fresh id and the first output group not used by another row. */
+    /** Appends a new concept row with a fresh id  */
     public void addConcept() {
-        Sam3Concept concept = new Sam3Concept(nextId++);
+        PcsConcept concept = new PcsConcept(nextId++);
         concepts.add(concept);
         int row = concepts.size() - 1;
         fireTableRowsInserted(row, row);
@@ -135,12 +147,12 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
         fireTableRowsDeleted(rowIndex, rowIndex);
     }
 
-    public Sam3Concept getConcept(int rowIndex) {
+    public PcsConcept getConcept(int rowIndex) {
         return concepts.get(rowIndex);
     }
 
     /** Read-only view of the current concepts, in row order. */
-    public List<Sam3Concept> getConcepts() {
+    public List<PcsConcept> getConcepts() {
         return Collections.unmodifiableList(concepts);
     }
 
@@ -163,7 +175,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
      */
     public boolean reconcileVisualGroups(Set<Integer> availableGroupIds) {
         boolean changed = false;
-        for (Sam3Concept concept : concepts) {
+        for (PcsConcept concept : concepts) {
             if (concept.getPositiveVisualGroup() != null
                     && !availableGroupIds.contains(concept.getPositiveVisualGroup())) {
                 concept.setPositiveVisualGroup(null);
@@ -181,7 +193,7 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     }
 
     /** Trims {@code desired} (blank -> the concept's numeric id), then appends "-1", "-2", ... until unique among the other rows. */
-    private String uniqueName(String desired, Sam3Concept self) {
+    private String uniqueName(String desired, PcsConcept self) {
         String base = desired == null ? "" : desired.trim();
         if (base.isEmpty()) base = String.valueOf(self.getId());
         String candidate = base;
@@ -192,8 +204,8 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
         return candidate;
     }
 
-    private boolean nameTaken(String name, Sam3Concept self) {
-        for (Sam3Concept concept : concepts) {
+    private boolean nameTaken(String name, PcsConcept self) {
+        for (PcsConcept concept : concepts) {
             if (concept != self && concept.getName().equals(name)) return true;
         }
         return false;

@@ -8,7 +8,7 @@ import java.util.Objects;
  * an optional text prompt and/or an optional visual prompt (positive/negative), run
  * independently on every frame of the stack.
  */
-public class Sam3Concept {
+public class PcsConcept {
 
     /* Stable identifier, assigned once by the table model, not displayed in the conceptTable*/
     private final int id;
@@ -25,13 +25,13 @@ public class Sam3Concept {
     // output group id assigned to this concept's detections (independent of the input groups)
     private int outputGroup;
 
-    public Sam3Concept(int id, int outputGroup) {
+    public PcsConcept(int id, int outputGroup) {
         this.id = id;
         this.outputGroup = outputGroup;
         this.name = id + "";
     }
 
-    public Sam3Concept(int id) {
+    public PcsConcept(int id) {
         this.id = id;
         this.outputGroup = id>255 ? (id%255)+1 : id;
         this.name = id + "";

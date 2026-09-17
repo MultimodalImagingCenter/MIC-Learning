@@ -50,7 +50,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
     private final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
     private String detectionModelPath;
     private String trackingModelPath;
-    private List<Sam3Concept> concepts;
+    private List<PcsConcept> concepts;
 
     private Sam3ModelParameters modelParams;
     private DetectionUtils.OutputOptions outputOptions;
@@ -123,7 +123,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         List<Roi> roisAtPromptFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, chosenPromptFrame); // roi on the prompt frame
 
         // register each concept + extract relevant ROIs
-        for (Sam3Concept concept : concepts) {
+        for (PcsConcept concept : concepts) {
             // register concept
             conceptLabels.add(concept.getName());
             conceptTexts.add(concept.isTextPromptUsed() ? concept.getTextPrompt() : "visual");
@@ -308,7 +308,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         Set<String> usedNames = new HashSet<>();
         for (int i = 0; i < outputGroupsArr.length; i++) {
             int outputGroup = Integer.parseInt(outputGroupsArr[i].trim());
-            Sam3Concept concept = new Sam3Concept(i + 1, outputGroup);
+            PcsConcept concept = new PcsConcept(i + 1, outputGroup);
 
             concept.setTextPrompt(textsArr[i].trim());
             concept.setPositiveVisualGroup(parseOptionalInt(positiveVisualArr[i]));
@@ -424,7 +424,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         String outputGroups = concepts.stream().map(c -> String.valueOf(c.getOutputGroup())).collect(Collectors.joining(","));
         Recorder.recordOption("output_groups", outputGroups);
 
-        String names = concepts.stream().map(Sam3Concept::getName).collect(Collectors.joining(","));
+        String names = concepts.stream().map(PcsConcept::getName).collect(Collectors.joining(","));
         Recorder.recordOption("names", names);
 
         String texts = concepts.stream().map(c -> c.isTextPromptUsed() ? c.getTextPrompt() : "").collect(Collectors.joining(","));

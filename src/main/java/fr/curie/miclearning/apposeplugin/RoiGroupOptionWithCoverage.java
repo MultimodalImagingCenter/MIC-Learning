@@ -1,16 +1,14 @@
-package fr.curie.miclearning.apposeplugin.sampcs;
-
-import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
+package fr.curie.miclearning.apposeplugin;
 
 /**
- * One selectable entry in a group-id combo box for {@link Sam3ImagePcs_Plugin}: a RoiManager group id + how many of the
+ * One selectable entry in a group-id combo box: a RoiManager group id + how many of the
  * frames being processed contain at least one usable ROI belonging to that group.
  */
-public class Sam3GroupOptionImage extends Sam3GroupOption {
+public class RoiGroupOptionWithCoverage extends RoiGroupOption {
     private final int coveredFrames;
     private final int totalFrames;
 
-    public Sam3GroupOptionImage(int groupId, int coveredFrames, int totalFrames) {
+    public RoiGroupOptionWithCoverage(int groupId, int coveredFrames, int totalFrames) {
         super(groupId);
         this.coveredFrames = coveredFrames;
         this.totalFrames = totalFrames;

@@ -2,6 +2,7 @@ package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
 import fr.curie.miclearning.apposeplugin.FrameRangeSelector;
+import fr.curie.miclearning.apposeplugin.RoiGroupOption;
 import ij.IJ;
 import ij.ImagePlus;
 
@@ -182,12 +183,12 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
     }
 
     @Override
-    List<Sam3GroupOption> computeGroupOptions() {
+    List<RoiGroupOption> computeGroupOptions() {
         TreeSet<Integer> currentGroupsAtFrame = roiPromptExtractor.getRoiGroupAtFrame(getRoiManager().getRoisAsArray(), axis, currentFrameRange().get(0));
 
-        List<Sam3GroupOption> options = new ArrayList<>();
+        List<RoiGroupOption> options = new ArrayList<>();
         for (int groupId : currentGroupsAtFrame) {
-            options.add(new Sam3GroupOption(groupId));
+            options.add(new RoiGroupOption(groupId));
         }
         return options;
     }
@@ -218,7 +219,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
     }
 
     @Override
-    protected void logWarnings(List<Sam3Concept> currentConcepts) {
+    protected void logWarnings(List<PcsConcept> currentConcepts) {
 
     }
 

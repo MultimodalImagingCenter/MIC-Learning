@@ -1,6 +1,9 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
+import fr.curie.miclearning.apposeplugin.DialogUiSupport;
+import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
+import fr.curie.miclearning.apposeplugin.RoiGroupOption;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
@@ -18,8 +21,6 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -36,12 +37,8 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     protected static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
     static final int ROI_POLL_INTERVAL_MS = 500;
     static final String VISUAL_PROMPT_RESET_OWNER = "visualPromptReset";
-    static final String PREF_UI_SCALE_KEY = "miclearning.sam3.imagedialog.uiscale";
-    static final double DEFAULT_UI_SCALE = 1;
-    static final double MIN_UI_SCALE = 0.25;
-    static final double MAX_UI_SCALE = 4.0;
 
-    final double uiScale = Prefs.get(PREF_UI_SCALE_KEY, DEFAULT_UI_SCALE);
+    final double uiScale = Prefs.get(DialogUiSupport.PREF_UI_SCALE_KEY, DialogUiSupport.DEFAULT_UI_SCALE);
 
     final ImagePlus imp;
     final int nFrames;
@@ -77,7 +74,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     String modelPath;
     Sam3ModelParameters finalModelParam;
     DetectionUtils.OutputOptions outputOptions;
-    List<Sam3Concept> concepts;
+    List<PcsConcept> concepts;
 
 
     protected Sam3ConceptDialogBase(ImagePlus imp, int nFrames, int axis, String dialogTitle) {
@@ -98,8 +95,8 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         buildUi();
         installClickAwayCommit();
         if (uiScale != 1.0) {
-            rescaleFonts(getContentPane(), uiScale);
-            rescaleFonts(table.getTableHeader(), uiScale);
+            DialogUiSupport.rescaleFonts(getContentPane(), uiScale);
+            DialogUiSupport.rescaleFonts(table.getTableHeader(), uiScale);
             helpBar.rescaleFont(uiScale); // the help bar resets its own font from a cached field on every render - update that field directly
         }
         pack();
@@ -135,55 +132,14 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         });
     }
 
-    /**
-     * Recursively derives every font in {@code comp}'s subtree by {@code uiScale}, and scales
-     * checkbox icons too. Shared with other dialogs in this package (e.g. {@link Sam3AdvancedParametersDialog})
-     * so they honor the same {@link #PREF_UI_SCALE_KEY} preference.
-     * Applied once at construction time  (the dialog must be closed and reopened for a new scale to
-     * take effect)
-     */
-    public static void rescaleFonts(Component comp, double uiScale) {
-        Font font = comp.getFont();
-        if (font != null) comp.setFont(font.deriveFont((float) (font.getSize2D() * uiScale)));
-        if (comp instanceof JCheckBox && ((JCheckBox) comp).getIcon() == null) {
-            Icon checkIcon = UIManager.getIcon("CheckBox.icon");
-            if (checkIcon != null) ((JCheckBox) comp).setIcon(scaledIcon(checkIcon, uiScale));
-        }
-        if (comp instanceof Container) {
-            for (Component child : ((Container) comp).getComponents()) rescaleFonts(child, uiScale);
-        }
-    }
-
-    /** Wraps {@code icon}, painting it scaled by {@code scale} (Swing icons have a fixed pixel size). */
-    private static Icon scaledIcon(Icon icon, double scale) {
-        int w = (int) Math.round(icon.getIconWidth() * scale);
-        int h = (int) Math.round(icon.getIconHeight() * scale);
-        return new Icon() {
-            @Override
-            public void paintIcon(Component c, Graphics g, int x, int y) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.translate(x, y);
-                g2.scale((double) w / icon.getIconWidth(), (double) h / icon.getIconHeight());
-                icon.paintIcon(c, g2, 0, 0);
-                g2.dispose();
-            }
-            @Override public int getIconWidth() {return w;}
-            @Override public int getIconHeight() {return h;}
-        };
-    }
-
     /** Scales a pixel dimension (row height, column width, ...) by {@link #uiScale}. */
     int scaled(int pixels) {
-        return (int) Math.round(pixels * uiScale);
+        return DialogUiSupport.scaled(pixels, uiScale);
     }
 
     /** A section-title label matching this dialog's unified heading style: bold, one size bigger than body text. */
     JLabel createSectionTitle(String text) {
-        JLabel label = new JLabel(text);
-        Font base = label.getFont();
-        label.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1f));
-        label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        return label;
+        return DialogUiSupport.createSectionTitle(text);
     }
 
     /**
@@ -210,7 +166,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     public String getModelPath() {return modelPath;}
     public Sam3ModelParameters getFinalModelParam() {return finalModelParam;}
     public DetectionUtils.OutputOptions getOutputOptions() {return outputOptions;}
-    public List<Sam3Concept> getConcepts() {return concepts;}
+    public List<PcsConcept> getConcepts() {return concepts;}
 
     // ==== UI construction ====
 
@@ -230,7 +186,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         JLabel modelLabel = new JLabel("Model path:");
         fieldsPanel.add(modelLabel, c);
 
-        modelPathField = new JTextField(Sam3Dialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY), 40);
+        modelPathField = new JTextField(ModelPathDialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY, "sam3.pt"), 40);
         c.gridx = 1; c.weightx = 1;
         fieldsPanel.add(modelPathField, c);
 
@@ -251,7 +207,15 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         fieldsPanel.add(browseButton, c);
 
         JButton instructionsButton = new JButton("Instructions to download SAM3 model");
-        instructionsButton.addActionListener(e -> Sam3Dialogs.addDownloadInstruction());
+        instructionsButton.addActionListener(e -> ModelPathDialogs.showDownloadInstructions(
+                "instructions to download SAM3 model",
+                "The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
+                        "To download them, you need to:\n" +
+                        "   1/ Create a Hugging Face account\n" +
+                        "   2/ Request access\n" +
+                        "     The authorization process usually takes no more than one hour.\n" +
+                        "   3/ Once your access request is approved, you can download the \"sam3.pt\" file.\n" +
+                        "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and copy the model file inside it."));
         c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.NONE;
         c.gridx = 0; c.gridy = 1; c.gridwidth = 3; c.weightx = 0;
         fieldsPanel.add(instructionsButton, c);
@@ -516,11 +480,11 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         helpBar.applyHelpLevelChoice(gd.getNextChoiceIndex());
 
         double scalePercent = gd.getNextNumber();
-        if (Double.isNaN(scalePercent) || scalePercent < MIN_UI_SCALE * 100 || scalePercent > MAX_UI_SCALE * 100) {
-            IJ.log("Interface scale must be between " + (int) (MIN_UI_SCALE * 100) + "% and "
-                    + (int) (MAX_UI_SCALE * 100) + "%. Keeping the previous value.");
+        if (Double.isNaN(scalePercent) || scalePercent < DialogUiSupport.MIN_UI_SCALE * 100 || scalePercent > DialogUiSupport.MAX_UI_SCALE * 100) {
+            IJ.log("Interface scale must be between " + (int) (DialogUiSupport.MIN_UI_SCALE * 100) + "% and "
+                    + (int) (DialogUiSupport.MAX_UI_SCALE * 100) + "%. Keeping the previous value.");
         } else {
-            Prefs.set(PREF_UI_SCALE_KEY, scalePercent / 100.0);
+            Prefs.set(DialogUiSupport.PREF_UI_SCALE_KEY, scalePercent / 100.0);
             Prefs.savePreferences();
         }
     }
@@ -545,13 +509,13 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     }
 
     void refreshGroupOptions() {
-        List<Sam3GroupOption> options = computeGroupOptions();
+        List<RoiGroupOption> options = computeGroupOptions();
         positiveGroupEditor.setAvailableGroups(options); // updates the groups available in the "positive prompt" columns
         negativeGroupEditor.setAvailableGroups(options);
 
         // for Roi positive & negative prompts columns : update available ROI groups
         Set<Integer> availableGroupIds = new HashSet<>();
-        for (Sam3GroupOption option : options) availableGroupIds.add(option.getGroupId());
+        for (RoiGroupOption option : options) availableGroupIds.add(option.getGroupId());
         if (tableModel.reconcileVisualGroups(availableGroupIds)) {
             helpBar.showInfo(VISUAL_PROMPT_RESET_OWNER, "A previously selected ROI group is no longer available - "
                     + "visual prompt turned off for the affected concept(s).", DialogHelpBar.DEFAULT_NOTIFICATION_COLOR);
@@ -564,7 +528,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
     /** Return Roi group available (i.e. roi groups on any processed frame for {@link Sam3ImagePcs_Plugin},
      * roi groups on the prompt frame for {@link Sam3VideoPcs_Plugin}*/
-    abstract List<Sam3GroupOption> computeGroupOptions();
+    abstract List<RoiGroupOption> computeGroupOptions();
 
     /** True when at least an output where a concept's output roi group matters is selected (all outputs except instance masks). */
     boolean outputWithRoiGroupSelected() {
@@ -618,7 +582,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         if (path == null) return false; // does not close window, because "dispose()" is not called. Usr can try again
 
         // check concept validity
-        List<Sam3Concept> currentConcepts = tableModel.getConcepts();
+        List<PcsConcept> currentConcepts = tableModel.getConcepts();
         List<String> errors = validateConcepts(currentConcepts);
 
         if (!errors.isEmpty()) {
@@ -655,24 +619,17 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     abstract void onOk();
 
     private String resolveAndValidateModelPath() {
-        String path = modelPathField.getText().trim();
-        if (Files.exists(Paths.get(path))) {
-            Prefs.set(PREF_LAST_MODEL_KEY, path);
-            Prefs.savePreferences();
-            return path;
-        }
-        IJ.error("Selection Error", "The selected path is not valid:\n" + path);
-        return null;
+        return ModelPathDialogs.validateAndSaveModelPath(modelPathField.getText().trim(), PREF_LAST_MODEL_KEY);
     }
 
-    List<String> validateConcepts(List<Sam3Concept> currentConcepts) {
+    List<String> validateConcepts(List<PcsConcept> currentConcepts) {
         List<String> errors = new ArrayList<>();
         if (currentConcepts.isEmpty()) {
             errors.add("At least one concept must be defined.");
             return errors;
         }
         Set<String> seenNames = new HashSet<>();
-        for (Sam3Concept concept : currentConcepts) {
+        for (PcsConcept concept : currentConcepts) {
             if (!concept.hasAnyPositivePrompt()) {
                 errors.add("Concept " + concept.getName() + ": needs a text prompt and/or a positive visual prompt.");
             }
@@ -715,7 +672,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         return options;
     }
 
-    protected abstract void logWarnings(List<Sam3Concept> currentConcepts);
+    protected abstract void logWarnings(List<PcsConcept> currentConcepts);
 
     protected abstract List<Integer> currentFrameRange();
 

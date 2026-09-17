@@ -76,6 +76,25 @@ public class RoiPromptExtractor {
     }
 
     /**
+     * Which ROI groups in {@code rois} contain at least one usable POINT roi on at least one of
+     * {@code frames}
+     *
+     * @param rois   ROIs to scan
+     * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frames the frames to check (1-indexed)
+     */
+    public Set<Integer> groupsWithUsablePointRoi(Roi[] rois, int axis, Collection<Integer> frames) {
+        Map<Integer, List<Roi>> roisByFrame = groupRoisByFrame(rois, axis);
+        Set<Integer> groups = new TreeSet<>();
+        for (int frame : frames) {
+            for (Roi roi : roisByFrame.getOrDefault(frame, Collections.emptyList())) {
+                if (roi.getType() == Roi.POINT) groups.add(roi.getGroup());
+            }
+        }
+        return groups;
+    }
+
+    /**
      * Collects the usable ROIs (rectangle or point) on the given frame - 3D image,
      * only one axis used
      *
