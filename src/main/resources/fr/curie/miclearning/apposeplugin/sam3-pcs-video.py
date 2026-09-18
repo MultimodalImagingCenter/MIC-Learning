@@ -33,17 +33,27 @@ def xywh_to_norm_x1y1x2y2(box, img_height, img_width):
     """Convert a [x, y, w, h] pixel box to [(x1, y1), (x2, y2)] corner points normalized to [0, 1]."""
     x1, y1, w, h = box
     x2, y2 = x1 + w, y1 + h
-    norm_x1 = x1 / img_width
-    norm_y1 = y1 / img_height
-    norm_x2 = x2 / img_width
-    norm_y2 = y2 / img_height
-    return [(norm_x1, norm_y1), (norm_x2, norm_y2)]
+    return [(x1 / img_width, y1 / img_height), (x2 / img_width, y2 / img_height)]
 
 
 def norm_xy(point, img_height, img_width):
     """Convert an (x, y) pixel point to normalized [0, 1] coordinates."""
     x1, y1 = point
     return (x1 / img_width, y1 / img_height)
+
+
+def split_rois(rois, img_height, img_width):
+    """rois format: [[x,y,w,h], [x,y], ...] (absolute values) -> (normalized box list, normalized point list)."""
+    box_list = []
+    point_list = []
+    for roi in rois:
+        if len(roi) == 4:  # box
+            box_list.append(xywh_to_norm_x1y1x2y2(roi, img_height, img_width))
+        elif len(roi) == 2:  # point
+            point_list.append(norm_xy(roi, img_height, img_width))
+        else:
+            log_to_java(f"unknown prompt size: prompt {roi}")
+    return box_list, point_list
 
 
 # ============================================================
@@ -86,43 +96,32 @@ n_frames, h_img, w_img = images_bgr.shape[:3]
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 
 # -- 2.2 format inputs
-# - 2.2.1 text inputs
-text_prompt = textPrompt
+# concepts are frame-invariant, index-aligned lists (one entry per concept) resolved once (on prompt frame only).
+concept_labels = conceptLabels
+concept_texts = conceptTexts
+concept_text_used = conceptTextUsed
+concept_positive_rois = conceptPositiveRois  # one rois list per concept: [[x,y,w,h] or [x,y], ...]
+concept_negative_rois = conceptNegativeRois
+n_concepts = len(concept_labels)
 
-# - 2.2.2 visual inputs
-positive_rois = positiveRois
-negative_rois = negativeRois
-
-pos_box_xy1xy2_norm_list = []
-neg_box_xy1xy2_norm_list = []
-pos_point_xy_norm_list = []
-neg_point_xy_norm_list = []
-
-# positive_rois received format: [[x,y,w,h], [x,y], ...] (absolute values)
-# expected format:
-#  one list for boxes : [[(x1, y1), (x2, y2)], ...] (normalized values)
-#  one list for points : [(x, y), ... ] (normalized values)
-if len(positive_rois) > 0:
-    for prompt in positive_rois:
-        if len(prompt) == 4:  # box
-            pos_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
-        elif len(prompt) == 2:  # point
-            pos_point_xy_norm_list.append(norm_xy(prompt, h_img, w_img))
-        else:
-            log_to_java(f"unknown prompt size: prompt {prompt}")
-
-# negative_rois received format: [[x,y,w,h], [x,y], ...] (absolute values)
-# expected format:
-#  one list for boxes : [[(x1, y1), (x2, y2)], ...] (normalized values)
-#  one list for points : [(x, y), ... ] (normalized values)
-if len(negative_rois) > 0:
-    for prompt in negative_rois:
-        if len(prompt) == 4:  # box
-            neg_box_xy1xy2_norm_list.append(xywh_to_norm_x1y1x2y2(prompt, h_img, w_img))
-        elif len(prompt) == 2:  # point
-            neg_point_xy_norm_list.append(norm_xy(prompt, h_img, w_img))
-        else:
-            log_to_java(f"unknown prompt size: prompt {prompt}")
+# kwargs for detect_model.encode_exemplars(), or None for a concept with no usable prompt at all
+concept_detection_prompts = []
+for concept_idx in range(n_concepts):
+    pos_box_list, pos_point_list = split_rois(concept_positive_rois[concept_idx], h_img, w_img)
+    neg_box_list, neg_point_list = split_rois(concept_negative_rois[concept_idx], h_img, w_img)
+    has_positive_visual = len(pos_box_list) > 0 or len(pos_point_list) > 0
+    if not concept_text_used[concept_idx] and not has_positive_visual:
+        log_to_java(f"concept '{concept_labels[concept_idx]}': no prompt on the prompt frame - skipped")
+        concept_detection_prompts.append(None)
+        continue
+    # encode_exemplars always receives a text value: concepts without a real text prompt use the "visual" placeholder
+    concept_detection_prompts.append({
+        "text": concept_texts[concept_idx],
+        "box_xy1xy2_norm_list": pos_box_list,
+        "point_xy_norm_list": pos_point_list,
+        "negative_boxes_list": neg_box_list,
+        "negative_points_list": neg_point_list,
+    })
 
 # -- 2.3 Parameters for detection/tracking (received directly from java)
 detect_every_n_frames = detectEveryNFrames  # Set to None to only run once on startup
@@ -143,13 +142,6 @@ include_coordinate_encodings = includeCoordinateEncoding
 # Bundle re-used data together for ease of use
 imgenc_config_dict_track = {"max_side_length": max_side_length_track, "use_square_sizing": True}
 imgenc_config_dict_detect = {"max_side_length": max_side_length_detect, "use_square_sizing": True}
-detection_prompts_dict = {
-    "text": text_prompt,
-    "box_xy1xy2_norm_list": pos_box_xy1xy2_norm_list,
-    "point_xy_norm_list": pos_point_xy_norm_list,
-    "negative_boxes_list": neg_box_xy1xy2_norm_list,
-    "negative_points_list": neg_point_xy_norm_list,
-}
 
 needs_detect_reencode = is_using_separate_tracking_model or imgenc_config_dict_track != imgenc_config_dict_detect
 
@@ -164,6 +156,8 @@ missed_frames_per_obj_dict_forward = defaultdict(int)
 # backward
 memory_per_obj_dict_backward = defaultdict(SAMVideoMemoryBank)  # defined with max_frame_memory=6 and max_prompt_memory=32
 missed_frames_per_obj_dict_backward = defaultdict(int)
+# which concept each tracked object belongs to
+concept_id_per_obj_dict = {} #dict to link each object id to the corresponding concept id
 
 # -- 2.5 frame index and bidirectionality
 n_frame_to_process = nFrameToProcess
@@ -199,7 +193,8 @@ total_detection = 0  # number of detections across all frames
 all_masks = []
 all_boxes = []
 all_scores = []
-all_ids = []  # object ids
+all_ids = []  # object ids (tracking identity, stable across frames) (one id per object, even if class is different)
+all_concept_ids = []  # per-detection concept index (parallel to all_ids), i.e. its class
 index = 0  # index to get results in "all_X" lists
 all_ids_used = []  # list of all used id
 
@@ -208,12 +203,12 @@ all_ids_used = []  # list of all used id
 # 3. Per-frame helpers shared by the prompt frame and the tracking loop
 # ============================================================
 
-def run_detection_and_register_new_objects(frame, track_encoded_img, det_exemplars, memory_dicts, all_ids_used,
-                                            known_boxes_xywh_norm_list, count_label):
+def run_detection_and_register_new_objects(frame, track_encoded_img, det_exemplars, concept_idx, memory_dicts,
+                                            all_ids_used, known_boxes_xywh_norm_list, count_label):
     """
-    Run SAM3 detection (text + visual prompts) on `frame`, keep only the detections that don't
-    already overlap a currently-tracked box (`known_boxes_xywh_norm_list`), and register each
-    surviving detection as a new tracked object.
+    Run SAM3 detection (text + visual prompts) for ONE concept on `frame`, keep only the detections
+    that don't already overlap a currently-tracked box (of that same concept) and register each surviving
+    detection as a new tracked object tagged with `concept_idx`.
 
     Passing an empty `known_boxes_xywh_norm_list` makes every detection count as "new"
 
@@ -231,7 +226,7 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
     if num_detections == 0:
         return new_masks, new_boxes, new_scores, new_ids
 
-    # a detection counts as "new" unless it overlaps a box that's already being tracked
+    # a detection counts as "new" unless it overlaps a box already tracked (for this same concept)
     known_boxes_list = []
     for box_x, box_y, box_w, box_h in known_boxes_xywh_norm_list:
         box_xy1xy2_norm = torch.tensor(((box_x, box_y), (box_x + box_w, box_y + box_h)))
@@ -253,6 +248,7 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
         init_mem = track_model.encode_prompt_memory_from_mask(track_encoded_img, raw_det_mask)
         new_idx = next_new_idx + idx_offset
         all_ids_used.append(new_idx)
+        concept_id_per_obj_dict[new_idx] = concept_idx
         for memory_dict in memory_dicts:
             memory_dict[new_idx].store_prompt_result(init_mem)
 
@@ -269,8 +265,42 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
     return new_masks, new_boxes, new_scores, new_ids
 
 
+def detect_new_objects_all_concepts(frame, encoded_img, memory_dicts, known_boxes_xywh_norm_list=None,
+                                     known_ids_list=None, count_label_suffix="detected"):
+    """
+    Runs `run_detection_and_register_new_objects` once per concept
+
+    `known_boxes_xywh_norm_list`/`known_ids_list` describe every currently-tracked object on this
+    frame (across all concepts, as parallel lists) - each concept only compares against the subset
+    of those that belong to itself
+
+    Returns parallel lists (masks, boxes, scores, ids, concept_ids) of every new detection, across
+    all concepts.
+    """
+    known_boxes_xywh_norm_list = known_boxes_xywh_norm_list or []
+    known_ids_list = known_ids_list or []
+
+    masks_all, boxes_all, scores_all, ids_all, concept_ids_all = [], [], [], [], []
+    for concept_idx, det_exemplars in enumerate(concept_det_exemplars):
+        if det_exemplars is None:
+            continue
+        known_boxes_this_concept = [box for box, obj_id in zip(known_boxes_xywh_norm_list, known_ids_list)
+                                     if concept_id_per_obj_dict.get(obj_id) == concept_idx]
+        new_masks, new_boxes, new_scores, new_ids = run_detection_and_register_new_objects(
+            frame, encoded_img, det_exemplars, concept_idx, memory_dicts,
+            all_ids_used, known_boxes_this_concept,
+            count_label=f"{count_label_suffix} for concept '{concept_labels[concept_idx]}'"
+        )
+        masks_all.extend(new_masks)
+        boxes_all.extend(new_boxes)
+        scores_all.extend(new_scores)
+        ids_all.extend(new_ids)
+        concept_ids_all.extend([concept_idx] * len(new_ids))
+    return masks_all, boxes_all, scores_all, ids_all, concept_ids_all
+
+
 def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_list, scores_list, ids_list,
-                                    progress_index):
+                                    concept_ids_list, progress_index):
     """
     Wrap one frame's detections as shared-memory appose.NDArrays, append them to the all_* result
     lists, and report progress/results back to Java via task.update. Returns the number of objects
@@ -282,6 +312,7 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
         all_boxes.append([])
         all_scores.append([])
         all_ids.append([])
+        all_concept_ids.append([])
         task.update(
             message=f"   frame {frame_idx + frame_offset + 1} - no object detected/tracked",
             current=progress_index + 1,
@@ -313,11 +344,17 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
     shared_scores.ndarray()[:] = scores_np
     all_scores.append(shared_scores)
 
-    # IDs
+    # object IDs (tracking identity, stable across frames)
     ids_np = np.array(ids_list, dtype='int32')
     shared_ids = appose.NDArray("int32", ids_np.shape)
     shared_ids.ndarray()[:] = ids_np
     all_ids.append(shared_ids)
+
+    # concept IDs (which concept/class each detection belongs to - index into concept_labels)
+    concept_ids_np = np.array(concept_ids_list, dtype='int32')
+    shared_concept_ids = appose.NDArray("int32", concept_ids_np.shape)
+    shared_concept_ids.ndarray()[:] = concept_ids_np
+    all_concept_ids.append(shared_concept_ids)
 
     # send results to java via task update
     task.update(
@@ -328,6 +365,7 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
             "frame_idx": frame_idx + frame_offset,
             "n_results": n_obj,
             "object_ids": all_ids[progress_index],
+            "prompts_ids": all_concept_ids[progress_index],
             "scores": all_scores[progress_index],
             "boxes": all_boxes[progress_index],
             "masks": all_masks[progress_index]
@@ -346,19 +384,26 @@ log_to_java("running prediction...")
 frame_idx = prompt_frame_index
 frame = images_bgr[frame_idx]
 
-# Encode image data
+# Encode image data, then each concept's exemplars (text + visual prompt)
 encoded_img = track_model.encode_image(frame, **imgenc_config_dict_track)
-det_exemplars = detect_model.encode_exemplars(encoded_img, **detection_prompts_dict, include_coordinate_encodings=include_coordinate_encodings,)
-masks_uint8_on_frame, boxes_on_frame, scores_on_frame, ids_on_frame = run_detection_and_register_new_objects(
-    frame, encoded_img, det_exemplars,
+concept_det_exemplars = []
+for concept_idx in range(n_concepts):
+    prompts = concept_detection_prompts[concept_idx]
+    if prompts is None:
+        concept_det_exemplars.append(None)
+        continue
+    concept_det_exemplars.append(detect_model.encode_exemplars(
+        encoded_img, **prompts, include_coordinate_encodings=include_coordinate_encodings,
+    ))
+
+masks_uint8_on_frame, boxes_on_frame, scores_on_frame, ids_on_frame, concept_ids_on_frame = detect_new_objects_all_concepts(
+    frame, encoded_img,
     memory_dicts=[memory_per_obj_dict_forward, memory_per_obj_dict_backward],
-    all_ids_used=all_ids_used,
-    known_boxes_xywh_norm_list=[],  # nothing tracked yet - every detection is new
-    count_label="object(s) detected on prompt frame"
+    count_label_suffix="object(s) detected on prompt frame",
 )
 
 n_obj = package_and_send_frame_results(frame_idx, masks_uint8_on_frame, boxes_on_frame, scores_on_frame,
-                                        ids_on_frame, index)
+                                        ids_on_frame, concept_ids_on_frame, index)
 total_detection += n_obj
 index += 1
 
@@ -377,9 +422,10 @@ for direction_data in ids_and_memories_dicts:
         box_xywh_norm_on_frame = []
         scores_on_frame = []
         ids_on_frame = []
+        concept_ids_on_frame = []
         objs_to_remove_list = []
 
-        # 1. Advance video tracking for all known objects
+        # 1. Advance video tracking for all known objects (for all object in parallel as tracking is concept independent)
         for idx_obj, obj_memory in memory_dict.items():
             # predict this frame's mask for this already-tracked object
             mask_pred, iou_pred, obj_ptr, obj_score = track_model.step_video_masking(
@@ -403,6 +449,7 @@ for direction_data in ids_and_memories_dicts:
             masks_uint8_on_frame.append(mask_uint8)
             scores_on_frame.append(obj_score[0])
             ids_on_frame.append(idx_obj)
+            concept_ids_on_frame.append(concept_id_per_obj_dict[idx_obj])
             # find bounding box
             contours_list, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             if len(contours_list) == 0:
@@ -413,22 +460,23 @@ for direction_data in ids_and_memories_dicts:
             box_xywh_norm = [box_x / mask_w, box_y / mask_h, box_w / mask_w, box_h / mask_h]
             box_xywh_norm_on_frame.append(box_xywh_norm)
 
-        # 2. Run detection to pick up new objects - only every N frames, or immediately if
-        #    nothing is currently tracked
+        # 2. Run detection to pick up new objects (per concept) - only every N frames, or
+        #    immediately if nothing at all is currently tracked yet (any concept)
         no_tracked_objects = len(memory_dict) == 0
         need_detection = ((frame_idx - prompt_frame_index) % detect_every_n_frames) == 0 or no_tracked_objects
         if need_detection:
-            new_masks, new_boxes, new_scores, new_ids = run_detection_and_register_new_objects(
-                frame, encoded_img, det_exemplars,
+            new_masks, new_boxes, new_scores, new_ids, new_concept_ids = detect_new_objects_all_concepts(
+                frame, encoded_img,
                 memory_dicts=[memory_dict],
-                all_ids_used=all_ids_used,
                 known_boxes_xywh_norm_list=box_xywh_norm_on_frame,
-                count_label="new object(s) detected"
+                known_ids_list=ids_on_frame,
+                count_label_suffix="new object(s) detected",
             )
             masks_uint8_on_frame.extend(new_masks)
             box_xywh_norm_on_frame.extend(new_boxes)
             scores_on_frame.extend(new_scores)
             ids_on_frame.extend(new_ids)
+            concept_ids_on_frame.extend(new_concept_ids)
 
         # 3. Stop tracking objects that were marked for removal
         for idx_obj in objs_to_remove_list:
@@ -438,7 +486,7 @@ for direction_data in ids_and_memories_dicts:
             log_to_java(f"     {len(objs_to_remove_list)} object(s) removed")
 
         n_obj = package_and_send_frame_results(frame_idx, masks_uint8_on_frame, box_xywh_norm_on_frame,
-                                                scores_on_frame, ids_on_frame, index)
+                                                scores_on_frame, ids_on_frame, concept_ids_on_frame, index)
         total_detection += n_obj
         index += 1
 

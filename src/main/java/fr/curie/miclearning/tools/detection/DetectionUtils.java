@@ -36,7 +36,7 @@ public class DetectionUtils {
 
     // --- User Output Selection ---
     public static class OutputOptions {
-        public boolean addToRoiManagerBB = true;
+        public boolean addToRoiManagerBB = false;
         public boolean addToRoiManagerShapes = false;
         public boolean createStackMask = false;
         public boolean createInstanceMask = false;
@@ -45,6 +45,10 @@ public class DetectionUtils {
         public boolean showDetectionResultTables = false;
         public boolean deletePreviousRoi = false;
         public boolean deletePreviousRT = false; // delete previous result table
+
+        public boolean noOutputSelected() {
+            return !addToRoiManagerBB && !addToRoiManagerShapes && !createStackMask && !createInstanceMask && !createSemanticMask && !createInstanceMaskPerClass;
+        }
     }
 
 
@@ -1220,6 +1224,90 @@ public class DetectionUtils {
         return classStackImage;
     }
 
+    /**
+     * Stack version of {@link #createInstanceMaskPerClass}: builds a 4D hyperstack with one
+     * time-point per processed frame and, within each time-point, one channel per class (from
+     * {@code classIdMap}, ordered by group id then name). Each channel is the instance mask
+     * (unique pixel value per instance) of that class's detections on that frame; a class with no
+     * detection on a frame gets an empty channel.
+
+     * @param imp               source image
+     * @param detectionsByFrame frame index (0-based) -> detections on that frame
+     * @param classIdMap        class name -> output group id; defines the channel slices and their order
+     * @return a hyperstack ImagePlus (channels = 1, slices = nClasses, frames = nFrames), or
+     *         {@code null} when there is nothing to build
+     */
+    public static ImagePlus createInstanceMaskPerClassStack(
+            ImagePlus imp,
+            Map<Integer, List<ProcessedDetection>> detectionsByFrame,
+            Map<String, Integer> classIdMap) {
+
+        if (classIdMap == null || classIdMap.isEmpty()) {
+            IJ.log("No class ID map provided. Cannot create instance-mask-per-class hyperstack.");
+            return null;
+        }
+        if (detectionsByFrame == null || detectionsByFrame.isEmpty()) {
+            IJ.log("No detections available. Cannot create instance-mask-per-class hyperstack.");
+            return null;
+        }
+
+        int width = imp.getWidth();
+        int height = imp.getHeight();
+
+        // classes (name, groupId) ordered by groupId then name - defines the C axis
+        List<Map.Entry<String, Integer>> classes = new ArrayList<>(classIdMap.entrySet());
+        classes.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()));
+
+        // frames in ascending index order - defines the T axis
+        List<Integer> frameKeys = new ArrayList<>(detectionsByFrame.keySet());
+        Collections.sort(frameKeys);
+
+        ImageStack originalStack = imp.getStack();
+        ImageStack stack = new ImageStack(width, height);
+
+        // hyperstack order is czt (channel, then slice, then frame)
+        // for each frame append one channel per class.
+        for (int frameKey : frameKeys) {
+            // create list of valid detection (with shape ROI) by class
+            Map<String, List<ProcessedDetection>> byClassName = new HashMap<>();
+            for (ProcessedDetection det : detectionsByFrame.getOrDefault(frameKey, Collections.emptyList())) {
+                if (!det.hasShapeRoi()) continue;
+                byClassName.computeIfAbsent(det.getClassName(), k -> new ArrayList<>()).add(det);
+            }
+
+            String frameLabel = safeSliceLabel(originalStack, frameKey + 1);
+            for (Map.Entry<String, Integer> cls : classes) {
+                List<ProcessedDetection> classDetections =
+                        byClassName.getOrDefault(cls.getKey(), Collections.emptyList());
+                ImageProcessor processor = createInstanceMaskProcessor(classDetections, width, height);
+                stack.addSlice(cls.getKey() + " - " + frameLabel + " (" + classDetections.size() + " instances)", processor);
+            }
+        }
+
+        if (stack.getSize() == 0) {
+            IJ.log("Could not create any slices for the instance-mask-per-class hyperstack.");
+            return null;
+        }
+
+        ImagePlus result = new ImagePlus(imp.getTitle() + " - instance mask per class", stack);
+        result.setDimensions(classes.size(), 1, frameKeys.size());
+        result.setOpenAsHyperStack(true);
+        IJ.log("Instance-mask-per-class hyperstack created (" + classes.size() + " class(es) x "
+                + frameKeys.size() + " frame(s)).");
+        result.setDisplayRange(0, 255);
+        setGlasbeyLut(result);
+        return result;
+    }
+
+    /** Slice label for {@code oneBasedIndex}, or a "frame N" fallback when the stack has none. */
+    private static String safeSliceLabel(ImageStack stack, int oneBasedIndex) {
+        if (stack == null || oneBasedIndex < 1 || oneBasedIndex > stack.getSize()) {
+            return "frame " + oneBasedIndex;
+        }
+        String label = stack.getSliceLabel(oneBasedIndex);
+        return (label == null || label.trim().isEmpty()) ? ("frame " + oneBasedIndex) : label;
+    }
+
 
 
     /**
@@ -1366,6 +1454,4 @@ public class DetectionUtils {
         }
         return classIdMap;
     }
-
-
 }

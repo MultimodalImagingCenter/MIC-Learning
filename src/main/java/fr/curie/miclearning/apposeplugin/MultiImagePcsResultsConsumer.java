@@ -79,7 +79,7 @@ public class MultiImagePcsResultsConsumer implements Callable<Void> {
         NDArray outputPromptIds = (NDArray) info.get("prompts_ids");
 
         if (outputBoxes == null || outputMasks == null || outputScores == null) {
-            IJ.log("Warning : Missing output arrays (boxes, masks or scores) from Python for frame " + frameIdx);
+            IJ.log("Warning : Missing output arrays (boxes, masksor scores) from Python for frame " + frameIdx);
             detectionsByFrame.put(frameIdx, Collections.emptyList());
             return;
         }

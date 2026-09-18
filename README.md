@@ -11,7 +11,7 @@ Built on top of the [Deep Java Library (DJL v0.34.0)](https://www.google.com/url
 
 ### Installation
 #### From Fiji Update Site
-1. In Fiji, go to `Help>Update...` then to `Manage Update Sites` in the window that opens.
+1. In Fiji, go to `Help>Update...` then to `Manage Update Sites` in the window that opens. 
 2. Use the search bar to find the plugin named `MIC-learning` and check the left side box next to the plug-in name.
 3. Click on `Apply and Close` and then on `Apply Changes`.
 4. Restart Fiji. You will find the plugin under `Plugins > MIC-Learning`.
@@ -49,7 +49,7 @@ Those requirements apply to the plug-ins in section [Inference](#inference).
 ### Inference
 Located under `Plugins > MIC-Learning > Inference`.
 
-These plug-ins allow you to run predictions on your images using pre-trained models. Choose the module that matches your model's architecture and your specific analysis goal:
+These plug-ins are built using [Deep Java Library (DJL v0.34.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fdjl.ai%2F). They allow you to run predictions on your images using pre-trained models. Choose the module that matches your model's architecture and your specific analysis goal:
 
 * **Classification:** Whole-image categorization : processes an input image and returns a list of probabilities for each predefined class.
 * **U-Net Models:** Take an input image and generate one or more output images (such as probability maps or binary masks).
@@ -64,11 +64,13 @@ These plug-ins allow you to run predictions on your images using pre-trained mod
 
 ### Inference with SAM3 model
 Located under `Plugins > MIC-Learning > SAM`.
-These plug-ins allow you to run Promptable Concept Segmentation (PCS) using Metas SAM3 model. Choose the module that matches your image(s) and your prompt(s) format:
+
+These plug-ins are built using [Appose (v0.11.0)](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fappose%2Fappose). They allow you to run Promptable Concept Segmentation (PCS) using Metas SAM3 model. Choose the module that matches your image(s) and your prompt(s) format:
+
 * **Single image(s) - Text prompt(s):** Prompt is one or more short text phrase(s), each one defining one class. If the image is a stack, detection and segmentation are performed independently on every frame of the stack.
 * **Single image - Visual prompt(s):** Prompt is composed of ROI(s) (boxes or points or combination of both), defining one or more class(es). One group (ROI group) can be used as negative prompt. Does not work on stacks.
 * **Cross-image(s) - Visual prompt:** Prompt encoded on 1 reference image, detection is run on a different target image(s). Prompt is composed of ROI(s) (boxes or points or combination of both), defining one class. One group (ROI group) can be used as negative prompt.
-* **Video:** Prompt is composed of ROI(s) (boxes or points or combination of both) and/or one short text phrase, defining one class. One group (ROI group) can be used as negative prompt. Objects are detected and tracked along the video.
+* **Video - Text + Visual prompt:** Prompt is composed of ROI(s) (boxes or points or combination of both) and/or one short text phrase, defining one class. One group (ROI group) can be used as negative prompt. Objects are detected and tracked along the video.
 
 ### Tools
 Located under `Plugins > MIC-Learning > Tools`.
@@ -79,4 +81,4 @@ Located under `Plugins > MIC-Learning > Tools`.
 * **Visualize Image Encoding:** View how an image is encoded (currently supports SAM2 models).
 
 ## License
-Distributed under Curie Institute License. See `LICENSE` for more information.
+Distributed under Institut Curie Software License. See `LICENSE` for more information.

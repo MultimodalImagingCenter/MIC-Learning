@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
 import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
@@ -66,9 +66,11 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         inputs.put("promptFrame", config.getPromptFrame() - config.getFirstFrame()); //indexed with first frame as 0
         inputs.put("lastFrame", config.getEndFrame() - config.getFirstFrame()); //indexed with first frame as 0
 
-        inputs.put("textPrompt", config.getTextPrompt());
-        inputs.put("positiveRois", config.getPositiveRois());
-        inputs.put("negativeRois", config.getNegativeRois());
+        inputs.put("conceptLabels", config.getConceptLabels());
+        inputs.put("conceptTexts", config.getConceptTexts());
+        inputs.put("conceptTextUsed", config.getConceptTextUsed());
+        inputs.put("conceptPositiveRois", config.getConceptPositiveRois());
+        inputs.put("conceptNegativeRois", config.getConceptNegativeRois());
 
         inputs.put("frameOffset", config.getFirstFrame()); // informational only, used for logging on the python side
 
