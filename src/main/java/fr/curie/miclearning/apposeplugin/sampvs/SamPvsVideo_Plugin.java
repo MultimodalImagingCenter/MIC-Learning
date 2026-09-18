@@ -406,10 +406,6 @@ public class SamPvsVideo_Plugin implements PlugIn {
             long promptFrameCount = config.getFramePrompts().values().stream().filter(m -> m.containsKey(objIndex)).count();
             IJ.log("  - " + name + " -> " + promptFrameCount + " prompt frame(s) -> output group: " + config.getClassIdMap().get(name));
         }
-        IJ.log("mask score threshold: " + params.getMaskScoreThreshold());
-        IJ.log("max side length: " + (params.getMaxSideLength() > 0 ? String.valueOf(params.getMaxSideLength()) : "no limit"));
-        IJ.log("frames in memory: " + params.getNFramesInMemory());
-        IJ.log("tracking score threshold: " + params.getTrackingScoreThreshold());
         IJ.log("----------------------");
     }
 

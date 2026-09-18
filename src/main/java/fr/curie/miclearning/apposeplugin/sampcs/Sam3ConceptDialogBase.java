@@ -208,14 +208,17 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
         JButton instructionsButton = new JButton("Instructions to download SAM3 model");
         instructionsButton.addActionListener(e -> ModelPathDialogs.showDownloadInstructions(
-                "instructions to download SAM3 model",
-                "The SAM checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
+                this,
+                "Instructions to download SAM3 model",
+                "The SAM3 checkpoints are available on the SAM3 HuggingFace repository (huggingface.co/facebook/sam3).\n" +
                         "To download them, you need to:\n" +
-                        "   1/ Create a Hugging Face account\n" +
-                        "   2/ Request access\n" +
-                        "     The authorization process usually takes no more than one hour.\n" +
-                        "   3/ Once your access request is approved, you can download the \"sam3.pt\" file.\n" +
-                        "   4/ Create a \"sam3\" folder inside the \"models\" subfolder of ImageJ, and copy the model file inside it."));
+                        "   1/ Create a Hugging Face account.\n" +
+                        "   2/ Inside Meta's SAM3 HuggingFace repository, open the \"Files and versions\" tab.\n" +
+                        "   3/ Request access. " +
+                        "The authorization process usually takes no more than one hour.\n" +
+                        "   4/ Once your access request is approved, you can download the checkpoint file: \"sam3.pt\".\n" +
+                        "   5/ If it does not exist, create a \"models\" folder inside the ImageJ directory. " +
+                        "Copy the model file inside it.\n"));
         c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.NONE;
         c.gridx = 0; c.gridy = 1; c.gridwidth = 3; c.weightx = 0;
         fieldsPanel.add(instructionsButton, c);
@@ -420,12 +423,12 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         addBoxRoisCB.addItemListener(e -> table.repaint());
         addShapeRoisCB.addItemListener(e -> table.repaint());
 
-        helpBar.attachHelp(addBoxRoisCB, "Adds one rectangle ROI per detection, named 'box_' + the concept's output name, "
-                + "placed in the ROI group set by that concept's \"Output group\".");
-        helpBar.attachHelp(addShapeRoisCB, "Adds one shape ROI per detection, named 'mask_' + the concept's output name, "
-                + "placed in the ROI group set by that concept's \"Output group\".");
-        helpBar.attachHelp(instanceMaskCB, "One image where each detected instance gets its own unique pixel value ");
-        helpBar.attachHelp(semanticMaskCB, "One image where each pixel takes the value of its concept's \"Output group\" "
+        helpBar.attachHelp(addBoxRoisCB, "Adds one rectangle ROI per detection, named 'box_' + the object's output name. "
+                + "\nRoi placed in the ROI group set by that object's \"Output group\".");
+        helpBar.attachHelp(addShapeRoisCB, "Adds one shape ROI per detection, named 'mask_' + the object's output name. "
+                + "\nRoi placed in the ROI group set by that object's \"Output group\".");
+        helpBar.attachHelp(instanceMaskCB, "One image per frame where each detected instance gets its own unique pixel value.");
+        helpBar.attachHelp(semanticMaskCB, "One image per frame where each pixel takes the value of its concept's \"Output group\" "
                 + "(0 = background).");
         helpBar.attachHelp(instanceMaskPerClassCB, "Like instance masks, but one slice per concept ; "
                 + "a per-frame hyperstack for stacks.");

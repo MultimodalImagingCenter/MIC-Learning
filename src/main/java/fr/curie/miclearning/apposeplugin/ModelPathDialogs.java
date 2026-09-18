@@ -4,6 +4,8 @@ import ij.IJ;
 import ij.Prefs;
 import ij.gui.GenericDialog;
 
+import javax.swing.*;
+import java.awt.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -73,6 +75,10 @@ public class ModelPathDialogs {
         gd.addMessage(message);
         gd.hideCancelButton();
         gd.showDialog();
+    }
+
+    public static void showDownloadInstructions(Component parent, String title, String message) {
+        JOptionPane.showMessageDialog(parent, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
 }

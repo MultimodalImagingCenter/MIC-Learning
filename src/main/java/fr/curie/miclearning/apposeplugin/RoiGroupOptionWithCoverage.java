@@ -19,6 +19,6 @@ public class RoiGroupOptionWithCoverage extends RoiGroupOption {
 
     @Override
     public String toString() {
-        return RoiPromptExtractor.formatGroupLabel(getGroupId()) + " - " + coveredFrames + "/" + totalFrames + " frames";
+        return RoiPromptExtractor.formatGroupLabel(getGroupId()) + " (" + coveredFrames + "/" + totalFrames + " frames)";
     }
 }
