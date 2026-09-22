@@ -1,4 +1,4 @@
-package fr.curie.miclearning.apposeplugin.sam;
+package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 
@@ -10,7 +10,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Immutable description of a single SAM3 promptable-concept-segmentation run.
+ * Immutable description of a single SAM3 promptable-concept-segmentation run over a video, with
+ * an arbitrary number of independent concepts - each with an optional text prompt and/or an
+ * optional positive/negative visual prompt. Unlike the image plugin, prompts are resolved once,
+ * from a single prompt frame (not per processed frame).
  * Built once (via {@link Builder}) after the user dialog (or macro parsing) completes,
  */
 public final class Sam3VideoRunConfig {
@@ -18,50 +21,47 @@ public final class Sam3VideoRunConfig {
     private final String detectionModelPath;
     private final String trackingModelPath;
 
-    private final String textPrompt;
-    private final boolean textPromptUsed;
+    // frame-invariant, index-aligned across all five
+    private final List<String> conceptLabels;
+    private final List<String> conceptTexts; // real text prompt, or "visual" placeholder when unused
+    private final List<Boolean> conceptTextUsed;
+    private final List<List<double[]>> conceptPositiveRois; // one rois list per concept, resolved from the prompt frame
+    private final List<List<double[]>> conceptNegativeRois;
+    private final Map<String, Integer> classIdMap; // concept label -> output RoiManager group id
 
-    private final List<double[]> positiveRois;   // never null; empty if unused
-    private final List<double[]> negativeRois;   // never null; empty if unused
-    private final boolean visualPositivePromptUsed;
-    private final boolean negativePromptUsed;
-
-    private final int promptFrame; // index of the frame of the original image where the prompt are defined, where the pcs starts 0-indexed, inclusive
+    private final int promptFrame; // index of the frame of the original image where the prompt are defined, where the sampcs starts 0-indexed, inclusive
     private final int endFrame;   // index of the frame of te original image  0-indexed, inclusive
     private final boolean bidirectional;
     private final int firstFrame; // index frame to go back to if bidirectional, firstFrame = startFrame otherwise
 
     private final Sam3ModelParameters detectionParams;
     private final DetectionUtils.OutputOptions outputOptions;
-    private final Map<String, Integer> classIdMap;
 
     private Sam3VideoRunConfig(Builder b) {
         this.detectionModelPath = b.detectionModelPath;
         this.trackingModelPath = b.trackingModelPath;
-        this.textPrompt = b.textPrompt;
-        this.textPromptUsed = b.textPromptUsed;
-        this.positiveRois = Collections.unmodifiableList(new ArrayList<>(b.positiveRois));
-        this.negativeRois = Collections.unmodifiableList(new ArrayList<>(b.negativeRois));
-        this.visualPositivePromptUsed = b.visualPositivePromptUsed;
-        this.negativePromptUsed = b.negativePromptUsed;
+        this.conceptLabels = Collections.unmodifiableList(new ArrayList<>(b.conceptLabels));
+        this.conceptTexts = Collections.unmodifiableList(new ArrayList<>(b.conceptTexts));
+        this.conceptTextUsed = Collections.unmodifiableList(new ArrayList<>(b.conceptTextUsed));
+        this.conceptPositiveRois = Collections.unmodifiableList(new ArrayList<>(b.conceptPositiveRois));
+        this.conceptNegativeRois = Collections.unmodifiableList(new ArrayList<>(b.conceptNegativeRois));
+        this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
         this.promptFrame = b.promptFrame;
         this.endFrame = b.endFrame;
         this.bidirectional = b.bidirectional;
         this.firstFrame = b.firstFrame;
         this.detectionParams = b.detectionParams;
         this.outputOptions = b.outputOptions;
-        this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
-
     }
 
     public String getDetectionModelPath() { return detectionModelPath; }
     public String getTrackingModelPath() { return trackingModelPath; }
-    public String getTextPrompt() { return textPrompt; }
-    public boolean isTextPromptUsed() { return textPromptUsed; }
-    public List<double[]> getPositiveRois() { return positiveRois; }
-    public List<double[]> getNegativeRois() { return negativeRois; }
-    public boolean isVisualPositivePromptUsed() { return visualPositivePromptUsed; }
-    public boolean isNegativePromptUsed() { return negativePromptUsed; }
+    public List<String> getConceptLabels() { return conceptLabels; }
+    public List<String> getConceptTexts() { return conceptTexts; }
+    public List<Boolean> getConceptTextUsed() { return conceptTextUsed; }
+    public List<List<double[]>> getConceptPositiveRois() { return conceptPositiveRois; }
+    public List<List<double[]>> getConceptNegativeRois() { return conceptNegativeRois; }
+    public Map<String, Integer> getClassIdMap() { return classIdMap; }
     public int getPromptFrame() { return promptFrame; }
     public int getEndFrame() { return endFrame; }
     public int getFrameCount() { return endFrame - firstFrame + 1; }
@@ -69,24 +69,22 @@ public final class Sam3VideoRunConfig {
     public int getFirstFrame() {return firstFrame; }
     public Sam3ModelParameters getDetectionParams() { return detectionParams; }
     public DetectionUtils.OutputOptions getOutputOptions() { return outputOptions; }
-    public Map<String, Integer> getClassIdMap() { return classIdMap; }
 
     public static final class Builder {
         private String detectionModelPath;
         private String trackingModelPath;
-        private String textPrompt = "visual";
-        private boolean textPromptUsed;
-        private List<double[]> positiveRois = new ArrayList<>();
-        private List<double[]> negativeRois = new ArrayList<>();
-        private boolean visualPositivePromptUsed;
-        private boolean negativePromptUsed;
+        private List<String> conceptLabels = new ArrayList<>();
+        private List<String> conceptTexts = new ArrayList<>();
+        private List<Boolean> conceptTextUsed = new ArrayList<>();
+        private List<List<double[]>> conceptPositiveRois = new ArrayList<>();
+        private List<List<double[]>> conceptNegativeRois = new ArrayList<>();
+        private Map<String, Integer> classIdMap = new HashMap<>();
         private int firstFrame;
         private int promptFrame;
         private int endFrame;
         private boolean bidirectional;
         private Sam3ModelParameters detectionParams;
         private DetectionUtils.OutputOptions outputOptions;
-        private Map<String, Integer> classIdMap = new HashMap<>();
 
         public Builder modelPath(String modelPath) {
             this.detectionModelPath = modelPath;
@@ -100,18 +98,33 @@ public final class Sam3VideoRunConfig {
             return this;
         }
 
-        public Builder textPrompt(String textPrompt, boolean used) {
-            this.textPrompt = textPrompt;
-            this.textPromptUsed = used;
+        public Builder conceptLabels(List<String> conceptLabels) {
+            this.conceptLabels = conceptLabels != null ? conceptLabels : new ArrayList<>();
             return this;
         }
 
-        public Builder visualPrompts(List<double[]> positiveRois, List<double[]> negativeRois,
-                                     boolean positiveUsed, boolean negativeUsed) {
-            this.positiveRois = positiveRois != null ? positiveRois : new ArrayList<>();
-            this.negativeRois = negativeRois != null ? negativeRois : new ArrayList<>();
-            this.visualPositivePromptUsed = positiveUsed;
-            this.negativePromptUsed = negativeUsed;
+        public Builder conceptTexts(List<String> conceptTexts) {
+            this.conceptTexts = conceptTexts != null ? conceptTexts : new ArrayList<>();
+            return this;
+        }
+
+        public Builder conceptTextUsed(List<Boolean> conceptTextUsed) {
+            this.conceptTextUsed = conceptTextUsed != null ? conceptTextUsed : new ArrayList<>();
+            return this;
+        }
+
+        public Builder conceptPositiveRois(List<List<double[]>> conceptPositiveRois) {
+            this.conceptPositiveRois = conceptPositiveRois != null ? conceptPositiveRois : new ArrayList<>();
+            return this;
+        }
+
+        public Builder conceptNegativeRois(List<List<double[]>> conceptNegativeRois) {
+            this.conceptNegativeRois = conceptNegativeRois != null ? conceptNegativeRois : new ArrayList<>();
+            return this;
+        }
+
+        public Builder classIdMap(Map<String, Integer> classIdMap) {
+            this.classIdMap = classIdMap != null ? classIdMap : new HashMap<>();
             return this;
         }
 
@@ -141,11 +154,6 @@ public final class Sam3VideoRunConfig {
             return this;
         }
 
-        public Builder classIdMap(Map<String, Integer> classIdMap) {
-            this.classIdMap = classIdMap != null ? classIdMap : new HashMap<>();
-            return this;
-        }
-
         /**
          * Validates the configuration and builds the {@link Sam3VideoRunConfig}.
          * @throws IllegalStateException if the configuration is incomplete or inconsistent
@@ -154,9 +162,21 @@ public final class Sam3VideoRunConfig {
             Objects.requireNonNull(detectionModelPath, "modelPath must be set");
             Objects.requireNonNull(detectionParams, "detectionParams must be set");
             Objects.requireNonNull(outputOptions, "outputOptions must be set");
-            if (!textPromptUsed && !visualPositivePromptUsed) {
+            if (conceptLabels.isEmpty()) {
+                throw new IllegalStateException("At least one concept must be provided.");
+            }
+            boolean anyUsablePrompt = false;
+            for (int i = 0; i < conceptLabels.size(); i++) {
+                boolean hasPositiveVisual = i < conceptPositiveRois.size() && !conceptPositiveRois.get(i).isEmpty();
+                boolean textUsed = i < conceptTextUsed.size() && conceptTextUsed.get(i);
+                if (textUsed || hasPositiveVisual) {
+                    anyUsablePrompt = true;
+                    break;
+                }
+            }
+            if (!anyUsablePrompt) {
                 throw new IllegalStateException(
-                        "No positive prompt (neither text nor visual) provided.");
+                        "No positive prompt (neither text nor visual) provided for any concept.");
             }
             if (endFrame < promptFrame) {
                 throw new IllegalStateException(
