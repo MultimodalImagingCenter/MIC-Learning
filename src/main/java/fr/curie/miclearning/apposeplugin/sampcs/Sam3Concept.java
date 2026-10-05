@@ -21,6 +21,10 @@ public class Sam3Concept {
     // RoiManager group feeding the positive/negative visual prompt; null == that prompt is unused
     private Integer positiveVisualGroup = null;
     private Integer negativeVisualGroup = null;
+    private int positivePromptCount;
+    private int negativePromptCount;
+
+
 
     // output group id assigned to this concept's detections (independent of the input groups)
     private int outputGroup;
@@ -76,4 +80,9 @@ public class Sam3Concept {
     public boolean isNegativeGroupValid() {
         return negativeVisualGroup == null || !Objects.equals(negativeVisualGroup, positiveVisualGroup);
     }
+    public int getPositivePromptCount() {return positivePromptCount;}
+    public void setPositivePromptCount(int positivePromptCount) {this.positivePromptCount = positivePromptCount;}
+
+    public int getNegativePromptCount() {return negativePromptCount;}
+    public void setNegativePromptCount(int negativePromptCount) {this.negativePromptCount = negativePromptCount;}
 }

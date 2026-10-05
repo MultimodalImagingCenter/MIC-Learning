@@ -168,7 +168,8 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         List<Map<String, List<double[]>>> result = new ArrayList<>();
         for (Sam3Concept concept : concepts) {
             RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
-
+            concept.setPositivePromptCount(promptRois.getPositive().size());
+            concept.setNegativePromptCount(promptRois.getNegative().size());
             Map<String, List<double[]>> entry = new HashMap<>();
             entry.put("positive_rois", promptRois.getPositive());
             entry.put("negative_rois", promptRois.getNegative());
@@ -438,11 +439,19 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             StringBuilder line = new StringBuilder("  - ").append(concept.getName())
                     .append(" -> prompt:");
             if (concept.isTextPromptUsed()) line.append("  text=\"").append(concept.getTextPrompt()).append("\"");
-            if (concept.isPositiveVisualUsed()) line.append("  positive visual group=").append(concept.getPositiveVisualGroup());
-            if (concept.isNegativeVisualUsed()) line.append("  negative visual group=").append(concept.getNegativeVisualGroup());
+            if (concept.isPositiveVisualUsed()) {
+                line.append("  positive visual: group ").append(concept.getPositiveVisualGroup()).append(" (")
+                        .append(concept.getPositivePromptCount()).append(" roi").append(concept.getPositivePromptCount() > 1 ? "s)" : ")");
+            }
+            if (concept.isNegativeVisualUsed()) {
+                line.append("  negative visual group=").append(concept.getNegativeVisualGroup()).append(" (")
+                        .append(concept.getNegativePromptCount()).append(" roi").append(concept.getNegativePromptCount() > 1 ? "s)" : ")");
+            }
             line.append(" -> output group: ").append(concept.getOutputGroup());
             IJ.log(line.toString());
         }
+
+
         IJ.log("----------------------");
     }
 }
