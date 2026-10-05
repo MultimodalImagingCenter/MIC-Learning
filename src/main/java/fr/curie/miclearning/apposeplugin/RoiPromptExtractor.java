@@ -15,7 +15,8 @@ public class RoiPromptExtractor {
     /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
     // TODO : extract a rectangle from any ROI type ??
     public static boolean isUsableRoiType(Roi roi) {
-        return roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT;
+        //return roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT;
+        return roi.isArea() || roi.getType() == Roi.POINT;
     }
 
     /**
@@ -154,7 +155,8 @@ public class RoiPromptExtractor {
             boolean isNegativeGroup = negativePromptUsed && groupId == negativeGroupId;
             if (!isPositiveGroup && !isNegativeGroup) continue;
 
-            if (roi.getType() == Roi.RECTANGLE) {
+            //if (roi.getType() == Roi.RECTANGLE) {
+            if (roi.isArea()){
                 Rectangle rect = roi.getBounds();
                 double[] coord = {rect.x, rect.y, rect.width, rect.height};
                 if (isPositiveGroup) positive.add(coord);
