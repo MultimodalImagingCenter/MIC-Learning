@@ -20,7 +20,12 @@ import torch
 import cv2
 import numpy as np
 from muggled_sam.make_sam import make_sam_from_state_dict
+import sys
 
+log_to_java(f"Python : {sys.executable}")
+log_to_java(f"Torch : {torch.__version__}")
+log_to_java(f"CUDA available : {torch.cuda.is_available()}")
+log_to_java(f"CUDA version : {torch.version.cuda}")
 
 # ============================================================
 # Small geometry helpers

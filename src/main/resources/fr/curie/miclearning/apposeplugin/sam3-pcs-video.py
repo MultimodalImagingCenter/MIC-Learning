@@ -23,7 +23,12 @@ from collections import defaultdict
 from muggled_sam.make_sam import make_sam_from_state_dict
 from muggled_sam.demo_helpers.video_data_storage import SAMVideoMemoryBank
 from muggled_sam.demo_helpers.bounding_boxes import get_2box_iou
+import sys
 
+log_to_java(f"Python : {sys.executable}")
+log_to_java(f"Torch : {torch.__version__}")
+log_to_java(f"CUDA available : {torch.cuda.is_available()}")
+log_to_java(f"CUDA version : {torch.version.cuda}")
 
 # ============================================================
 # Small geometry helpers
