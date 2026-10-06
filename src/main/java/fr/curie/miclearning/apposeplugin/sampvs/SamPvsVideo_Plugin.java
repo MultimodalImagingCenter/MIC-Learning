@@ -106,9 +106,10 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
         long startTime = System.nanoTime();
 
-        // --- 3. Build the sparse per-frame, per-object prompts, and the run config ---
+        // --- 3. Build the sparse per-frame per-object prompts, and the run config ---
+        // the objects are the ones defined by user in the table/via macro
         // each object contributes a prompt on every frame (up to chosenLastFrame) where it has a
-        // usable positive-group ROI - the first such frame starts tracking it, later ones refine it.
+        // usable positive-group ROI (the first such frame starts tracking it, later ones refine it)
         Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts = new TreeMap<>();
         List<String> objectNames = new ArrayList<>();
         Map<String, Integer> classIdMap = new HashMap<>();

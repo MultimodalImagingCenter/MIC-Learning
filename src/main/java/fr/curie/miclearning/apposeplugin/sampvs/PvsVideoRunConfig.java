@@ -22,7 +22,7 @@ public final class PvsVideoRunConfig {
 
     private final String modelPath;
 
-    private final List<String> objectNames; // row order, index-aligned with the object index used in framePrompts and echoed back by python
+    private final List<String> objectNames; // name given by user to 1 object - row order, index-aligned with the object index used in framePrompts
     private final Map<String, Integer> classIdMap; // object name -> output RoiManager group id
 
     // 0-indexed frame -> 0-indexed object index -> the prompt(s) defined on that frame for that object

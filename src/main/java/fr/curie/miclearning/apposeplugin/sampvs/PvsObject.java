@@ -14,6 +14,7 @@ public class PvsObject {
     private final int id;
 
     // name given by the user, by default id, should be unique
+    // does not impact the segmentation/tracking
     private String name;
 
     // RoiManager group for the positive/negative visual prompt. null if unused

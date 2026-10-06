@@ -1,6 +1,6 @@
 [workspace]
 channels = ["conda-forge"]
-name = "SAM_muggled_env"
+name = "SAM_muggled_env_2"
 platforms = ["linux-64", "win-64"]
 
 [tasks]

@@ -20,12 +20,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 
 /**
- * Collect per-frame tracking results from a {@link BlockingQueue}, convert them into
- * {@link ProcessedDetection}, and save them into a {@link MultiFrameDataManager}.
+ * Collect per-frame tracking results from a {@link BlockingQueue},
+ * convert them into {@link ProcessedDetection},
+ * and save them into a {@link MultiFrameDataManager}.
  * <p>
- * Simpler than {@code VideoPcsResultsConsumer}: object identity IS the class here (the
- * Java-assigned object index echoed back as {@code object_ids} resolves directly to a name via
- * {@link #objectNames}) - there is no separate concept/class id to resolve.
+ * Simpler than {@code VideoPcsResultsConsumer}: here object identity is the class
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
