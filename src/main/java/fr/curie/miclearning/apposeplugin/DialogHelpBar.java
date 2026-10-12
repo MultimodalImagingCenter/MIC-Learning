@@ -59,7 +59,7 @@ public class DialogHelpBar {
     private static final String PREF_MODE_KEY = "miclearning.helpbarmode";
     private static final HelpBarMode DEFAULT_MODE = HelpBarMode.HELP;
 
-    private static final int VISIBLE_LINES = 2;
+    private static final int VISIBLE_LINES = 3;
     private static final int DEFAULT_BASE_FONT_SIZE = 12; // fallback
     private static final float HELP_BAR_FONT_SCALE = 0.9f; // relative to the dialog's own  font
 

@@ -19,9 +19,10 @@ public class PvsObjectTableModel extends AbstractTableModel {
     public static final int COL_POSITIVE_VISUAL = 1;
     public static final int COL_NEGATIVE_VISUAL = 2;
     public static final int COL_OUTPUT_GROUP = 3;
+    public static final int COL_MODE = 4;
 
     private static final String[] COLUMN_NAMES = {
-            "Output name", "Positive visual prompt", "Negative visual prompt", "Output value"
+            "Output name", "Positive visual prompt", "Negative visual prompt", "Output value", "Mode"
     };
 
     private static final int MAX_GROUP_ID = 255;
@@ -55,6 +56,8 @@ public class PvsObjectTableModel extends AbstractTableModel {
             case COL_NEGATIVE_VISUAL:
             case COL_OUTPUT_GROUP:
                 return Integer.class;
+            case COL_MODE:
+                return PvsObject.Mode.class;
             default:
                 return String.class;
         }
@@ -76,6 +79,7 @@ public class PvsObjectTableModel extends AbstractTableModel {
             case COL_POSITIVE_VISUAL: return object.getPositiveVisualGroup();
             case COL_NEGATIVE_VISUAL: return object.getNegativeVisualGroup();
             case COL_OUTPUT_GROUP: return object.getOutputGroup();
+            case COL_MODE: return object.getMode();
             default: throw new IllegalArgumentException("Unknown column: " + columnIndex);
         }
     }
@@ -114,6 +118,9 @@ public class PvsObjectTableModel extends AbstractTableModel {
                 break;
             case COL_OUTPUT_GROUP:
                 object.setOutputGroup(clampGroupId((Integer) value, object.getOutputGroup()));
+                break;
+            case COL_MODE:
+                object.setMode((PvsObject.Mode) value);
                 break;
             default:
                 throw new IllegalArgumentException("Unknown column: " + columnIndex);

@@ -107,34 +107,18 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
         long startTime = System.nanoTime();
 
-        // --- 3. Build the sparse per-frame per-object prompts, and the run config ---
-        // the objects are the ones defined by user in the table/via macro
-        // each object contributes a prompt on every frame (up to chosenLastFrame) where it has a
-        // usable positive-group ROI (the first such frame starts tracking it, later ones refine it)
-        Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts = new TreeMap<>();
-        List<String> objectNames = new ArrayList<>();
-        Map<String, Integer> classIdMap = new HashMap<>();
-
+        // --- 3. Resolve the table rows into actually-tracked objects, build the sparse
+        // per-frame per-object prompts, and the run config ---
+        // an OBJECT-mode row is resolved as one tracked object, refined by every one of
+        // its positive-group ROIs on every frame. A CLASS-mode row is resolved into one tracked
+        // object per distinct ROI name seen in its positive group
         Roi[] roisForRun = roiManager.getRoisAsArray(); // all ROIs in the RoiManager when the user presses "ok"
+        Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts = new TreeMap<>();
+        List<ResolvedObject> resolved = resolveObjects(roisForRun, framePrompts);
 
-        for (int objIndex = 0; objIndex < objects.size(); objIndex++) {
-            PvsObject object = objects.get(objIndex);
-            objectNames.add(object.getName());
-            classIdMap.put(object.getName(), object.getOutputGroup());
-
-            if (!object.isPositiveVisualUsed()) continue;
-
-            for (int frame = 1; frame <= chosenLastFrame; frame++) {
-                List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
-                if (roisAtFrame.isEmpty()) continue;
-                RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
-                        roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup());
-                if (promptRois.getPositive().isEmpty()) continue; // no prompt for this object on this frame
-                framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
-                object.setPositivePromptCount(object.getPositivePromptCount() + promptRois.getPositive().size());
-                object.setNegativePromptCount(object.getNegativePromptCount() + promptRois.getNegative().size());
-            }
-        }
+        List<String> objectNames = resolved.stream().map(r -> r.name).collect(Collectors.toList());
+        Map<String, Integer> classIdMap = new HashMap<>();
+        for (ResolvedObject r : resolved) classIdMap.put(r.name, r.outputGroup);
 
         int posLastFrame = chosenLastFrame - 1; // 0-indexed, inclusive
         // frames before the earliest object prompt are ignored entirely - not sliced into the
@@ -163,7 +147,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         // record macro, print parameters in log
         recordInMacro();
         IJ.log("\n   --- Starting SAM Promptable Visual Segmentation on video --- ");
-        printParameters(config);
+        printParameters(config, resolved);
 
         // --- 4. Run ---
         runPvs(config, mfdManager, startTime);
@@ -275,6 +259,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         String[] namesArr = splitAligned(Macro.getValue(options, "names", ""), outputGroupsArr.length);
         String[] positiveVisualArr = splitAligned(Macro.getValue(options, "positive_visual_groups", ""), outputGroupsArr.length);
         String[] negativeVisualArr = splitAligned(Macro.getValue(options, "negative_visual_groups", ""), outputGroupsArr.length);
+        String[] modesArr = splitAligned(Macro.getValue(options, "modes", ""), outputGroupsArr.length);
 
         objects = new ArrayList<>();
         Set<String> usedNames = new HashSet<>();
@@ -284,6 +269,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
             object.setPositiveVisualGroup(parseOptionalInt(positiveVisualArr[i]));
             object.setNegativeVisualGroup(parseOptionalInt(negativeVisualArr[i]));
+            object.setMode(parseMode(modesArr[i]));
 
             String requestedName = namesArr[i].trim();
             object.setName(uniqueName(requestedName.isEmpty() ? object.getName() : requestedName, usedNames));
@@ -340,6 +326,13 @@ public class SamPvsVideo_Plugin implements PlugIn {
         return trimmed.isEmpty() ? null : Integer.parseInt(trimmed);
     }
 
+    /** Parses a {@link PvsObject.Mode} name (case-insensitive), defaulting to {@code OBJECT} when blank/unrecognized. */
+    private PvsObject.Mode parseMode(String text) {
+        String trimmed = text == null ? "" : text.trim();
+        if (trimmed.equalsIgnoreCase("class")) return PvsObject.Mode.CLASS;
+        return PvsObject.Mode.OBJECT;
+    }
+
     /** {@code base} trimmed, with "-1", "-2", ... appended until it is absent from {@code taken}. */
     private String uniqueName(String base, Set<String> taken) {
         String candidate = base == null ? "" : base.trim();
@@ -385,6 +378,9 @@ public class SamPvsVideo_Plugin implements PlugIn {
                 .collect(Collectors.joining(","));
         Recorder.recordOption("negative_visual_groups", negativeVisualGroups);
 
+        String modes = objects.stream().map(o -> o.getMode().name().toLowerCase()).collect(Collectors.joining(","));
+        Recorder.recordOption("modes", modes);
+
         Recorder.recordOption("last_frame", String.valueOf(chosenLastFrame));
 
         Recorder.recordOption("mask_threshold", String.valueOf(modelParams.getMaskScoreThreshold()));
@@ -397,31 +393,137 @@ public class SamPvsVideo_Plugin implements PlugIn {
         if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
     }
 
-    private void printParameters(PvsVideoRunConfig config) {
+    /**
+     * Resolves the table rows into the objects actually tracked, fills {@code framePrompts)
+     * <p>
+     * An {@link PvsObject.Mode#OBJECT} row resolves to exactly one tracked object: every usable
+     * ROI in its positive group, on every processed frame, refines that same objec
+     * <p>
+     * A {@link PvsObject.Mode#CLASS} row resolves to one tracked object per distinct ROI name
+     * seen in its positive group, named {@code "<row name>-<n>"} in order of first appearance
+     * (n = 1, 2, ...). A later ROI only refines one of these if it reuses that exact name - any
+     * other name starts a new object.
+     */
+    private List<ResolvedObject> resolveObjects(Roi[] roisForRun, Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+        List<ResolvedObject> resolved = new ArrayList<>();
+        for (PvsObject object : objects) {
+            if (!object.isPositiveVisualUsed()) {
+                resolved.add(new ResolvedObject(object));
+            } else if (object.getMode() == PvsObject.Mode.CLASS) {
+                resolveClassRow(object, roisForRun, resolved, framePrompts);
+            } else {
+                resolveObjectRow(object, roisForRun, resolved, framePrompts);
+            }
+        }
+        return resolved;
+    }
+
+    private void resolveObjectRow(PvsObject object, Roi[] roisForRun, List<ResolvedObject> resolved,
+                                   Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+        int objIndex = resolved.size();
+        ResolvedObject resolvedObject = new ResolvedObject(object);
+        resolved.add(resolvedObject);
+
+        for (int frame = 1; frame <= chosenLastFrame; frame++) {
+            List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
+            if (roisAtFrame.isEmpty()) continue;
+            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
+                    roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup());
+            if (promptRois.getPositive().isEmpty()) continue; // no prompt for this object on this frame
+            framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
+            resolvedObject.addPromptCounts(promptRois);
+        }
+    }
+
+    private void resolveClassRow(PvsObject object, Roi[] roisForRun, List<ResolvedObject> resolved,
+                                  Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+        Map<String, Integer> objIndexByRoiName = new HashMap<>();
+
+        for (int frame = 1; frame <= chosenLastFrame; frame++) {
+            List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
+            if (roisAtFrame.isEmpty()) continue;
+
+            // negative prompt is shared by every instance of this class on this frame, not matched by name
+            List<double[]> sharedNegative = roiPromptExtractor
+                    .buildPromptRois(roisAtFrame, null, object.getNegativeVisualGroup()).getNegative();
+
+            for (Roi roi : roisAtFrame) {
+                if (roi.getGroup() != object.getPositiveVisualGroup()) continue;
+                RoiPromptExtractor.PromptRois onlyThisRoi = roiPromptExtractor.buildPromptRois(
+                        Collections.singletonList(roi), object.getPositiveVisualGroup(), null);
+                if (onlyThisRoi.getPositive().isEmpty()) continue;
+
+                String roiName = roi.getName();
+                Integer objIndex = objIndexByRoiName.get(roiName);
+                if (objIndex == null) {
+                    objIndex = resolved.size();
+                    String instanceName = object.getName() + "-" + (objIndexByRoiName.size() + 1);
+                    resolved.add(new ResolvedObject(instanceName, object.getOutputGroup(),
+                            object.getPositiveVisualGroup(), object.getNegativeVisualGroup()));
+                    objIndexByRoiName.put(roiName, objIndex);
+                }
+
+                RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.combinePromptRois(onlyThisRoi.getPositive(), sharedNegative);
+                framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
+                resolved.get(objIndex).addPromptCounts(promptRois);
+            }
+        }
+    }
+
+    private void printParameters(PvsVideoRunConfig config, List<ResolvedObject> resolved) {
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + config.getModelPath());
         IJ.log("number of frame(s) to process: " + config.getFrameCount()
                 + " (frame " + (config.getFirstFrame() + 1) + " to " + (config.getLastFrame() + 1) + ")");
-        IJ.log("number of object(s): " + config.getObjectNames().size());
-        for (int i = 0; i < config.getObjectNames().size(); i++) {
-            String name = config.getObjectNames().get(i);
+        IJ.log("number of object(s): " + resolved.size());
+        for (int i = 0; i < resolved.size(); i++) {
             int objIndex = i;
-            PvsObject object = objects.get(objIndex);
+            ResolvedObject object = resolved.get(objIndex);
             long promptFrameCount = config.getFramePrompts().values().stream().filter(m -> m.containsKey(objIndex)).count();
-            StringBuilder line = new StringBuilder("  - ").append(name)
+            StringBuilder line = new StringBuilder("  - ").append(object.name)
                     .append(" (object ").append(objIndex).append(") ")
-                    .append("-> ").append(promptFrameCount).append(" prompt frame(s)");
+                    .append("-> ").append(promptFrameCount).append(" prompt frame").append(promptFrameCount>1?"s":"");
 
-            line.append(" - positive group: ").append(object.getPositiveVisualGroup()).append(" (")
-                    .append(object.getPositivePromptCount()).append(" roi").append(object.getPositivePromptCount() > 1 ? "s)" : ")");
-            if (object.isNegativeVisualUsed()) line.append(", negative group: ").append(object.getNegativeVisualGroup()).append(" (")
-                    .append(object.getNegativePromptCount()).append(" roi").append(object.getNegativePromptCount() > 1 ? "s)" : ")");
-            line.append("-> output group: ").append(config.getClassIdMap().get(name));
+            line.append(" - positive group: ").append(object.positiveGroup).append(" (")
+                    .append(object.positivePromptCount).append(" roi").append(object.positivePromptCount > 1 ? "s)" : ")");
+            if (object.negativeGroup != null) line.append(", negative group: ").append(object.negativeGroup).append(" (")
+                    .append(object.negativePromptCount).append(" roi").append(object.negativePromptCount > 1 ? "s)" : ")");
+            line.append(" -> output group: ").append(object.outputGroup);
             IJ.log(line.toString());
 
         }
         IJ.log("----------------------");
+    }
+
+    /**
+     * One object actually tracked during a run: either a table row 1:1 (OBJECT mode, or a row
+     * with no positive prompt), or one of the several objects a CLASS-mode row expands into (one
+     * per distinct ROI name in its positive group).
+     */
+    private static final class ResolvedObject {
+        final String name;
+        final int outputGroup;
+        final Integer positiveGroup;
+        final Integer negativeGroup;
+        int positivePromptCount = 0;
+        int negativePromptCount = 0;
+
+        ResolvedObject(PvsObject source) {
+            this(source.getName(), source.getOutputGroup(), source.getPositiveVisualGroup(), source.getNegativeVisualGroup());
+        }
+
+        ResolvedObject(String name, int outputGroup, Integer positiveGroup, Integer negativeGroup) {
+            this.name = name;
+            this.outputGroup = outputGroup;
+            this.positiveGroup = positiveGroup;
+            this.negativeGroup = negativeGroup;
+        }
+
+        void addPromptCounts(RoiPromptExtractor.PromptRois promptRois) {
+            positivePromptCount += promptRois.getPositive().size();
+            negativePromptCount += promptRois.getNegative().size();
+        }
     }
 
 }

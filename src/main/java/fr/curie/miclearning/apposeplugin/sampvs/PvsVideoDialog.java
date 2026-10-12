@@ -179,11 +179,14 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         JLabel titleLabel = createSectionTitle("Objects");
         helpBar.attachHelp(titleLabel,
                 "An object = one specific instance to segment and track. Define it with " +
-                        "\n positive visual prompt(s) (box and/or point ROI(s) in the ROI Manager).");
+                        "\n positive visual prompt(s) (box and/or point ROI(s) in the ROI Manager). " +
+                        "\nIn \"Class\" mode, every ROI in the positive group is instead tracked as its own " +
+                        "\nindependent object (see the Mode column).");
         panel.add(titleLabel, BorderLayout.NORTH);
 
         table.setDefaultEditor(String.class, createSelectAllTextEditor());
         table.setDefaultEditor(Integer.class, createSelectAllIntegerEditor());
+        table.setDefaultEditor(PvsObject.Mode.class, new DefaultCellEditor(new JComboBox<>(PvsObject.Mode.values())));
 
         // Name column : greyed (but still editable) while no ROI output is selected
         table.getColumnModel().getColumn(PvsObjectTableModel.COL_NAME).setCellRenderer(new DefaultTableCellRenderer() {
@@ -217,6 +220,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         table.getColumnModel().getColumn(PvsObjectTableModel.COL_POSITIVE_VISUAL).setPreferredWidth(scaled(220));
         table.getColumnModel().getColumn(PvsObjectTableModel.COL_NEGATIVE_VISUAL).setPreferredWidth(scaled(220));
         table.getColumnModel().getColumn(PvsObjectTableModel.COL_OUTPUT_GROUP).setPreferredWidth(scaled(90));
+        table.getColumnModel().getColumn(PvsObjectTableModel.COL_MODE).setPreferredWidth(scaled(90));
         table.setRowHeight(scaled(22));
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 
@@ -246,6 +250,11 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                     break;
                 case PvsObjectTableModel.COL_OUTPUT_GROUP:
                     text = "Id tagging this object's outputs: the ROI group for output ROIs." + roiGroupNotUsed;
+                    break;
+                case PvsObjectTableModel.COL_MODE:
+                    text = "Object: every ROI in the positive group is part of the same tracked object (default)."
+                            + "\nClass: each ROI in the positive group becomes its own independently-tracked object "
+                            + "\nA later ROI refines a specific instance only if it has that instance's exact ROI name; ";
                     break;
                 default:
                     return null;
@@ -512,14 +521,15 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         }
         Set<String> seenNames = new HashSet<>();
         for (PvsObject object : currentObjects) {
+            String label = object.getMode() == PvsObject.Mode.CLASS ? "Class" : "Object";
             if (!object.hasAnyPositivePrompt()) {
-                errors.add("Object " + object.getName() + ": needs a positive visual prompt.");
+                errors.add(label + " " + object.getName() + ": needs a positive visual prompt.");
             }
             if (!object.isNegativeGroupValid()) {
-                errors.add("Object " + object.getName() + ": negative visual can't use the same group as the positive visual.");
+                errors.add(label + " " + object.getName() + ": negative visual can't use the same group as the positive visual.");
             }
             if (!seenNames.add(object.getName())) {
-                errors.add("Duplicate object name: " + object.getName());
+                errors.add("Duplicate name: " + object.getName());
             }
         }
         return errors;

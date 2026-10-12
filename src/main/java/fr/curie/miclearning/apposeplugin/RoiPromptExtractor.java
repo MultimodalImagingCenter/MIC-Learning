@@ -16,7 +16,7 @@ public class RoiPromptExtractor {
 
     /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
     public static boolean isUsableRoiType(Roi roi) {
-        return (roi.isArea() )|| roi.getType() == Roi.POINT;
+        return (roi.isArea() && roi.getType()!= Roi.COMPOSITE)|| roi.getType() == Roi.POINT; // composite Roi are not accepted as prompts
     }
 
     /**
@@ -222,6 +222,11 @@ public class RoiPromptExtractor {
         }
 
         return new PromptRois(positive, negative);
+    }
+
+    /** Combines independently-computed positive/negative coordinate lists into one {@link PromptRois}. */
+    public PromptRois combinePromptRois(List<double[]> positive, List<double[]> negative) {
+        return new PromptRois(new ArrayList<>(positive), new ArrayList<>(negative));
     }
 
 

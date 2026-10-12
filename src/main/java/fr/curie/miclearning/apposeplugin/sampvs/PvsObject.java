@@ -3,12 +3,44 @@ package fr.curie.miclearning.apposeplugin.sampvs;
 import java.util.Objects;
 
 /**
- * One row of the object table for {@link SamPvsVideo_Plugin}: a single object to segment and
- * track, defined by visual prompts
- * - a mandatory positive visual prompt (box and/or point ROIs, possibly on several frames)
- * - and an optional point-only negative prompt
+ * One row of the object table for {@link SamPvsVideo_Plugin} an object/group of object to segment and
+ * track, defined by visual prompts:
+ * <ul>
+ *   <li>a mandatory positive visual prompt (box and/or point ROIs, possibly on several frames)</li>
+ *   <li>and an optional point-only negative prompt</li>
+ * </ul>
+ * <p>
+ * Can be of 2 types:
+ * <ul>
+ *   <li>a single object: on a single frame, all ROIs of the group are resolved as parts of the same object ;
+ *    across multiple frames, all ROIs of the same group are instances of the same object.</li>
+ *   <li>a class: on a single frame, all Rois of the group are resolved as independent objects :
+ *   across multiple frames, all ROIs with the same name and group are instances of the same object.</li>
+ *   TODO: add a third type, objects defined by 1 single Roi (regardless of group)
+ * </ul>
  */
 public class PvsObject {
+
+    /**
+     * Whether this row's positive-group ROIs are resolved as one tracked object ({@link #OBJECT},)
+     * or as one independently-tracked object per distinct ROI name ({@link #CLASS}.
+     * In {@link #CLASS} mode, a later ROI refines a specific earlier
+     * instance only if it reuses that instance's exact ROI name; any other name starts a new one.
+     */
+    public enum Mode {
+        OBJECT("Object"), CLASS("Class");
+
+        private final String label;
+
+        Mode(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
 
     /* Stable identifier, assigned once by the table model, not displayed in the object table */
     private final int id;
@@ -17,11 +49,11 @@ public class PvsObject {
     // does not impact the segmentation/tracking
     private String name;
 
+    private Mode mode = Mode.OBJECT;
+
     // RoiManager group for the positive/negative visual prompt. null if unused
     private Integer positiveVisualGroup = null;
     private Integer negativeVisualGroup = null;
-    private int positivePromptCount=0;
-    private int negativePromptCount=0;
 
     // output group id assigned to this object's detections, by default input group
     private int outputGroup;
@@ -42,6 +74,9 @@ public class PvsObject {
 
     public String getName() {return name;}
     public void setName(String name) {this.name = name;}
+
+    public Mode getMode() {return mode;}
+    public void setMode(Mode mode) {this.mode = mode;}
 
     public Integer getPositiveVisualGroup() {return positiveVisualGroup;}
     public void setPositiveVisualGroup(Integer positiveVisualGroup) {this.positiveVisualGroup = positiveVisualGroup;}
@@ -73,10 +108,4 @@ public class PvsObject {
     public boolean isNegativeGroupValid() {
         return negativeVisualGroup == null || !Objects.equals(negativeVisualGroup, positiveVisualGroup);
     }
-
-    public int getPositivePromptCount() {return positivePromptCount;}
-    public void setPositivePromptCount(int positivePromptCount) {this.positivePromptCount = positivePromptCount;}
-
-    public int getNegativePromptCount() {return negativePromptCount;}
-    public void setNegativePromptCount(int negativePromptCount) {this.negativePromptCount = negativePromptCount;}
 }
