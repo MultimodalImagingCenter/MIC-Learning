@@ -43,7 +43,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     private String modelPath;
     private Sam3ModelParameters detectionParams;
     private DetectionMode stackMode;
-    private List<Sam3Concept> concepts;
+    private List<PcsConcept> concepts;
 
     private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
 
@@ -110,7 +110,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         Map<String, Integer> classIdMap = new HashMap<>();
 
         // register each concept
-        for (Sam3Concept concept : concepts) {
+        for (PcsConcept concept : concepts) {
             conceptLabels.add(concept.getName());
             conceptTexts.add(concept.isTextPromptUsed() ? concept.getTextPrompt() : "visual");
             conceptTextUsed.add(concept.isTextPromptUsed());
@@ -166,10 +166,11 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     /** Resolves each concept's positive/negative visual prompt from a list of ROI (from a specific frame). */
     private List<Map<String, List<double[]>>> buildFrameConceptPrompts(List<Roi> roisAtFrame) {
         List<Map<String, List<double[]>>> result = new ArrayList<>();
-        for (Sam3Concept concept : concepts) {
+        for (PcsConcept concept : concepts) {
             RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
             concept.setPositivePromptCount(promptRois.getPositive().size());
             concept.setNegativePromptCount(promptRois.getNegative().size());
+
             Map<String, List<double[]>> entry = new HashMap<>();
             entry.put("positive_rois", promptRois.getPositive());
             entry.put("negative_rois", promptRois.getNegative());
@@ -310,7 +311,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         Set<String> usedNames = new HashSet<>();
         for (int i = 0; i < outputGroupsArr.length; i++) {
             int outputGroup = Integer.parseInt(outputGroupsArr[i].trim());
-            Sam3Concept concept = new Sam3Concept(i + 1, outputGroup);
+            PcsConcept concept = new PcsConcept(i + 1, outputGroup);
 
             concept.setTextPrompt(textsArr[i].trim());
             concept.setPositiveVisualGroup(parseOptionalInt(positiveVisualArr[i]));
@@ -398,7 +399,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         String outputGroups = concepts.stream().map(c -> String.valueOf(c.getOutputGroup())).collect(Collectors.joining(","));
         Recorder.recordOption("output_groups", outputGroups);
 
-        String names = concepts.stream().map(Sam3Concept::getName).collect(Collectors.joining(","));
+        String names = concepts.stream().map(PcsConcept::getName).collect(Collectors.joining(","));
         Recorder.recordOption("names", names);
 
         String texts = concepts.stream().map(c -> c.isTextPromptUsed() ? c.getTextPrompt() : "").collect(Collectors.joining(","));
@@ -435,7 +436,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         IJ.log("confidence threshold: " + detectionParams.getConfidenceThreshold());
         IJ.log("mask score threshold: " + detectionParams.getMaskScoreThreshold());
         IJ.log("number of concept(s): " + concepts.size());
-        for (Sam3Concept concept : concepts) {
+        for (PcsConcept concept : concepts) {
             StringBuilder line = new StringBuilder("  - ").append(concept.getName())
                     .append(" -> prompt:");
             if (concept.isTextPromptUsed()) line.append("  text=\"").append(concept.getTextPrompt()).append("\"");
@@ -450,8 +451,6 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             line.append(" -> output group: ").append(concept.getOutputGroup());
             IJ.log(line.toString());
         }
-
-
         IJ.log("----------------------");
     }
 }

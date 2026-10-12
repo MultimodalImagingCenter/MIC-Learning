@@ -1,6 +1,8 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
+import fr.curie.miclearning.apposeplugin.DialogUiSupport;
+import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
 import ij.IJ;
 import ij.Prefs;
 
@@ -76,9 +78,9 @@ class Sam3AdvancedParametersDialog extends JDialog {
         content.add(buildButtonsPanel());
 
         // honor the same interface-scale preference as Sam3ConceptDialogBase's dialogs
-        double uiScale = Prefs.get(Sam3ConceptDialogBase.PREF_UI_SCALE_KEY, Sam3ConceptDialogBase.DEFAULT_UI_SCALE);
+        double uiScale = Prefs.get(DialogUiSupport.PREF_UI_SCALE_KEY, DialogUiSupport.DEFAULT_UI_SCALE);
         if (uiScale != 1.0) {
-            Sam3ConceptDialogBase.rescaleFonts(getContentPane(), uiScale);
+            DialogUiSupport.rescaleFonts(getContentPane(), uiScale);
             helpBar.rescaleFont(uiScale);
         }
 
@@ -89,13 +91,9 @@ class Sam3AdvancedParametersDialog extends JDialog {
         setLocationRelativeTo(owner);
     }
 
-    /** Section-title style matching {@link Sam3ConceptDialogBase#createSectionTitle} */
+    /** Section-title style matching {@link DialogUiSupport#createSectionTitle} */
     private JLabel sectionTitle(String text) {
-        JLabel label = new JLabel(text);
-        Font base = label.getFont();
-        label.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1f));
-        label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        return label;
+        return DialogUiSupport.createSectionTitle(text);
     }
 
     private void addRow(JPanel panel, GridBagConstraints c, int row, DialogHelpBar helpBar,
@@ -123,7 +121,7 @@ class Sam3AdvancedParametersDialog extends JDialog {
         c.fill = GridBagConstraints.HORIZONTAL;
 
         String defaultPath = trackingModelPath != null ? trackingModelPath
-                : Sam3Dialogs.resolveDefaultModelPath(PREF_LAST_TRACK_MODEL_KEY);
+                : ModelPathDialogs.resolveDefaultModelPath(PREF_LAST_TRACK_MODEL_KEY, "sam3.pt");
         trackingModelPathField = new JTextField(defaultPath, 40);
         String trackingModelHint = "Path to a SAM2 or SAM3 model checkpoint used for tracking instead of the detection model.\n"
                 + "Leave empty to use the detection model for both.";
@@ -226,7 +224,7 @@ class Sam3AdvancedParametersDialog extends JDialog {
 
     private void onOk() {
         if (includeTracking) {
-            String validated = Sam3Dialogs.validateAndSaveModelPath(trackingModelPathField.getText().trim(), PREF_LAST_TRACK_MODEL_KEY);
+            String validated = ModelPathDialogs.validateAndSaveModelPath(trackingModelPathField.getText().trim(), PREF_LAST_TRACK_MODEL_KEY);
             if (validated != null) trackingModelPath = validated;
         }
 

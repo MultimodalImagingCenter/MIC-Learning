@@ -1,5 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import fr.curie.miclearning.apposeplugin.RoiGroupOption;
+
 import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JTable;
@@ -31,7 +33,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
 
     private final JComboBox<String> comboBox;
     private final boolean excludeOwnRowPositiveGroup; // true for the "negative prompt"
-    private List<Sam3GroupOption> availableGroups = new ArrayList<>();
+    private List<RoiGroupOption> availableGroups = new ArrayList<>();
     private Integer editingValue; // cell value when editing started (fallback)
 
     /**
@@ -56,7 +58,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
     }
 
     /** Replaces the candidate groups shown in the dropdown */
-    public void setAvailableGroups(List<Sam3GroupOption> options) {
+    public void setAvailableGroups(List<RoiGroupOption> options) {
         this.availableGroups = new ArrayList<>(options);
     }
 
@@ -72,7 +74,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
 
         comboBox.removeAllItems();
         comboBox.addItem(NOT_USED_LABEL);
-        for (Sam3GroupOption option : availableGroups) {
+        for (RoiGroupOption option : availableGroups) {
             if (excludedGroupId != null && option.getGroupId() == excludedGroupId) continue;
             comboBox.addItem(option.toString());
         }
@@ -100,7 +102,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
     }
 
     private boolean isAvailableGroup(int groupId) {
-        for (Sam3GroupOption option : availableGroups) {
+        for (RoiGroupOption option : availableGroups) {
             if (option.getGroupId() == groupId) return true;
         }
         return false;
@@ -109,7 +111,7 @@ public class Sam3GroupIdCellEditor extends DefaultCellEditor {
     /** Formats {@code groupId} for display: the full option label if known, {@value #NOT_USED_LABEL} if null. */
     String findLabel(Integer groupId) {
         if (groupId == null) return NOT_USED_LABEL;
-        for (Sam3GroupOption option : availableGroups) {
+        for (RoiGroupOption option : availableGroups) {
             if (option.getGroupId() == groupId) return option.toString();
         }
         return String.valueOf(groupId);

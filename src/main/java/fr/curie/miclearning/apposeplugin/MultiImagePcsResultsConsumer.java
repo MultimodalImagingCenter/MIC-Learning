@@ -1,14 +1,15 @@
 package fr.curie.miclearning.apposeplugin;
 
-import ai.djl.modality.cv.output.BoundingBox;
-import fr.curie.miclearning.tools.detection.*;
+import fr.curie.miclearning.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
 import org.apposed.appose.NDArray;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
 
 /**
  * Collect per-frame detection results from a {@link BlockingQueue}
@@ -17,97 +18,48 @@ import java.util.concurrent.Callable;
  * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
-public class MultiImagePcsResultsConsumer implements Callable<Void> {
-    // signal pushed onto the queue exactly once, on every terminal python task outcome. */
-    public static final Map<String, Object> END_SIGNAL = Collections.unmodifiableMap(new HashMap<>());
+public class MultiImagePcsResultsConsumer extends AbstractResultsConsumer {
 
-    private final BlockingQueue<Map<String, Object>> resultsQueue;
     private final Map<Integer, List<ProcessedDetection>> detectionsByFrame;
-    private final Map<String, Integer> classIdMap;
-    private final List<String> textPrompts;
-    private final ImagePlus imp;
 
     public MultiImagePcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, Map<Integer, List<ProcessedDetection>> detectionsByFrame,
                                         Map<String, Integer> classIdMap, List<String> textPrompts, ImagePlus imp) {
-        this.resultsQueue = resultsQueue;
+        super(resultsQueue, classIdMap, textPrompts, imp);
         this.detectionsByFrame = detectionsByFrame;
-        this.classIdMap = classIdMap;
-        this.textPrompts = textPrompts;
-        this.imp = imp;
     }
 
     public MultiImagePcsResultsConsumer(BlockingQueue<Map<String, Object>> resultsQueue, Map<Integer, List<ProcessedDetection>> detectionsByFrame,
                                         Map<String, Integer> classIdMap, String textPrompt, ImagePlus imp) {
-        this.resultsQueue = resultsQueue;
+        super(resultsQueue, classIdMap, singleton(textPrompt), imp);
         this.detectionsByFrame = detectionsByFrame;
-        this.classIdMap = classIdMap;
-        this.textPrompts = new ArrayList<>(1);
-        this.textPrompts.add(textPrompt);
-        this.imp = imp;
+    }
+
+    private static List<String> singleton(String textPrompt) {
+        List<String> textPrompts = new ArrayList<>(1);
+        textPrompts.add(textPrompt);
+        return textPrompts;
     }
 
     @Override
-    public Void call() throws InterruptedException {
-        while (true) {
-            Map<String, Object> info = resultsQueue.take();
-            if (info == END_SIGNAL) {
-                IJ.log("All frames processed.");
-                break;
-            }
-            try {
-                processFrame(info);
-            } catch (RuntimeException e) {
-                // A single malformed/unexpected frame should not abort the whole run.
-                IJ.log("ERROR processing a frame, skipping it: " + e);
-            }
-        }
-        return null;
+    protected int[] extractLabelIds(int frameIdx, Map<String, Object> info, int numResults) {
+        NDArray outputPromptIds = (NDArray) info.get("prompts_ids");
+        if (outputPromptIds != null) return DetectionArrayParsing.extractIntArray(outputPromptIds, numResults);
+        return new int[numResults]; // if no prompt id received from python, we assume only one text prompt
     }
 
-    private void processFrame(Map<String, Object> info) {
-        int numResults = ((Number) info.get("n_results")).intValue();
-        int frameIdx = ((Number) info.get("frame_idx")).intValue();
+    @Override
+    protected void onEmptyFrame(int frameIdx) {
+        detectionsByFrame.put(frameIdx, Collections.emptyList());
+    }
 
-        if (numResults == 0) {
-            detectionsByFrame.put(frameIdx, Collections.emptyList());
-            return;
-        }
+    @Override
+    protected void onMissingArrays(int frameIdx) {
+        IJ.log("Warning: missing output arrays (boxes, masks or scores) from Python for frame " + frameIdx);
+        detectionsByFrame.put(frameIdx, Collections.emptyList());
+    }
 
-        NDArray outputBoxes = (NDArray) info.get("boxes");
-        NDArray outputMasks = (NDArray) info.get("masks");
-        NDArray outputScores = (NDArray) info.get("scores");
-        NDArray outputPromptIds = (NDArray) info.get("prompts_ids");
-
-        if (outputBoxes == null || outputMasks == null || outputScores == null) {
-            IJ.log("Warning : Missing output arrays (boxes, masksor scores) from Python for frame " + frameIdx);
-            detectionsByFrame.put(frameIdx, Collections.emptyList());
-            return;
-        }
-
-        double[][] boxes = DetectionArrayParsing.extractBoxes(outputBoxes, numResults);
-        byte[][][] masks = DetectionArrayParsing.extractMasks(outputMasks, numResults);
-        double[] scores = DetectionArrayParsing.extractScores(outputScores, numResults);
-        int[] promptIds;
-        if (outputPromptIds != null) promptIds = DetectionArrayParsing.extractIntArray(outputPromptIds, numResults);
-        else promptIds = new int[scores.length]; // if no prompt id received from python, we assume only one text prompt
-
-        List<String> classNames = new ArrayList<>(numResults);
-        List<Double> probabilities = new ArrayList<>(numResults);
-        List<BoundingBox> boundingBoxes = new ArrayList<>(numResults);
-        for (int i = 0; i < numResults; i++) {
-            classNames.add(textPrompts.get(promptIds[i]));
-            double[] coord = boxes[i];
-            boundingBoxes.add(new MaskByte(coord[0], coord[1], coord[2], coord[3], masks[i], true));
-            probabilities.add(scores[i]);
-        }
-
-        DetectedObjects detectedObjects = new DetectedObjects(classNames, probabilities, boundingBoxes);
-        List<ProcessedDetection> processedDetections =
-                DetectionUtils.processDetections(imp, detectedObjects, classIdMap);
-
-        if (processedDetections.isEmpty()) {
-            IJ.log("No valid detections were processed for frame " + frameIdx);
-        }
+    @Override
+    protected void storeResults(int frameIdx, List<ProcessedDetection> processedDetections, int[] labelIds, Map<String, Object> info, int numResults) {
         detectionsByFrame.put(frameIdx, processedDetections);
     }
 }

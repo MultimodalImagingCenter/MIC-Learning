@@ -1,6 +1,8 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
+import fr.curie.miclearning.apposeplugin.RoiGroupOption;
+import fr.curie.miclearning.apposeplugin.RoiGroupOptionWithCoverage;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
@@ -39,7 +41,8 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     public DetectionUtils.DetectionMode getStackMode() {return stackMode;}
 
     // ==== UI construction ====
-    void buildUi() {
+    @Override
+    protected void buildUi() {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -167,14 +170,14 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
 
     /** One option per roi group with a usable ROI on at least one of the current frames. */
     @Override
-    List<Sam3GroupOption> computeGroupOptions() {
+    List<RoiGroupOption> computeGroupOptions() {
         List<Integer> frames = currentFrameRange();
         Map<Integer, Integer> coveredFramesByGroup = roiPromptExtractor.countGroupCoverage(getRoiManager().getRoisAsArray(), axis, frames);
 
-        List<Sam3GroupOption> options = new ArrayList<>();
+        List<RoiGroupOption> options = new ArrayList<>();
         int totalFrames = frames.size();
         for (Map.Entry<Integer, Integer> entry : coveredFramesByGroup.entrySet()) {
-            options.add(new Sam3GroupOptionImage(entry.getKey(), entry.getValue(), totalFrames));
+            options.add(new RoiGroupOptionWithCoverage(entry.getKey(), entry.getValue(), totalFrames));
         }
         return options;
     }
@@ -182,7 +185,7 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     // ==== OK / Cancel ====
 
     @Override
-    void onOk() {
+    protected void onOk() {
         if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
         stackMode = (nFrames > 1 && processStackCB.isSelected())
                 ? DetectionUtils.DetectionMode.MULTI_IMAGE : DetectionUtils.DetectionMode.SINGLE_IMAGE;
@@ -205,11 +208,11 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
 
     /** Logs, per concept, which of the currently processed frames are missing a usable ROI for an enabled visual prompt. */
     @Override
-    protected void logWarnings(List<Sam3Concept> currentConcepts) {
+    protected void logWarnings(List<PcsConcept> currentConcepts) {
         Roi[] allRois = getRoiManager().getRoisAsArray();
         List<Integer> frames = currentFrameRange();
 
-        for (Sam3Concept concept : currentConcepts) {
+        for (PcsConcept concept : currentConcepts) {
             if (concept.isPositiveVisualUsed()) {
                 warnIfPartialCoverage(allRois, frames, concept.getPositiveVisualGroup(), concept, "positive");
             }
@@ -219,7 +222,7 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
         }
     }
 
-    private void warnIfPartialCoverage(Roi[] allRois, List<Integer> frames, int groupId, Sam3Concept concept, String kind) {
+    private void warnIfPartialCoverage(Roi[] allRois, List<Integer> frames, int groupId, PcsConcept concept, String kind) {
         List<Integer> missingFrames = roiPromptExtractor.findFramesMissingGroup(allRois, axis, groupId, frames);
         if (!missingFrames.isEmpty()) {
             IJ.log("WARNING: concept " + concept.getName() + " - " + kind + " group " + groupId

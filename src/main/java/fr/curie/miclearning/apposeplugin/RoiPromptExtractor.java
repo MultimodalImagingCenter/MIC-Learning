@@ -1,6 +1,8 @@
 package fr.curie.miclearning.apposeplugin;
 
+import ij.gui.PointRoi;
 import ij.gui.Roi;
+import ij.process.FloatPolygon;
 
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -13,10 +15,39 @@ import java.util.*;
 public class RoiPromptExtractor {
 
     /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
-    // TODO : extract a rectangle from any ROI type ??
     public static boolean isUsableRoiType(Roi roi) {
-        //return roi.getType() == Roi.RECTANGLE || roi.getType() == Roi.POINT;
-        return roi.isArea() || roi.getType() == Roi.POINT;
+        return (roi.isArea() && roi.getType()!= Roi.COMPOSITE)|| roi.getType() == Roi.POINT; // composite Roi are not accepted as prompts
+    }
+
+    /**
+     * {@code roi}'s position along {@code axis} (3 = Z, 4 = Time),
+     * in case Roi is {@link PointRoi} (single-point or multiple-points):
+     * tracks the slice of the first point (fall back to {@link PointRoi#getPointPosition(int)}
+     * TODO: case multi-point ROI whose points span several frames
+     */
+    private int positionAlong(Roi roi, int axis) {
+        int position = axis == 3 ? zPositionOf(roi) : tPositionOf(roi);
+        return position == 0 ? 1 : position;
+    }
+
+    private int zPositionOf(Roi roi) {
+        int position = roi.getZPosition();
+        if (position == 0) position = singlePointPositionOf(roi);
+        return position;
+    }
+
+    private int tPositionOf(Roi roi) {
+        int position = roi.getTPosition();
+        if (position == 0) position = singlePointPositionOf(roi);
+        return position;
+    }
+
+    /** The point's own tracked slice, for a ROI holding exactly one point; 0 otherwise. */
+    private int singlePointPositionOf(Roi roi) {
+        if (roi instanceof PointRoi && ((PointRoi) roi).getNCoordinates() == 1) {
+            return ((PointRoi) roi).getPointPosition(0);
+        }
+        return 0;
     }
 
     /**
@@ -30,7 +61,7 @@ public class RoiPromptExtractor {
         if (rois == null) return byFrame;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition(); // position le long de l'axe choisi
+            int position = positionAlong(roi, axis);
             if (position==0) position=1;
             byFrame.computeIfAbsent(position, k -> new ArrayList<>()).add(roi);
         }
@@ -77,6 +108,25 @@ public class RoiPromptExtractor {
     }
 
     /**
+     * Which ROI groups in {@code rois} contain at least one usable POINT roi on at least one of
+     * {@code frames}
+     *
+     * @param rois   ROIs to scan
+     * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frames the frames to check (1-indexed)
+     */
+    public Set<Integer> groupsWithUsablePointRoi(Roi[] rois, int axis, Collection<Integer> frames) {
+        Map<Integer, List<Roi>> roisByFrame = groupRoisByFrame(rois, axis);
+        Set<Integer> groups = new TreeSet<>();
+        for (int frame : frames) {
+            for (Roi roi : roisByFrame.getOrDefault(frame, Collections.emptyList())) {
+                if (roi.getType() == Roi.POINT) groups.add(roi.getGroup());
+            }
+        }
+        return groups;
+    }
+
+    /**
      * Collects the usable ROIs (rectangle or point) on the given frame - 3D image,
      * only one axis used
      *
@@ -89,7 +139,7 @@ public class RoiPromptExtractor {
         if (rois == null) return result;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             if (position == frame || position == 0) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return result;
@@ -108,7 +158,7 @@ public class RoiPromptExtractor {
         if (rois == null) return groups;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             if (position == frame || position == 0) groups.add(roi.getGroup()); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return groups;
@@ -128,7 +178,9 @@ public class RoiPromptExtractor {
         if (rois == null) return result;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            if ((roi.getTPosition() == frame || roi.getTPosition() == 0) && (roi.getZPosition() == slice || roi.getZPosition() == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
+            int t = tPositionOf(roi);
+            int z = zPositionOf(roi);
+            if ((t == frame || t == 0) && (z == slice || z == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return result;
     }
@@ -155,8 +207,7 @@ public class RoiPromptExtractor {
             boolean isNegativeGroup = negativePromptUsed && groupId == negativeGroupId;
             if (!isPositiveGroup && !isNegativeGroup) continue;
 
-            //if (roi.getType() == Roi.RECTANGLE) {
-            if (roi.isArea()){
+            if (roi.isArea()) {
                 Rectangle rect = roi.getBounds();
                 double[] coord = {rect.x, rect.y, rect.width, rect.height};
                 if (isPositiveGroup) positive.add(coord);
@@ -173,6 +224,11 @@ public class RoiPromptExtractor {
         return new PromptRois(positive, negative);
     }
 
+    /** Combines independently-computed positive/negative coordinate lists into one {@link PromptRois}. */
+    public PromptRois combinePromptRois(List<double[]> positive, List<double[]> negative) {
+        return new PromptRois(new ArrayList<>(positive), new ArrayList<>(negative));
+    }
+
 
     /**
      * fingerprint of the ROI state that matters for prompt selection (group + frame per
@@ -186,7 +242,7 @@ public class RoiPromptExtractor {
         if (rois == null) return sb.toString();
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             sb.append(roi.getGroup()).append(':').append(position).append(';');
         }
         return sb.toString();

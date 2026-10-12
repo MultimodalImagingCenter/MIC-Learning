@@ -22,6 +22,27 @@
 - `Sam3AdvancedParametersDialog`: modal Swing dialog to modify the rarely-tuned SAM3 detection parameters (image and video).
 - Output generation for detection: `DetectionUtils.createInstanceMaskPerClassStack`: generate a 4D hyperstack 
   for image stacks (one time-point per processed frame, one channel per concept).
+- Classes to define **"objects" for promptable visual segmentation (PVS)** :
+  - `PvsObject` : an object is defined by a name, an output group, and prompts: a mandatory positive
+    visual prompt (box and/or point ROIs, one ROI group, possibly defined on several frames to refine
+    tracking downstream) plus an optional point-only negative visual prompt (one ROI group).
+  - GUI: `PvsObjectTableModel`, `PvsGroupIdCellEditor` : table where each row is one object; the
+    negative-prompt column only offers ROI groups that contain at least one point ROI.
+- **New plugin "SAM PVS on Video"** (`SamPvsVideo_Plugin`): promptable visual segmentation with SAM2
+  or SAM3 (model type detected automatically from the checkpoint).
+  - No text prompt, no class/concept - only box/point ROI-based object identity.
+  - Objects are tracked forward only, each starting on whichever frame its own first prompt appears;
+    a later prompt for an already-tracked object refines it going forward without affecting earlier frames.
+  - Macro-recordable.
+  - New supporting classes: `PvsVideoDialog`, `PvsModelParameters`, `PvsAdvancedParametersDialog`,
+    `PvsVideoRunConfig`, `PvsVideoPythonRunner`, `PvsVideoResultsConsumer`, and the `sam-pvs-video.py` script.
+- Dialog helpers shared by the SAM3 PCS and SAM PVS plugins, promoted out of the PCS-only package:
+  `RoiGroupOption`, `RoiGroupOptionWithCoverage` (renamed from `Sam3GroupOption`/`Sam3GroupOptionImage`),
+  `DialogUiSupport` (UI-scale helpers extracted from `Sam3ConceptDialogBase`), `ModelPathDialogs`
+  (renamed/genericized from `Sam3Dialogs`, now takes candidate checkpoint file name(s) instead of
+  being hardcoded to `sam3.pt`).
+- `RoiPromptExtractor.groupsWithUsablePointRoi`: identifies which ROI groups contain at least one
+  usable point ROI - used to filter PVS's negative-prompt group picker down to point-only groups.
 
 ### Changed
 - **Plugin "SAM3 PCS on Video"** (`Sam3VideoPcs_Plugin`): now accept multiple concept as prompts:
@@ -34,6 +55,9 @@
   replaced by a single "SAM3 PCS on Image(s)".
 - `RoiPromptExtractor.groupRoisByFrame`: ROIs with no Z/T position (position 0) are treated as
   belonging to frame 1 (avoid ignoring ROIs on single frame images)
+- SAM3 PCS dialogs (`Sam3ConceptDialogBase`, `Sam3ImageDialog`, `Sam3VideoDialog`,
+  `Sam3AdvancedParametersDialog`, `Sam3GroupIdCellEditor`) now use the shared `RoiGroupOption`,
+  `DialogUiSupport` and `ModelPathDialogs` classes instead of `sampcs`-local ones (no behavior change).
 
 ### Removed
 - `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 
@@ -44,6 +68,8 @@
  (`sam3-detection-image-geomprompt-m.py`): replaced by unified single image plugin.
 - `sam3-detection-image.toml` (unused Pixi environment file).
 - `Sam3CrossImagePcs_Plugin.java`, associated classes and associated script (unsatisfying results).
+- `Sam3GroupOption.java`, `Sam3GroupOptionImage.java`, `Sam3Dialogs.java` : superseded by the shared
+  `RoiGroupOption`, `RoiGroupOptionWithCoverage`, `DialogUiSupport` and `ModelPathDialogs` classes.
 
 ## [1.3.0] - 2026-08-24
 ### Added
