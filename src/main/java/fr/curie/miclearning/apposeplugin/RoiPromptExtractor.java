@@ -1,6 +1,6 @@
 package fr.curie.miclearning.apposeplugin;
 
-import ij.IJ;
+import ij.gui.PointRoi;
 import ij.gui.Roi;
 import ij.process.FloatPolygon;
 
@@ -16,7 +16,38 @@ public class RoiPromptExtractor {
 
     /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
     public static boolean isUsableRoiType(Roi roi) {
-        return roi.isArea() || roi.getType() == Roi.POINT;
+        return (roi.isArea() )|| roi.getType() == Roi.POINT;
+    }
+
+    /**
+     * {@code roi}'s position along {@code axis} (3 = Z, 4 = Time),
+     * in case Roi is {@link PointRoi} (single-point or multiple-points):
+     * tracks the slice of the first point (fall back to {@link PointRoi#getPointPosition(int)}
+     * TODO: case multi-point ROI whose points span several frames
+     */
+    private int positionAlong(Roi roi, int axis) {
+        int position = axis == 3 ? zPositionOf(roi) : tPositionOf(roi);
+        return position == 0 ? 1 : position;
+    }
+
+    private int zPositionOf(Roi roi) {
+        int position = roi.getZPosition();
+        if (position == 0) position = singlePointPositionOf(roi);
+        return position;
+    }
+
+    private int tPositionOf(Roi roi) {
+        int position = roi.getTPosition();
+        if (position == 0) position = singlePointPositionOf(roi);
+        return position;
+    }
+
+    /** The point's own tracked slice, for a ROI holding exactly one point; 0 otherwise. */
+    private int singlePointPositionOf(Roi roi) {
+        if (roi instanceof PointRoi && ((PointRoi) roi).getNCoordinates() == 1) {
+            return ((PointRoi) roi).getPointPosition(0);
+        }
+        return 0;
     }
 
     /**
@@ -30,7 +61,7 @@ public class RoiPromptExtractor {
         if (rois == null) return byFrame;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition(); // position le long de l'axe choisi
+            int position = positionAlong(roi, axis);
             if (position==0) position=1;
             byFrame.computeIfAbsent(position, k -> new ArrayList<>()).add(roi);
         }
@@ -108,7 +139,7 @@ public class RoiPromptExtractor {
         if (rois == null) return result;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             if (position == frame || position == 0) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return result;
@@ -127,7 +158,7 @@ public class RoiPromptExtractor {
         if (rois == null) return groups;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             if (position == frame || position == 0) groups.add(roi.getGroup()); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return groups;
@@ -147,7 +178,9 @@ public class RoiPromptExtractor {
         if (rois == null) return result;
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            if ((roi.getTPosition() == frame || roi.getTPosition() == 0) && (roi.getZPosition() == slice || roi.getZPosition() == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
+            int t = tPositionOf(roi);
+            int z = zPositionOf(roi);
+            if ((t == frame || t == 0) && (z == slice || z == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
         }
         return result;
     }
@@ -204,7 +237,7 @@ public class RoiPromptExtractor {
         if (rois == null) return sb.toString();
         for (Roi roi : rois) {
             if (!isUsableRoiType(roi)) continue;
-            int position = axis == 3 ? roi.getZPosition() : roi.getTPosition();
+            int position = positionAlong(roi, axis);
             sb.append(roi.getGroup()).append(':').append(position).append(';');
         }
         return sb.toString();

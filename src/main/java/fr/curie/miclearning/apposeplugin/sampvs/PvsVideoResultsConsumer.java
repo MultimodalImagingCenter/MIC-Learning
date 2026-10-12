@@ -17,8 +17,6 @@ import java.util.concurrent.BlockingQueue;
  * convert them into {@link ProcessedDetection},
  * and save them into a {@link MultiFrameDataManager}.
  * <p>
- * Simpler than {@code VideoPcsResultsConsumer}: here object identity is the class
- * <p>
  * Runs on a background thread so it can consume results while the python task is still producing them.
  */
 public class PvsVideoResultsConsumer extends AbstractResultsConsumer {
