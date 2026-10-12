@@ -1,53 +1,28 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import fr.curie.miclearning.apposeplugin.AbstractPromptDialog;
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
-import fr.curie.miclearning.apposeplugin.DialogUiSupport;
 import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
 import fr.curie.miclearning.apposeplugin.RoiGroupOption;
-import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
-import ij.IJ;
 import ij.ImagePlus;
-import ij.Prefs;
-import ij.gui.GenericDialog;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
-import javax.swing.table.TableCellEditor;
 import java.awt.*;
-import java.awt.event.AWTEventListener;
-import java.awt.event.MouseEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-
-import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
  * Non-modal Swing dialog base for {@link Sam3ImageDialog} and {@link Sam3VideoDialog} :
  * lets the user define an arbitrary number of concepts, plus model path, detection parameters and output options.
  */
-public abstract class Sam3ConceptDialogBase extends JDialog {
-    protected static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sam3";
-    static final int ROI_POLL_INTERVAL_MS = 500;
+public abstract class Sam3ConceptDialogBase extends AbstractPromptDialog {
     static final String VISUAL_PROMPT_RESET_OWNER = "visualPromptReset";
-
-    final double uiScale = Prefs.get(DialogUiSupport.PREF_UI_SCALE_KEY, DialogUiSupport.DEFAULT_UI_SCALE);
-
-    final ImagePlus imp;
-    final int nFrames;
-    final int axis; // 3 = Z axis, 4 = Time axis (matches ImagePlus.getDimensions() indexing)
-
-    // Roi processing and updating
-    final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
-    Timer roiPollTimer;
-    String lastRoiSignature = "";
 
    // concept table
     final Sam3ConceptTableModel tableModel = new Sam3ConceptTableModel();
@@ -57,120 +32,37 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
     final Sam3ModelParameters modelParams = new Sam3ModelParameters();
 
-    // interface elements
-    DialogHelpBar helpBar;
-    JTextField modelPathField;
-    JCheckBox addBoxRoisCB;
-    JCheckBox addShapeRoisCB;
-    JCheckBox instanceMaskCB;
+    // interface elements specific to concepts (model path/output checkboxes live in the base)
     JCheckBox semanticMaskCB;
     JCheckBox instanceMaskPerClassCB;
-    JButton okButton;
-
-    final CountDownLatch closedLatch = new CountDownLatch(1); //blocks the calling thread until the user closes it
-    boolean approved = false; // true if user pressed OK and no error
 
     // populated only once the user presses OK
-    String modelPath;
     Sam3ModelParameters finalModelParam;
-    DetectionUtils.OutputOptions outputOptions;
     List<PcsConcept> concepts;
 
 
     protected Sam3ConceptDialogBase(ImagePlus imp, int nFrames, int axis, String dialogTitle) {
-        super(IJ.getInstance(), dialogTitle, false);
-        this.imp = imp;
-        this.nFrames = nFrames;
-        this.axis = axis;
-
-        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                if (roiPollTimer != null) roiPollTimer.stop();
-                closedLatch.countDown();
-            }
-        });
-
-        buildUi();
-        installClickAwayCommit();
-        if (uiScale != 1.0) {
-            DialogUiSupport.rescaleFonts(getContentPane(), uiScale);
-            DialogUiSupport.rescaleFonts(table.getTableHeader(), uiScale);
-            helpBar.rescaleFont(uiScale); // the help bar resets its own font from a cached field on every render - update that field directly
-        }
-        pack();
-        setLocationRelativeTo(null);
+        super(imp, nFrames, axis, dialogTitle, "miclearning.lastmodeldir.sam3");
+        finishInit();
     }
 
-
-    /**
-     * Any click (even on non focusable area) commit changes made on cells
-     */
-    private void installClickAwayCommit() {
-        AWTEventListener listener = event -> {
-            if (!(event instanceof MouseEvent) || event.getID() != MouseEvent.MOUSE_PRESSED) return;
-
-            if (!table.isEditing()) return;
-            if (MenuSelectionManager.defaultManager().getSelectedPath().length > 0) return; // a popup (e.g. the combo box dropdown) is open
-
-            Component clicked = ((MouseEvent) event).getComponent(); //specific component the mouse press actually landed on
-            Component editorComp = table.getEditorComponent(); // the actual Component currently sitting on top of the cell in edit mode
-            if (clicked == null || editorComp == null) return;
-            if (clicked == editorComp || SwingUtilities.isDescendingFrom(clicked, editorComp)) return; // don't edit if the click is made inside the edited cell
-
-            TableCellEditor editor = table.getCellEditor();
-            if (editor != null) editor.stopCellEditing();
-
-        };
-        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.MOUSE_EVENT_MASK);
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                Toolkit.getDefaultToolkit().removeAWTEventListener(listener);
-            }
-        });
+    @Override
+    protected JTable getPromptTable() {
+        return table;
     }
 
-    /** Scales a pixel dimension (row height, column width, ...) by {@link #uiScale}. */
-    int scaled(int pixels) {
-        return DialogUiSupport.scaled(pixels, uiScale);
+    @Override
+    protected String pluginLogName() {
+        return "SAM3";
     }
 
-    /** A section-title label matching this dialog's unified heading style: bold, one size bigger than body text. */
-    JLabel createSectionTitle(String text) {
-        return DialogUiSupport.createSectionTitle(text);
-    }
-
-    /**
-     * Shows the dialog and blocks the calling thread until the user closes it (OK, Cancel, or the
-     * window's own close button)
-     *
-     * @return {@code true} if the user pressed OK with a valid configuration, {@code false} otherwise
-     */
-    public boolean showDialogAndWait() {
-        SwingUtilities.invokeLater(() -> {
-            refreshGroupOptions();
-            startRoiPolling();
-            setVisible(true);
-        });
-        try {
-            closedLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            approved = false;
-        }
-        return approved;
-    }
-
-    public String getModelPath() {return modelPath;}
     public Sam3ModelParameters getFinalModelParam() {return finalModelParam;}
-    public DetectionUtils.OutputOptions getOutputOptions() {return outputOptions;}
     public List<PcsConcept> getConcepts() {return concepts;}
 
     // ==== UI construction ====
 
-    abstract void buildUi();
+    @Override
+    protected abstract void buildUi();
 
     JPanel buildModelPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -186,7 +78,7 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
         JLabel modelLabel = new JLabel("Model path:");
         fieldsPanel.add(modelLabel, c);
 
-        modelPathField = new JTextField(ModelPathDialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY, "sam3.pt"), 40);
+        modelPathField = new JTextField(ModelPathDialogs.resolveDefaultModelPath(prefLastModelKey, "sam3.pt"), 40);
         c.gridx = 1; c.weightx = 1;
         fieldsPanel.add(modelPathField, c);
 
@@ -345,45 +237,6 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     }
 
 
-    /** Text-column editor that selects all existing text as soon as editing starts. */
-    private DefaultCellEditor createSelectAllTextEditor() {
-        JTextField textField = new JTextField();
-        return new DefaultCellEditor(textField) {
-            @Override
-            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
-                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
-                textField.selectAll();
-                return c;
-            }
-        };
-    }
-
-    /**
-     * Like {@link #createSelectAllTextEditor()}, but for Integer columns (the "Output group" column):
-     * parses the text back to an Integer, returning {@code null} on invalid input.
-     */
-    private DefaultCellEditor createSelectAllIntegerEditor() {
-        JTextField textField = new JTextField();
-        textField.setHorizontalAlignment(JTextField.RIGHT);
-        return new DefaultCellEditor(textField) {
-            @Override
-            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
-                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
-                textField.selectAll();
-                return c;
-            }
-
-            @Override
-            public Object getCellEditorValue() {
-                try {
-                    return Integer.valueOf(textField.getText().trim());
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-        };
-    }
-
     JPanel buildParametersPanel() {
         JPanel panel = new JPanel();
         panel.setBorder(BorderFactory.createEtchedBorder());
@@ -445,73 +298,10 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
     protected abstract JPanel buildScopePanel();
 
-
-    JPanel buildButtonsPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-
-        JButton settingsButton = new JButton("Settings...");
-        settingsButton.addActionListener(e -> openSettingsDialog());
-
-        okButton = new JButton("OK");
-        okButton.addActionListener(e -> onOk());
-
-        JButton cancelButton = new JButton("Cancel");
-        cancelButton.addActionListener(e -> onCancel());
-
-        panel.add(settingsButton);
-        panel.add(okButton);
-        panel.add(cancelButton);
-        return panel;
-    }
-
-    /** Combined settings dialog: help-bar level and interface scale. */
-    private void openSettingsDialog() {
-        String[] helpLabels = DialogHelpBar.helpLevelLabels();
-        int currentHelpIndex = DialogHelpBar.helpLevelIndex(helpBar.getHelpBarMode());
-
-        GenericDialog gd = new GenericDialog("Settings");
-        gd.addMessage("Choose how much guidance the dialog's help bar should show:");
-        gd.addChoice("Help level:", helpLabels, helpLabels[currentHelpIndex]);
-
-        gd.addMessage("");
-        gd.addNumericField("Interface_scale (%):", uiScale * 100, 0);
-        gd.addMessage("Close and reopen this plugin for a new interface scale to take effect.");
-
-        gd.showDialog();
-        if (gd.wasCanceled()) return;
-
-        helpBar.applyHelpLevelChoice(gd.getNextChoiceIndex());
-
-        double scalePercent = gd.getNextNumber();
-        if (Double.isNaN(scalePercent) || scalePercent < DialogUiSupport.MIN_UI_SCALE * 100 || scalePercent > DialogUiSupport.MAX_UI_SCALE * 100) {
-            IJ.log("Interface scale must be between " + (int) (DialogUiSupport.MIN_UI_SCALE * 100) + "% and "
-                    + (int) (DialogUiSupport.MAX_UI_SCALE * 100) + "%. Keeping the previous value.");
-        } else {
-            Prefs.set(DialogUiSupport.PREF_UI_SCALE_KEY, scalePercent / 100.0);
-            Prefs.savePreferences();
-        }
-    }
-
-
     // ==== live RoiManager refresh ====
 
-    private void startRoiPolling() {
-        lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
-        roiPollTimer = new Timer(ROI_POLL_INTERVAL_MS, e -> {
-            if (imp.getWindow() == null) { // source image was closed - nothing left to configure
-                onImageClosed();
-                return;
-            }
-            String signature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
-            if (!signature.equals(lastRoiSignature)) {
-                lastRoiSignature = signature;
-                refreshGroupOptions();
-            }
-        });
-        roiPollTimer.start();
-    }
-
-    void refreshGroupOptions() {
+    @Override
+    protected void refreshGroupOptions() {
         List<RoiGroupOption> options = computeGroupOptions();
         positiveGroupEditor.setAvailableGroups(options); // updates the groups available in the "positive prompt" columns
         negativeGroupEditor.setAvailableGroups(options);
@@ -550,19 +340,6 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     void onScopeChanged() {
         refreshGroupOptions();
     }; // why not refreshGroupOption directly ??
-
-    // ==== OK / Cancel ====
-    private void onCancel() {
-        approved = false;
-        dispose();
-    }
-
-    /** Called when the source image is closed while the dialog is still open: cancel like {@link #onCancel()}. */
-    void onImageClosed() {
-        approved = false;
-        IJ.showStatus("SAM3: source image was closed - dialog cancelled");
-        dispose();
-    }
 
     /**
      * Runs the validation/collection shared by both dialogs, populating {@link #modelPath},
@@ -619,10 +396,11 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
 
     /** Called when the user presses OK: must call {@link #validateAndCollect()} and only set
      * {@link #approved} + {@link #dispose()} if it returned {@code true}. */
-    abstract void onOk();
+    @Override
+    protected abstract void onOk();
 
     private String resolveAndValidateModelPath() {
-        return ModelPathDialogs.validateAndSaveModelPath(modelPathField.getText().trim(), PREF_LAST_MODEL_KEY);
+        return ModelPathDialogs.validateAndSaveModelPath(modelPathField.getText().trim(), prefLastModelKey);
     }
 
     List<String> validateConcepts(List<PcsConcept> currentConcepts) {
@@ -651,14 +429,6 @@ public abstract class Sam3ConceptDialogBase extends JDialog {
     double parseDouble(String text, double fallback) {
         try {
             return Double.parseDouble(text.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
-    int parseInt(String text, int fallback) {
-        try {
-            return Integer.parseInt(text.trim());
         } catch (NumberFormatException e) {
             return fallback;
         }

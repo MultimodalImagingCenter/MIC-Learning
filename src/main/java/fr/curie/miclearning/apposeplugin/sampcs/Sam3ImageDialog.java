@@ -41,7 +41,8 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     public DetectionUtils.DetectionMode getStackMode() {return stackMode;}
 
     // ==== UI construction ====
-    void buildUi() {
+    @Override
+    protected void buildUi() {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -184,7 +185,7 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     // ==== OK / Cancel ====
 
     @Override
-    void onOk() {
+    protected void onOk() {
         if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
         stackMode = (nFrames > 1 && processStackCB.isSelected())
                 ? DetectionUtils.DetectionMode.MULTI_IMAGE : DetectionUtils.DetectionMode.SINGLE_IMAGE;

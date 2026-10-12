@@ -32,7 +32,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
     // ==== UI construction ====
 
     @Override
-    void buildUi() {
+    protected void buildUi() {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -196,7 +196,7 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
     // ==== OK / Cancel ====
 
     @Override
-    void onOk() {
+    protected void onOk() {
         if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
 
         approved = true;

@@ -1,16 +1,13 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
+import fr.curie.miclearning.apposeplugin.AbstractPromptDialog;
 import fr.curie.miclearning.apposeplugin.DialogHelpBar;
-import fr.curie.miclearning.apposeplugin.DialogUiSupport;
 import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
 import fr.curie.miclearning.apposeplugin.RoiGroupOption;
 import fr.curie.miclearning.apposeplugin.RoiGroupOptionWithCoverage;
-import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
-import ij.Prefs;
-import ij.gui.GenericDialog;
 import ij.gui.Roi;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
@@ -19,20 +16,15 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
-import javax.swing.table.TableCellEditor;
 import java.awt.*;
-import java.awt.event.AWTEventListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
@@ -41,23 +33,10 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  * number of objects (visual-prompt-only, no text/class), the model path, tracking parameters and
  * output options.
  */
-public class PvsVideoDialog extends JDialog {
+public class PvsVideoDialog extends AbstractPromptDialog {
 
-    private static final String PREF_LAST_MODEL_KEY = "miclearning.lastmodeldir.sampvs";
-    private static final int ROI_POLL_INTERVAL_MS = 500;
     private static final String VISUAL_PROMPT_RESET_OWNER = "visualPromptReset";
     private static final String NO_USABLE_ROI_OWNER = "noRoiAtAll";
-
-    private final double uiScale = Prefs.get(DialogUiSupport.PREF_UI_SCALE_KEY, DialogUiSupport.DEFAULT_UI_SCALE);
-
-    private final ImagePlus imp;
-    private final int nFrames;
-    private final int axis; // 3 = Z axis, 4 = Time axis (matches ImagePlus.getDimensions() indexing)
-
-    // Roi processing and updating
-    private final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
-    private Timer roiPollTimer;
-    private String lastRoiSignature = "";
 
     // object table
     private final PvsObjectTableModel tableModel = new PvsObjectTableModel();
@@ -67,112 +46,37 @@ public class PvsVideoDialog extends JDialog {
 
     private final PvsModelParameters modelParams = new PvsModelParameters();
 
-    // interface elements
-    private DialogHelpBar helpBar;
-    private JTextField modelPathField;
+    // interface elements specific to objects (model path/output checkboxes live in the base)
     private JTextField lastFrameField;
-    private JCheckBox addBoxRoisCB;
-    private JCheckBox addShapeRoisCB;
-    private JCheckBox instanceMaskCB;
-    private JButton okButton;
-
-    private final CountDownLatch closedLatch = new CountDownLatch(1); // blocks the calling thread until the user closes it
-    private boolean approved = false; // true = the user pressed OK with a valid configuration
 
     // populated only once the user presses OK
-    private String modelPath;
     private PvsModelParameters finalModelParams;
-    private DetectionUtils.OutputOptions outputOptions;
     private List<PvsObject> objects;
     private int chosenLastFrame; // 1-indexed
 
     public PvsVideoDialog(ImagePlus imp, int nFrames, int axis) {
-        super(IJ.getInstance(), "SAM Promptable Visual Segmentation on Video", false);
-        this.imp = imp;
-        this.nFrames = nFrames;
-        this.axis = axis;
-
-        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                if (roiPollTimer != null) roiPollTimer.stop();
-                closedLatch.countDown();
-            }
-        });
-
-        buildUi();
-        installClickAwayCommit();
-        if (uiScale != 1.0) {
-            DialogUiSupport.rescaleFonts(getContentPane(), uiScale);
-            DialogUiSupport.rescaleFonts(table.getTableHeader(), uiScale);
-            helpBar.rescaleFont(uiScale);
-        }
-        pack();
-        setLocationRelativeTo(null);
+        super(imp, nFrames, axis, "SAM Promptable Visual Segmentation on Video", "miclearning.lastmodeldir.sampvs");
+        finishInit();
     }
 
-    /**
-     * Any click (even on non focusable area) commit changes made on cells
-     */
-    private void installClickAwayCommit() {
-        AWTEventListener listener = event -> {
-            if (!(event instanceof MouseEvent) || event.getID() != MouseEvent.MOUSE_PRESSED) return;
-
-            if (!table.isEditing()) return;
-            if (MenuSelectionManager.defaultManager().getSelectedPath().length > 0) return; // a popup (e.g. the combo box dropdown) is open
-
-            Component clicked = ((MouseEvent) event).getComponent();
-            Component editorComp = table.getEditorComponent();
-            if (clicked == null || editorComp == null) return;
-            if (clicked == editorComp || SwingUtilities.isDescendingFrom(clicked, editorComp)) return;
-
-            TableCellEditor editor = table.getCellEditor();
-            if (editor != null) editor.stopCellEditing();
-        };
-        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.MOUSE_EVENT_MASK);
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                Toolkit.getDefaultToolkit().removeAWTEventListener(listener);
-            }
-        });
+    @Override
+    protected JTable getPromptTable() {
+        return table;
     }
 
-    private int scaled(int pixels) {
-        return DialogUiSupport.scaled(pixels, uiScale);
+    @Override
+    protected String pluginLogName() {
+        return "SAM PVS";
     }
 
-    /**
-     * Shows the dialog and blocks the calling thread until the user closes it (OK, Cancel, or the
-     * window's own close button)
-     *
-     * @return {@code true} if the user pressed OK with a valid configuration, {@code false} otherwise
-     */
-    public boolean showDialogAndWait() {
-        SwingUtilities.invokeLater(() -> {
-            refreshGroupOptions();
-            startRoiPolling();
-            setVisible(true);
-        });
-        try {
-            closedLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            approved = false;
-        }
-        return approved;
-    }
-
-    public String getModelPath() {return modelPath;}
     public PvsModelParameters getFinalModelParams() {return finalModelParams;}
-    public DetectionUtils.OutputOptions getOutputOptions() {return outputOptions;}
     public List<PvsObject> getObjects() {return objects;}
     public int getChosenLastFrame() {return chosenLastFrame;}
 
     // ==== UI construction ====
 
-    private void buildUi() {
+    @Override
+    protected void buildUi() {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -198,7 +102,7 @@ public class PvsVideoDialog extends JDialog {
     private JPanel buildModelPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEtchedBorder());
-        panel.add(DialogUiSupport.createSectionTitle("Model"), BorderLayout.NORTH);
+        panel.add(createSectionTitle("Model"), BorderLayout.NORTH);
 
         JPanel fieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
@@ -209,7 +113,7 @@ public class PvsVideoDialog extends JDialog {
         JLabel modelLabel = new JLabel("Model path:");
         fieldsPanel.add(modelLabel, c);
 
-        modelPathField = new JTextField(ModelPathDialogs.resolveDefaultModelPath(PREF_LAST_MODEL_KEY,
+        modelPathField = new JTextField(ModelPathDialogs.resolveDefaultModelPath(prefLastModelKey,
                 "sam2.1_hiera_tiny.pt", "sam2.1_hiera_small.pt",
                 "sam2.1_hiera_base_plus.pt", "sam2.1_hiera_large.pt",
                 "sam2.pt", "sam3.pt"), 40);
@@ -272,7 +176,7 @@ public class PvsVideoDialog extends JDialog {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEtchedBorder());
 
-        JLabel titleLabel = DialogUiSupport.createSectionTitle("Objects");
+        JLabel titleLabel = createSectionTitle("Objects");
         helpBar.attachHelp(titleLabel,
                 "An object = one specific instance to segment and track. Define it with " +
                         "\n positive visual prompt(s) (box and/or point ROI(s) in the ROI Manager).");
@@ -400,50 +304,11 @@ public class PvsVideoDialog extends JDialog {
         return panel;
     }
 
-    /** Text-column editor that selects all existing text as soon as editing starts. */
-    private DefaultCellEditor createSelectAllTextEditor() {
-        JTextField textField = new JTextField();
-        return new DefaultCellEditor(textField) {
-            @Override
-            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
-                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
-                textField.selectAll();
-                return c;
-            }
-        };
-    }
-
-    /**
-     * Like {@link #createSelectAllTextEditor()}, but for Integer columns (the "Output group" column):
-     * parses the text back to an Integer, returning {@code null} on invalid input.
-     */
-    private DefaultCellEditor createSelectAllIntegerEditor() {
-        JTextField textField = new JTextField();
-        textField.setHorizontalAlignment(JTextField.RIGHT);
-        return new DefaultCellEditor(textField) {
-            @Override
-            public Component getTableCellEditorComponent(JTable t, Object value, boolean isSelected, int row, int column) {
-                Component c = super.getTableCellEditorComponent(t, value, isSelected, row, column);
-                textField.selectAll();
-                return c;
-            }
-
-            @Override
-            public Object getCellEditorValue() {
-                try {
-                    return Integer.valueOf(textField.getText().trim());
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-        };
-    }
-
     /** Merged frame-range + parameters section. */
     private JPanel buildParametersPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEtchedBorder());
-        panel.add(DialogUiSupport.createSectionTitle("Frame range and Parameters"), BorderLayout.NORTH);
+        panel.add(createSectionTitle("Frame range and Parameters"), BorderLayout.NORTH);
 
         JPanel fieldsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
@@ -484,7 +349,7 @@ public class PvsVideoDialog extends JDialog {
     private JPanel buildOutputPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEtchedBorder());
-        panel.add(DialogUiSupport.createSectionTitle("Outputs"), BorderLayout.NORTH);
+        panel.add(createSectionTitle("Outputs"), BorderLayout.NORTH);
 
         JPanel checkboxesPanel = new JPanel();
         checkboxesPanel.setLayout(new BoxLayout(checkboxesPanel, BoxLayout.Y_AXIS));
@@ -511,69 +376,7 @@ public class PvsVideoDialog extends JDialog {
         return panel;
     }
 
-    private JPanel buildButtonsPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-
-        JButton settingsButton = new JButton("Settings...");
-        settingsButton.addActionListener(e -> openSettingsDialog());
-
-        okButton = new JButton("OK");
-        okButton.addActionListener(e -> onOk());
-
-        JButton cancelButton = new JButton("Cancel");
-        cancelButton.addActionListener(e -> onCancel());
-
-        panel.add(settingsButton);
-        panel.add(okButton);
-        panel.add(cancelButton);
-        return panel;
-    }
-
-    /** Combined settings dialog: help-bar level and interface scale. */
-    private void openSettingsDialog() {
-        String[] helpLabels = DialogHelpBar.helpLevelLabels();
-        int currentHelpIndex = DialogHelpBar.helpLevelIndex(helpBar.getHelpBarMode());
-
-        GenericDialog gd = new GenericDialog("Settings");
-        gd.addMessage("Choose how much guidance the dialog's help bar should show:");
-        gd.addChoice("Help level:", helpLabels, helpLabels[currentHelpIndex]);
-
-        gd.addMessage("");
-        gd.addNumericField("Interface_scale (%):", uiScale * 100, 0);
-        gd.addMessage("Close and reopen this plugin for a new interface scale to take effect.");
-
-        gd.showDialog();
-        if (gd.wasCanceled()) return;
-
-        helpBar.applyHelpLevelChoice(gd.getNextChoiceIndex());
-
-        double scalePercent = gd.getNextNumber();
-        if (Double.isNaN(scalePercent) || scalePercent < DialogUiSupport.MIN_UI_SCALE * 100 || scalePercent > DialogUiSupport.MAX_UI_SCALE * 100) {
-            IJ.log("Interface scale must be between " + (int) (DialogUiSupport.MIN_UI_SCALE * 100) + "% and "
-                    + (int) (DialogUiSupport.MAX_UI_SCALE * 100) + "%. Keeping the previous value.");
-        } else {
-            Prefs.set(DialogUiSupport.PREF_UI_SCALE_KEY, scalePercent / 100.0);
-            Prefs.savePreferences();
-        }
-    }
-
     // ==== live RoiManager refresh ====
-
-    private void startRoiPolling() {
-        lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
-        roiPollTimer = new Timer(ROI_POLL_INTERVAL_MS, e -> {
-            if (imp.getWindow() == null) { // source image was closed - nothing left to configure
-                onImageClosed();
-                return;
-            }
-            String signature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
-            if (!signature.equals(lastRoiSignature)) {
-                lastRoiSignature = signature;
-                refreshGroupOptions();
-            }
-        });
-        roiPollTimer.start();
-    }
 
     /** Frames actually processed by the current dialog state: 1 .. the "process up to frame" value. */
     private List<Integer> currentFrameRange() {
@@ -594,7 +397,8 @@ public class PvsVideoDialog extends JDialog {
         }
     }
 
-    private void refreshGroupOptions() {
+    @Override
+    protected void refreshGroupOptions() {
         List<Integer> frames = currentFrameRange();
         Roi[] allRois = getRoiManager().getRoisAsArray();
 
@@ -646,19 +450,8 @@ public class PvsVideoDialog extends JDialog {
 
     // ==== OK / Cancel ====
 
-    private void onCancel() {
-        approved = false;
-        dispose();
-    }
-
-    /** Called when the source image is closed while the dialog is still open: cancel like {@link #onCancel()}. */
-    private void onImageClosed() {
-        approved = false;
-        IJ.showStatus("SAM PVS: source image was closed - dialog cancelled");
-        dispose();
-    }
-
-    private void onOk() {
+    @Override
+    protected void onOk() {
         if (!validateAndCollect()) return; // invalid input - keep the dialog open so the user can fix it
         approved = true;
         dispose();
@@ -671,7 +464,7 @@ public class PvsVideoDialog extends JDialog {
         }
         if (table.isEditing() && !table.getCellEditor().stopCellEditing()) return false;
 
-        String path = ModelPathDialogs.validateAndSaveModelPath(modelPathField.getText().trim(), PREF_LAST_MODEL_KEY);
+        String path = ModelPathDialogs.validateAndSaveModelPath(modelPathField.getText().trim(), prefLastModelKey);
         if (path == null) return false; // does not close window - user can try again
 
         int parsedLastFrame = parseInt(lastFrameField.getText(), nFrames);
@@ -759,14 +552,6 @@ public class PvsVideoDialog extends JDialog {
                 IJ.log("WARNING: object " + object.getName() + " - negative group " + object.getNegativeVisualGroup()
                         + " contains box ROI(s), which are ignored (only point ROIs are used as negative prompts).");
             }
-        }
-    }
-
-    private int parseInt(String text, int fallback) {
-        try {
-            return Integer.parseInt(text.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
         }
     }
 }
