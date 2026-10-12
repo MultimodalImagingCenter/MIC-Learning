@@ -78,14 +78,6 @@
             </roles>
             <!--properties><id></id></properties-->
         </contributor>
-        <contributor>
-            <name>Frederic Coquelle</name>
-            <url>https://curie.fr/personne/frederic-coquelle</url>
-            <roles>
-                <role>reviewer</role>
-            </roles>
-            <!--properties><id></id></properties-->
-        </contributor>
     </contributors>
 
     <mailingLists>
@@ -231,7 +223,7 @@
         <dependency>
             <groupId>org.apposed</groupId>
             <artifactId>appose</artifactId>
-            <version>0.12.0</version>
+            <version>0.11.0</version>
         </dependency>
 
         <!-- Source: https://mvnrepository.com/artifact/net.imglib2/imglib2-appose -->
@@ -327,66 +319,30 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <release>8</release>
+                    <release>${maven.compiler.source}</release>
                 </configuration>
             </plugin>
-<!-- generate javadoc -->
+
+            <!-- plugin pour copier le .jar dans le dossier plugins de fiji-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.11.2</version>
-
-                <configuration>
-                    <doclint>none</doclint>
-                    <source>8</source>
-                </configuration>
-
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
-                        <id>attach-javadocs</id>
                         <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <copy file="${project.build.directory}/${project.build.finalName}-all.jar"
+                                      tofile="/home/noemie/Applications/Fiji.app/plugins/mic_learning.jar"
+                                />
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
-            </plugin>
-    <!-- signing jar for security (maven) -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>3.2.8</version>
-
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                    </execution>
-                </executions>
-
-                <configuration>
-                    <bestPractices>true</bestPractices>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.11.0</version>
-                <extensions>true</extensions>
-
-                <configuration>
-                    <publishingServerId>central</publishingServerId>
-                    <autoPublish>false</autoPublish>
-                </configuration>
             </plugin>
         </plugins>
     </build>
 
 </project>
-
