@@ -40,9 +40,10 @@ import static fr.curie.miclearning.tools.detection.Detection3dUtils.createInstan
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
- * ImageJ plugin: promptable-visual-segmentation on video, with SAM2 or SAM3 (model type detected
- * automatically from the checkpoint). An arbitrary number of independent objects, each identified
- * purely by visual prompts (box and/or point ROIs, no text, no class). Tracking runs forward only,
+ * ImageJ plugin: promptable-visual-segmentation on video, with SAM2 or SAM3
+ * An arbitrary number of independent objects, each identified by visual prompts
+ * (box and/or point ROIs, no text, no class). One object = One Roi Group
+ * Tracking runs forward only,
  * starting for each object on whichever frame its own first prompt appears; a later prompt for an
  * already-tracked object refines it going forward without affecting earlier frames.
  */
@@ -121,14 +122,17 @@ public class SamPvsVideo_Plugin implements PlugIn {
             objectNames.add(object.getName());
             classIdMap.put(object.getName(), object.getOutputGroup());
 
-            if (!object.isPositiveVisualUsed()) continue; // guarded against by dialog validation, kept defensive
+            if (!object.isPositiveVisualUsed()) continue;
 
             for (int frame = 1; frame <= chosenLastFrame; frame++) {
                 List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
+                if (roisAtFrame.isEmpty()) continue;
                 RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
                         roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup());
                 if (promptRois.getPositive().isEmpty()) continue; // no prompt for this object on this frame
                 framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
+                object.setPositivePromptCount(object.getPositivePromptCount() + promptRois.getPositive().size());
+                object.setNegativePromptCount(object.getNegativePromptCount() + promptRois.getNegative().size());
             }
         }
 
@@ -394,7 +398,6 @@ public class SamPvsVideo_Plugin implements PlugIn {
     }
 
     private void printParameters(PvsVideoRunConfig config) {
-        PvsModelParameters params = config.getModelParams();
         IJ.log("----------------------");
         IJ.log("image: " + imp.getTitle());
         IJ.log("model: " + config.getModelPath());
@@ -404,8 +407,19 @@ public class SamPvsVideo_Plugin implements PlugIn {
         for (int i = 0; i < config.getObjectNames().size(); i++) {
             String name = config.getObjectNames().get(i);
             int objIndex = i;
+            PvsObject object = objects.get(objIndex);
             long promptFrameCount = config.getFramePrompts().values().stream().filter(m -> m.containsKey(objIndex)).count();
-            IJ.log("  - " + name + " -> " + promptFrameCount + " prompt frame(s) -> output group: " + config.getClassIdMap().get(name));
+            StringBuilder line = new StringBuilder("  - ").append(name)
+                    .append(" (object ").append(objIndex).append(") ")
+                    .append("-> ").append(promptFrameCount).append(" prompt frame(s)");
+
+            line.append(" - positive group: ").append(object.getPositiveVisualGroup()).append(" (")
+                    .append(object.getPositivePromptCount()).append(" roi").append(object.getPositivePromptCount() > 1 ? "s)" : ")");
+            if (object.isNegativeVisualUsed()) line.append(", negative group: ").append(object.getNegativeVisualGroup()).append(" (")
+                    .append(object.getNegativePromptCount()).append(" roi").append(object.getNegativePromptCount() > 1 ? "s)" : ")");
+            line.append("-> output group: ").append(config.getClassIdMap().get(name));
+            IJ.log(line.toString());
+
         }
         IJ.log("----------------------");
     }

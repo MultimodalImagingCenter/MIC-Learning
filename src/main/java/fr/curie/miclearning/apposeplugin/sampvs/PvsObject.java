@@ -20,6 +20,8 @@ public class PvsObject {
     // RoiManager group for the positive/negative visual prompt. null if unused
     private Integer positiveVisualGroup = null;
     private Integer negativeVisualGroup = null;
+    private int positivePromptCount=0;
+    private int negativePromptCount=0;
 
     // output group id assigned to this object's detections, by default input group
     private int outputGroup;
@@ -71,4 +73,10 @@ public class PvsObject {
     public boolean isNegativeGroupValid() {
         return negativeVisualGroup == null || !Objects.equals(negativeVisualGroup, positiveVisualGroup);
     }
+
+    public int getPositivePromptCount() {return positivePromptCount;}
+    public void setPositivePromptCount(int positivePromptCount) {this.positivePromptCount = positivePromptCount;}
+
+    public int getNegativePromptCount() {return negativePromptCount;}
+    public void setNegativePromptCount(int negativePromptCount) {this.negativePromptCount = negativePromptCount;}
 }
