@@ -236,13 +236,13 @@ public abstract class AbstractPromptDialog extends JDialog {
     // ==== live RoiManager refresh ====
 
     protected void startRoiPolling() {
-        lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
+        lastRoiSignature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis) + scopeSignature();
         roiPollTimer = new Timer(ROI_POLL_INTERVAL_MS, e -> {
             if (imp.getWindow() == null) { // source image was closed - nothing left to configure
                 onImageClosed();
                 return;
             }
-            String signature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis);
+            String signature = roiPromptExtractor.signature(getRoiManager().getRoisAsArray(), axis) + scopeSignature();
             if (!signature.equals(lastRoiSignature)) {
                 lastRoiSignature = signature;
                 refreshGroupOptions();
@@ -252,6 +252,9 @@ public abstract class AbstractPromptDialog extends JDialog {
     }
 
     protected abstract void refreshGroupOptions();
+
+    /** Extra state (besides the RoiManager content) whose change must refresh the group options; "" if none. */
+    protected String scopeSignature() { return ""; }
 
     // ==== OK / Cancel ====
 

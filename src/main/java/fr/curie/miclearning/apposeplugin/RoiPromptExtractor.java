@@ -38,6 +38,7 @@ public class RoiPromptExtractor {
 
     private int tPositionOf(Roi roi) {
         int position = roi.getTPosition();
+        if (position == 0 && !roi.hasHyperStackPosition()) position = roi.getPosition(); // plain stack: slice index stored in "position"
         if (position == 0) position = singlePointPositionOf(roi);
         return position;
     }
