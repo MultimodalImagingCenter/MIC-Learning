@@ -32,18 +32,18 @@ public class RoiPromptExtractor {
 
     private int zPositionOf(Roi roi) {
         int position = roi.getZPosition();
-        if (position == 0) position = singlePointPositionOf(roi);
+        if (position == 0) position = singlePointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
         return position;
     }
 
     private int tPositionOf(Roi roi) {
         int position = roi.getTPosition();
-        if (position == 0 && !roi.hasHyperStackPosition()) position = roi.getPosition(); // plain stack: slice index stored in "position"
-        if (position == 0) position = singlePointPositionOf(roi);
+        if (position == 0 && !roi.hasHyperStackPosition()) position = roi.getPosition(); // if plain stack: slice index stored in "position"
+        if (position == 0) position = singlePointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
         return position;
     }
 
-    /** The point's own tracked slice, for a ROI holding exactly one point; 0 otherwise. */
+    /** The point's own tracked slice, for a ROI holding exactly one point; position of the first point otherwise. */
     private int singlePointPositionOf(Roi roi) {
         if (roi instanceof PointRoi && ((PointRoi) roi).getNCoordinates() == 1) {
             return ((PointRoi) roi).getPointPosition(0);
