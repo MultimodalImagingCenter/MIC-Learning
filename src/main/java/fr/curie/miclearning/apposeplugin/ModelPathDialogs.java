@@ -39,10 +39,14 @@ public class ModelPathDialogs {
      */
     public static String validateAndSaveModelPath(String modelPathString, String lastModelPrefKey) {
         Path modelPath = Paths.get(modelPathString);
-        if (Files.exists(modelPath)) {
+        if (Files.isRegularFile(modelPath)) {
             Prefs.set(lastModelPrefKey, modelPathString);
             Prefs.savePreferences();
             return modelPathString;
+        } else if (Files.isDirectory(modelPath)) {
+            IJ.error("Selection Error", "The selected path is a folder, not a model checkpoint file (.pt):\n" + modelPathString
+                    + "\nPlease select the model file itself.");
+            return null;
         } else {
             IJ.error("Selection Error", "The selected path is not valid:\n" + modelPathString);
             return null;
