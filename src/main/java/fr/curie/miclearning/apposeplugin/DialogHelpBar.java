@@ -143,6 +143,7 @@ public class DialogHelpBar {
      */
     public void lockWidth(int width) {
         panel.setPreferredSize(new Dimension(width, VISIBLE_LINES * lineHeightPx));
+        panel.invalidate(); // setPreferredSize alone does not drop the cached layout sizes
     }
 
     /**

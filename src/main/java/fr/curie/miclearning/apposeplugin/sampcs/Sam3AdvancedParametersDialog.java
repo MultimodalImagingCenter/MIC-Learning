@@ -56,6 +56,7 @@ class Sam3AdvancedParametersDialog extends JDialog {
         this.includeTracking = includeTracking;
         this.trackingModelPath = currentTrackingModelPath;
 
+
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));

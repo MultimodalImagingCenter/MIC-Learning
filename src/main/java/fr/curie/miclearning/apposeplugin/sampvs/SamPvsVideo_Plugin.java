@@ -397,7 +397,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
      * Resolves the table rows into the objects actually tracked, fills {@code framePrompts)
      * <p>
      * An {@link PvsObject.Mode#OBJECT} row resolves to exactly one tracked object: every usable
-     * ROI in its positive group, on every processed frame, refines that same objec
+     * ROI in its positive group, on every processed frame, refines that same object
      * <p>
      * A {@link PvsObject.Mode#CLASS} row resolves to one tracked object per distinct ROI name
      * seen in its positive group, named {@code "<row name>-<n>"} in order of first appearance
