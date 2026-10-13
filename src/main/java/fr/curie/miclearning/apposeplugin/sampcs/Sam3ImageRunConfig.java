@@ -117,8 +117,15 @@ public final class Sam3ImageRunConfig {
             if (conceptLabels.isEmpty() || classIdMap.isEmpty()) {
                 throw new IllegalStateException("At least one concept must be provided.");
             }
-            if (framePrompts.isEmpty()) {
-                throw new IllegalStateException("At least one frame of prompts must be provided.");
+            // each concept needs a text prompt or at least one positive visual prompt (on any frame)
+            for (int c = 0; c < conceptLabels.size(); c++) {
+                final int conceptIdx = c;
+                boolean hasPositiveVisual = framePrompts.stream()
+                        .anyMatch(frame -> !frame.get(conceptIdx).get("positive_rois").isEmpty());
+                if (!conceptTextUsed.get(c) && !hasPositiveVisual) {
+                    throw new IllegalStateException("Concept " + conceptLabels.get(c)
+                            + ": needs a text prompt or at least one positive visual prompt (box or point ROI).");
+                }
             }
             return new Sam3ImageRunConfig(this);
         }
