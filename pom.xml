@@ -78,6 +78,14 @@
             </roles>
             <!--properties><id></id></properties-->
         </contributor>
+        <contributor>
+            <name>Frederic Coquelle</name>
+            <url>https://curie.fr/personne/frederic-coquelle</url>
+            <roles>
+                <role>reviewer</role>
+            </roles>
+            <!--properties><id></id></properties-->
+        </contributor>
     </contributors>
 
     <mailingLists>
@@ -319,7 +327,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>${maven.compiler.source}</release>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <release>8</release>
                 </configuration>
             </plugin>
 
