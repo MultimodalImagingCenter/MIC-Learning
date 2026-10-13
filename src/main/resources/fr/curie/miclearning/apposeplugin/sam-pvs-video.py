@@ -55,6 +55,33 @@ def split_rois(rois, img_height, img_width):
     return box_list, point_list
 
 
+def split_prompts_into_parts(box_list, fg_point_list):
+    """
+    SAM accepts at most one box per mask, so an object prompted with several boxes is split into
+    parts, each segmented on its own: one part per box (with the positive points inside it),
+    plus one part for the positive points outside every box.
+    Returns a list of (box_list, fg_point_list) ; a single entry when there is at most one box.
+    """
+    if len(box_list) <= 1:
+        return [(box_list, fg_point_list)]
+
+    points_per_box = [[] for _ in box_list]
+    loose_points = []
+    # split points an associate them with the boxes they're inside of
+    for point in fg_point_list:
+        for box_idx, ((x1, y1), (x2, y2)) in enumerate(box_list):
+            if x1 <= point[0] <= x2 and y1 <= point[1] <= y2:
+                points_per_box[box_idx].append(point)
+                break
+        else:
+            loose_points.append(point)
+
+    parts = [([box], points) for box, points in zip(box_list, points_per_box)]
+    if loose_points:
+        parts.append(([], loose_points))
+    return parts
+
+
 # ============================================================
 # 1. Build SAM model (SAM2 or SAM3 - detected automatically from the checkpoint)
 # ============================================================
@@ -182,12 +209,29 @@ for frame_idx in range(n_frames_to_process):
                 log_to_java(f"object {obj_idx}: no usable positive prompt on frame {frame_idx + frame_offset + 1} - skipped")
                 continue
             log_to_java(f"registering prompt for object {obj_idx} (frame {frame_idx + frame_offset + 1})")
-            obj_prompts = {
-                "box_xy1xy2_norm_list": pos_box_list,
-                "fg_xy_norm_list": pos_point_list,
-                "bg_xy_norm_list": neg_point_list,
-            }
-            _, init_mem = track_model.encode_prompt_memory(encoded_img, **obj_prompts)
+            parts = split_prompts_into_parts(pos_box_list, pos_point_list)
+            if len(parts) == 1:
+                obj_prompts = {
+                    "box_xy1xy2_norm_list": pos_box_list,
+                    "fg_xy_norm_list": pos_point_list,
+                    "bg_xy_norm_list": neg_point_list,
+                }
+                _, init_mem = track_model.encode_prompt_memory(encoded_img, **obj_prompts)
+            else:
+                # several boxes for one object: segment each part separately, then build the
+                # object's prompt memory from the union of the part masks
+                # log_to_java(f"   object {obj_idx}: {len(parts)} parts merged into one object")
+                part_masks = []
+                for part_box_list, part_point_list in parts:
+                    part_mask, _ = track_model.encode_prompt_memory(
+                        encoded_img,
+                        box_xy1xy2_norm_list=part_box_list,
+                        fg_xy_norm_list=part_point_list,
+                        bg_xy_norm_list=neg_point_list,
+                    )
+                    part_masks.append(part_mask)
+                merged_mask = torch.stack(part_masks).amax(dim=0)  # max of mask logits = union of the masks
+                init_mem = track_model.encode_prompt_memory_from_mask(encoded_img, merged_mask)
             memory_per_obj_dict[obj_idx].store_prompt_result(init_mem)
 
     # 2. Advance tracking for every currently-known object (objects prompted for the first time
@@ -218,8 +262,7 @@ for frame_idx in range(n_frames_to_process):
         contours_list, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours_list) == 0:
             continue  # no usable contour this frame for this object - tracking continues next frame
-        contour = max(contours_list, key=cv2.contourArea) if len(contours_list) > 1 else contours_list[0]
-        box_x, box_y, box_w, box_h = cv2.boundingRect(contour)
+        box_x, box_y, box_w, box_h = cv2.boundingRect(np.vstack(contours_list))  # spans every part of the object
         mask_h, mask_w = mask_uint8.shape
         box_xywh_norm = [box_x / mask_w, box_y / mask_h, box_w / mask_w, box_h / mask_h]
 

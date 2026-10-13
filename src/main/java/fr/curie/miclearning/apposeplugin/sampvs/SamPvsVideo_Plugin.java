@@ -497,9 +497,9 @@ public class SamPvsVideo_Plugin implements PlugIn {
     }
 
     /**
-     * One object actually tracked during a run: either a table row 1:1 (OBJECT mode, or a row
-     * with no positive prompt), or one of the several objects a CLASS-mode row expands into (one
-     * per distinct ROI name in its positive group).
+     * One object actually tracked during a run: either
+     * - a table row 1:1 (OBJECT mode, or a row with no positive prompt),
+     * - or one of the several objects a CLASS-mode row expands into (one per distinct ROI name in its positive group).
      */
     private static final class ResolvedObject {
         final String name;
