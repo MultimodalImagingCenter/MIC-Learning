@@ -74,13 +74,6 @@ public class ModelPathDialogs {
         return IJ.getDirectory("home"); // Fallback to user's home directory
     }
 
-    public static void showDownloadInstructions(String title, String message) {
-        GenericDialog gd = new GenericDialog(title);
-        gd.addMessage(message);
-        gd.hideCancelButton();
-        gd.showDialog();
-    }
-
     public static void showDownloadInstructions(Component parent, String title, String message) {
         JOptionPane.showMessageDialog(parent, message, title, JOptionPane.INFORMATION_MESSAGE);
     }

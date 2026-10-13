@@ -49,7 +49,7 @@ public class PvsObject {
     // does not impact the segmentation/tracking
     private String name;
 
-    private Mode mode = Mode.OBJECT;
+    private Mode mode = Mode.CLASS; // by default, a new PVS object is actually a class
 
     // RoiManager group for the positive/negative visual prompt. null if unused
     private Integer positiveVisualGroup = null;

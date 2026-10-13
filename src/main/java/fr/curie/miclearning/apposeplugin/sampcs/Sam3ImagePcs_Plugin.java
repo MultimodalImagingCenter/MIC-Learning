@@ -35,7 +35,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     protected static ImagePlus imp;
     private int nFrames;
     private int axis; // 3 = Z axis, 4 = Time axis (matches ImagePlus.getDimensions() indexing)
-    private int current_slice = 0; // 0 if all slices are processed, position of the processed frame otherwise
+    private int current_slice = 0; // 0 if all slices are processed, position of the processed frame otherwise, 1-indexed
 
     private final RoiPromptExtractor roiPromptExtractor = new RoiPromptExtractor();
 
@@ -124,9 +124,9 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
         List<List<Map<String, List<double[]>>>> framePrompts = new ArrayList<>();
         if (stackMode == DetectionMode.SINGLE_IMAGE) {
-            framePrompts.add(buildFrameConceptPrompts(roiPromptExtractor.getRoisAtFrame(allRois, current_slice, nFrames)));
+            framePrompts.add(buildFrameConceptPrompts(roiPromptExtractor.getRoisAtFrame(allRois, axis, current_slice)));
         } else {
-            Map<Integer, List<Roi>> roisByFrame = roiPromptExtractor.groupRoisByFrame(allRois, axis); // roi grouped by frame
+            Map<Integer, List<Roi>> roisByFrame = roiPromptExtractor.groupRoisByFrame(allRois, axis); // roi grouped by frame, 1-indexed
             // for each frame,
             // for each concept, extract positive and negative ROI
             for (int frame = 1; frame <= nFrames; frame++) {
@@ -163,20 +163,20 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         runSam3(config, startTime);
     }
 
-    /** Resolves each concept's positive/negative visual prompt from a list of ROI (from a specific frame). */
+    /** Resolves each concept's positive/negative visual prompt from a list of ROI for ONE frame. */
     private List<Map<String, List<double[]>>> buildFrameConceptPrompts(List<Roi> roisAtFrame) {
-        List<Map<String, List<double[]>>> result = new ArrayList<>();
+        List<Map<String, List<double[]>>> promptsRoisByConcept = new ArrayList<>();
         for (PcsConcept concept : concepts) {
             RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
-            concept.setPositivePromptCount(promptRois.getPositive().size());
-            concept.setNegativePromptCount(promptRois.getNegative().size());
+            concept.increasePositivePromptCount(promptRois.getPositive().size());
+            concept.increaseNegativePromptCount(promptRois.getNegative().size());
 
             Map<String, List<double[]>> entry = new HashMap<>();
             entry.put("positive_rois", promptRois.getPositive());
             entry.put("negative_rois", promptRois.getNegative());
-            result.add(entry);
+            promptsRoisByConcept.add(entry);
         }
-        return result;
+        return promptsRoisByConcept;
     }
 
     private void runSam3(Sam3ImageRunConfig config, long startTime) {

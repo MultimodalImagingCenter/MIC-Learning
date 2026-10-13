@@ -21,8 +21,8 @@ public class PcsConcept {
     // RoiManager group feeding the positive/negative visual prompt; null == that prompt is unused
     private Integer positiveVisualGroup = null;
     private Integer negativeVisualGroup = null;
-    private int positivePromptCount;
-    private int negativePromptCount;
+    private int positivePromptCount=0;
+    private int negativePromptCount=0;
 
     // output group id assigned to this concept's detections (independent of the input groups)
     private int outputGroup;
@@ -81,7 +81,9 @@ public class PcsConcept {
 
     public int getPositivePromptCount() {return positivePromptCount;}
     public void setPositivePromptCount(int positivePromptCount) {this.positivePromptCount = positivePromptCount;}
+    public void increasePositivePromptCount(int positivePromptIncrease){this.positivePromptCount+=positivePromptIncrease;}
 
     public int getNegativePromptCount() {return negativePromptCount;}
     public void setNegativePromptCount(int negativePromptCount) {this.negativePromptCount = negativePromptCount;}
+    public void increaseNegativePromptCount(int negativePromptIncrease){this.negativePromptCount+=negativePromptIncrease;}
 }

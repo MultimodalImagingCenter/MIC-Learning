@@ -178,10 +178,9 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
         JLabel titleLabel = createSectionTitle("Objects");
         helpBar.attachHelp(titleLabel,
-                "An object = one specific instance to segment and track. Define it with " +
-                        "\n positive visual prompt(s) (box and/or point ROI(s) in the ROI Manager). " +
-                        "\nIn \"Class\" mode, every ROI in the positive group is instead tracked as its own " +
-                        "\nindependent object (see the Mode column).");
+                "Each row defines what to segment and track, with positive visual prompt(s) (box and/or point ROIs)." +
+                        "\nBy default (\"Class\" mode), every ROI of the positive group is tracked as its own independent object." +
+                        "\nIn \"Object\" mode, all ROIs of the group describe one single object (see the Mode column).");
         panel.add(titleLabel, BorderLayout.NORTH);
 
         table.setDefaultEditor(String.class, createSelectAllTextEditor());
@@ -252,9 +251,9 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                     text = "Id tagging this object's outputs: the ROI group for output ROIs." + roiGroupNotUsed;
                     break;
                 case PvsObjectTableModel.COL_MODE:
-                    text = "Object: every ROI in the positive group is part of the same tracked object (default)."
-                            + "\nClass: each ROI in the positive group becomes its own independently-tracked object "
-                            + "\nA later ROI refines a specific instance only if it has that instance's exact ROI name; ";
+                    text = "Class (default): each ROI in the positive group is its own independently-tracked object, named \"<name>-1\", \"<name>-2\"..."
+                            + "\nA ROI on a later frame refines one of them only if it has that object's exact ROI name."
+                            + "\nObject: every ROI in the positive group is part of one single tracked object.";
                     break;
                 default:
                     return null;

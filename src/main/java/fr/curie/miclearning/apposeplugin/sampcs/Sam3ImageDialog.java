@@ -168,6 +168,12 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
         return frames;
     }
 
+    /** In single-image mode the available groups depend on the active slice. */
+    @Override
+    protected String scopeSignature() {
+        return String.valueOf(currentFrameRange());
+    }
+
     /** One option per roi group with a usable ROI on at least one of the current frames. */
     @Override
     List<RoiGroupOption> computeGroupOptions() {

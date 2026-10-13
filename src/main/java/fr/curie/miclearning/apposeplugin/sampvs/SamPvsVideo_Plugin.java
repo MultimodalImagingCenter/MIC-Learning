@@ -397,7 +397,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
      * Resolves the table rows into the objects actually tracked, fills {@code framePrompts)
      * <p>
      * An {@link PvsObject.Mode#OBJECT} row resolves to exactly one tracked object: every usable
-     * ROI in its positive group, on every processed frame, refines that same objec
+     * ROI in its positive group, on every processed frame, refines that same object
      * <p>
      * A {@link PvsObject.Mode#CLASS} row resolves to one tracked object per distinct ROI name
      * seen in its positive group, named {@code "<row name>-<n>"} in order of first appearance
@@ -497,9 +497,9 @@ public class SamPvsVideo_Plugin implements PlugIn {
     }
 
     /**
-     * One object actually tracked during a run: either a table row 1:1 (OBJECT mode, or a row
-     * with no positive prompt), or one of the several objects a CLASS-mode row expands into (one
-     * per distinct ROI name in its positive group).
+     * One object actually tracked during a run: either
+     * - a table row 1:1 (OBJECT mode, or a row with no positive prompt),
+     * - or one of the several objects a CLASS-mode row expands into (one per distinct ROI name in its positive group).
      */
     private static final class ResolvedObject {
         final String name;

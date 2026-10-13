@@ -136,6 +136,8 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     roisAtPromptFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
             conceptPositiveRois.add(promptRois.getPositive());
             conceptNegativeRois.add(promptRois.getNegative());
+            concept.setPositivePromptCount(promptRois.getPositive().size());
+            concept.setNegativePromptCount(promptRois.getNegative().size());
         }
 
         // 3.2 prepare config
