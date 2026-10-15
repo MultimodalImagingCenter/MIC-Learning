@@ -19,7 +19,7 @@ log_to_java("importing packages...")
 import torch
 import cv2
 import numpy as np
-from collections import defaultdict
+from collections import defaultdict, deque
 from muggled_sam.make_sam import make_sam_from_state_dict
 from muggled_sam.demo_helpers.video_data_storage import SAMVideoMemoryBank
 from muggled_sam.demo_helpers.bounding_boxes import get_2box_iou
@@ -193,14 +193,10 @@ if bidirectional:
 else:
     ids_and_memories_dicts = [id_and_memory_forward]
 
-# store results in arrays
 total_detection = 0  # number of detections across all frames
-all_masks = []
-all_boxes = []
-all_scores = []
-all_ids = []  # object ids (tracking identity, stable across frames) (one id per object, even if class is different)
-all_concept_ids = []  # per-detection concept index (parallel to all_ids), i.e. its class
-index = 0  # index to get results in "all_X" lists
+# queue for storing results arrays while Java retrieves it
+shm_queue = deque(maxlen=10)
+index = 0  # number of frames processed so far (progress counter)
 all_ids_used = []  # list of all used id
 
 
@@ -307,17 +303,12 @@ def detect_new_objects_all_concepts(frame, encoded_img, memory_dicts, known_boxe
 def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_list, scores_list, ids_list,
                                     concept_ids_list, progress_index):
     """
-    Wrap one frame's detections as shared-memory appose.NDArrays, append them to the all_* result
-    lists, and report progress/results back to Java via task.update. Returns the number of objects
+    Wrap one frame's detections as shared-memory appose.NDArrays, keep them alive in shm_queue,
+    and report progress/results back to Java via task.update. Returns the number of objects
     reported for this frame.
     """
     n_obj = len(masks_uint8_list)
     if n_obj == 0:
-        all_masks.append([])
-        all_boxes.append([])
-        all_scores.append([])
-        all_ids.append([])
-        all_concept_ids.append([])
         task.update(
             message=f"   frame {frame_idx + frame_offset + 1} - no object detected/tracked",
             current=progress_index + 1,
@@ -333,7 +324,6 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
     boxes_np = np.array([[float(v) for v in box] for box in boxes_xywh_norm_list], dtype='float64')
     shared_boxes = appose.NDArray("float64", boxes_np.shape)
     shared_boxes.ndarray()[:] = boxes_np
-    all_boxes.append(shared_boxes)
 
     # Masks
     masks_uint8_resized = [cv2.resize(mask, (w_img, h_img), interpolation=cv2.INTER_NEAREST)
@@ -341,25 +331,23 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
     masks_np = np.array(masks_uint8_resized, dtype='uint8')
     shared_masks = appose.NDArray("uint8", masks_np.shape)
     shared_masks.ndarray()[:] = masks_np
-    all_masks.append(shared_masks)
 
     # Scores
     scores_np = np.array([float(s) for s in scores_list], dtype='float64')
     shared_scores = appose.NDArray("float64", scores_np.shape)
     shared_scores.ndarray()[:] = scores_np
-    all_scores.append(shared_scores)
 
     # object IDs (tracking identity, stable across frames)
     ids_np = np.array(ids_list, dtype='int32')
     shared_ids = appose.NDArray("int32", ids_np.shape)
     shared_ids.ndarray()[:] = ids_np
-    all_ids.append(shared_ids)
 
     # concept IDs (which concept/class each detection belongs to - index into concept_labels)
     concept_ids_np = np.array(concept_ids_list, dtype='int32')
     shared_concept_ids = appose.NDArray("int32", concept_ids_np.shape)
     shared_concept_ids.ndarray()[:] = concept_ids_np
-    all_concept_ids.append(shared_concept_ids)
+
+    shm_queue.append((shared_boxes, shared_masks, shared_scores, shared_ids, shared_concept_ids))
 
     # send results to java via task update
     task.update(
@@ -369,11 +357,11 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
         info={
             "frame_idx": frame_idx + frame_offset,
             "n_results": n_obj,
-            "object_ids": all_ids[progress_index],
-            "prompts_ids": all_concept_ids[progress_index],
-            "scores": all_scores[progress_index],
-            "boxes": all_boxes[progress_index],
-            "masks": all_masks[progress_index]
+            "object_ids": shared_ids,
+            "prompts_ids": shared_concept_ids,
+            "scores": shared_scores,
+            "boxes": shared_boxes,
+            "masks": shared_masks
         }
     )
     return n_obj

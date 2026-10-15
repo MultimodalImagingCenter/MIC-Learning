@@ -19,6 +19,7 @@ log_to_java("importing packages...")
 import torch
 import cv2
 import numpy as np
+from collections import deque
 from muggled_sam.make_sam import make_sam_from_state_dict
 import sys
 
@@ -87,6 +88,9 @@ imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": T
 # concept_labels/concept_texts/concept_text_used are frame-invariant, index-aligned lists;
 # frame_prompts[frame_idx][concept_idx] = {"positive_rois": [...], "negative_rois": [...]} (per-frame visual prompts)
 n_concepts = len(concept_labels)
+
+# queue for storing results arrays while Java retrieves it
+shm_queue = deque(maxlen=10)
 
 # ============================================================
 # 3. Make predictions for each image, one concept at a time
@@ -176,6 +180,8 @@ for frame_idx, img in enumerate(images_bgr):
         shared_boxes.ndarray()[:] = final_boxes
         shared_scores.ndarray()[:] = final_scores
         shared_ids.ndarray()[:] = final_ids
+
+        shm_queue.append((shared_masks, shared_boxes, shared_scores, shared_ids))
 
         task.update(
             message=f"   frame {frame_idx + 1} - number of object(s) detected: {slice_total_detection}",
