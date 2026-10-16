@@ -49,6 +49,8 @@ public abstract class AbstractResultsConsumer implements Callable<Void> {
             } catch (RuntimeException e) {
                 // A single malformed/unexpected frame should not abort the whole run.
                 IJ.log("ERROR processing a frame, skipping it: " + e);
+            } finally {
+                closeArrays(info);
             }
         }
         return null;
@@ -97,6 +99,22 @@ public abstract class AbstractResultsConsumer implements Callable<Void> {
         }
 
         storeResults(frameIdx, processedDetections, labelIds, info, numResults);
+    }
+
+    /**
+     * Release the shared-memory arrays received for one frame, once their data has been copied into
+     * Java arrays.
+     */
+    private static void closeArrays(Map<String, Object> info) {
+        for (Object value : info.values()) {
+            if (value instanceof NDArray) {
+                try {
+                    ((NDArray) value).close();
+                } catch (RuntimeException e) {
+                    IJ.log("Warning: could not release shared memory array: " + e);
+                }
+            }
+        }
     }
 
     /** Which prompt/concept/object label each of the {@code numResults} detections belongs to. */

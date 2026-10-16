@@ -49,7 +49,8 @@ public class Detection3dUtils {
                     Roi roi = (Roi) det.getBoundingBoxRoi().clone();
                     roi.setPosition(frameIndex);
                     roi.setGroup(getGroupId(det, groupingMethod));
-                    roi.setName(frameIndex + "_" + det.getRoiName());
+                    // name must not start with a digit: RoiManager would replace it because of stupid rules
+                    roi.setName("f"+ frameIndex + "_" + det.getRoiName());
                     manager.addRoi(roi);
                 }
 
@@ -57,7 +58,7 @@ public class Detection3dUtils {
                     Roi roi = (Roi) det.getShapeRoi().clone();
                     roi.setPosition(frameIndex); // 1-based
                     roi.setGroup(getGroupId(det, groupingMethod));
-                    roi.setName(frameIndex + "_" + det.getRoiName());
+                    roi.setName("f" + frameIndex + "_" + det.getRoiName());
                     manager.addRoi(roi);
                 }
             }

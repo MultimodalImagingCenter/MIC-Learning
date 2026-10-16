@@ -19,7 +19,7 @@ log_to_java("importing packages...")
 import torch
 import cv2
 import numpy as np
-from collections import defaultdict
+from collections import defaultdict, deque
 from muggled_sam.make_sam import make_sam_from_state_dict
 from muggled_sam.demo_helpers.video_data_storage import SAMVideoMemoryBank
 
@@ -128,6 +128,9 @@ frame_prompts = {
 # 3. Per-frame helper: package one frame's results and send them to java
 # ============================================================
 
+# queue for storing results arrays while Java retrieves it
+shm_queue = deque(maxlen=10)
+
 def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_list, scores_list, ids_list, progress_index):
     """
     Wrap one frame's detections as shared-memory appose.NDArrays and report them back to Java via
@@ -165,6 +168,8 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
     ids_np = np.array(ids_list, dtype='int32')
     shared_ids = appose.NDArray("int32", ids_np.shape)
     shared_ids.ndarray()[:] = ids_np
+
+    shm_queue.append((shared_boxes, shared_masks, shared_scores, shared_ids))
 
     task.update(
         message=f"   frame {frame_idx + frame_offset + 1} - number of object(s) tracked: {n_obj}",
