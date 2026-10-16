@@ -20,10 +20,47 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * {@code roi}'s position along {@code axis} (3 = Z, 4 = Time),
-     * in case Roi is {@link PointRoi} (single-point or multiple-points):
-     * tracks the slice of the first point (fall back to {@link PointRoi#getPointPosition(int)}
-     * TODO: case multi-point ROI whose points span several frames
+     * Splits every multi-point ROI whose points span on several positions (several frames) into one {@link PointRoi}
+     * per position (each holding only that position's points)
+     * <p>
+     * Note: {@link PointRoi#getPointPosition(int)} is the point's index in the whole stack. This is
+     * only equal to its Z or T position because a  3D stack is accepted. For
+     * a 4D (Z + T) image, the index would have to be converted.
+     */
+    private Roi[] splitMultiPositionPoints(Roi[] rois) {
+        if (rois == null) return null;
+        List<Roi> result = new ArrayList<>(rois.length);
+        for (Roi roi : rois) {
+            if (!(roi instanceof PointRoi)) {
+                result.add(roi);
+                continue;
+            }
+            PointRoi pointRoi = (PointRoi) roi;
+            FloatPolygon points = pointRoi.getFloatPolygon();
+            Map<Integer, List<Integer>> pointIndicesByPosition = new TreeMap<>();
+            for (int i = 0; i < points.npoints; i++) {
+                pointIndicesByPosition.computeIfAbsent(pointRoi.getPointPosition(i), k -> new ArrayList<>()).add(i);
+            }
+            if (pointIndicesByPosition.size() <= 1) {
+                result.add(roi); // all points on the same position: nothing to split
+                continue;
+            }
+            for (Map.Entry<Integer, List<Integer>> entry : pointIndicesByPosition.entrySet()) {
+                PointRoi piece = new PointRoi();
+                for (int i : entry.getValue()) {
+                    piece.addPoint(points.xpoints[i], points.ypoints[i], entry.getKey());
+                }
+                piece.setName(roi.getName());
+                piece.setGroup(roi.getGroup());
+                result.add(piece);
+            }
+        }
+        return result.toArray(new Roi[0]);
+    }
+
+    /**
+     * {@code roi}'s position along {@code axis} (3 = Z, 4 = Time).
+     * For a {@link PointRoi}, falls back to the position of its first point,
      */
     private int positionAlong(Roi roi, int axis) {
         int position = axis == 3 ? zPositionOf(roi) : tPositionOf(roi);
@@ -32,20 +69,20 @@ public class RoiPromptExtractor {
 
     private int zPositionOf(Roi roi) {
         int position = roi.getZPosition();
-        if (position == 0) position = singlePointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
+        if (position == 0) position = firstPointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
         return position;
     }
 
     private int tPositionOf(Roi roi) {
         int position = roi.getTPosition();
         if (position == 0 && !roi.hasHyperStackPosition()) position = roi.getPosition(); // if plain stack: slice index stored in "position"
-        if (position == 0) position = singlePointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
+        if (position == 0) position = firstPointPositionOf(roi); // if the ROI is a point get position of first point, 0 otherwise
         return position;
     }
 
-    /** The point's own tracked slice, for a ROI holding exactly one point; position of the first point otherwise. */
-    private int singlePointPositionOf(Roi roi) {
-        if (roi instanceof PointRoi && ((PointRoi) roi).getNCoordinates() == 1) {
+    /** Position of the first point of a {@link PointRoi} (= of all its points, once split), 0 for other ROIs. */
+    private int firstPointPositionOf(Roi roi) {
+        if (roi instanceof PointRoi && ((PointRoi) roi).getNCoordinates() >= 1) {
             return ((PointRoi) roi).getPointPosition(0);
         }
         return 0;
@@ -60,7 +97,7 @@ public class RoiPromptExtractor {
     public Map<Integer, List<Roi>> groupRoisByFrame(Roi[] rois, int axis) {
         Map<Integer, List<Roi>> byFrame = new HashMap<>();
         if (rois == null) return byFrame;
-        for (Roi roi : rois) {
+        for (Roi roi : splitMultiPositionPoints(rois)) {
             if (!isUsableRoiType(roi)) continue;
             int position = positionAlong(roi, axis);
             if (position==0) position=1;
@@ -138,7 +175,7 @@ public class RoiPromptExtractor {
     public List<Roi> getRoisAtFrame(Roi[] rois, int axis, int frame) {
         List<Roi> result = new ArrayList<>();
         if (rois == null) return result;
-        for (Roi roi : rois) {
+        for (Roi roi : splitMultiPositionPoints(rois)) {
             if (!isUsableRoiType(roi)) continue;
             int position = positionAlong(roi, axis);
             if (position == frame || position == 0) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
@@ -157,7 +194,7 @@ public class RoiPromptExtractor {
     public TreeSet<Integer> getRoiGroupAtFrame(Roi[] rois, int axis, int frame) {
         TreeSet<Integer> groups = new TreeSet<>();
         if (rois == null) return groups;
-        for (Roi roi : rois) {
+        for (Roi roi : splitMultiPositionPoints(rois)) {
             if (!isUsableRoiType(roi)) continue;
             int position = positionAlong(roi, axis);
             if (position == frame || position == 0) groups.add(roi.getGroup()); // position == 0 means no specific position, roi defined on all frames of this axis
@@ -177,7 +214,7 @@ public class RoiPromptExtractor {
     public List<Roi> getRoisAtFrame(Roi[] rois, int axis, int slice, int frame) {
         List<Roi> result = new ArrayList<>();
         if (rois == null) return result;
-        for (Roi roi : rois) {
+        for (Roi roi : splitMultiPositionPoints(rois)) { // see splitMultiPositionPoints: point positions are stack indices, would need conversion for a 4D image
             if (!isUsableRoiType(roi)) continue;
             int t = tPositionOf(roi);
             int z = zPositionOf(roi);
@@ -241,7 +278,7 @@ public class RoiPromptExtractor {
     public String signature(Roi[] rois, int axis) {
         StringBuilder sb = new StringBuilder();
         if (rois == null) return sb.toString();
-        for (Roi roi : rois) {
+        for (Roi roi : splitMultiPositionPoints(rois)) {
             if (!isUsableRoiType(roi)) continue;
             int position = positionAlong(roi, axis);
             sb.append(roi.getGroup()).append(':').append(position).append(';');
