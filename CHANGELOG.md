@@ -25,14 +25,16 @@
 - Classes to define **"objects" for promptable visual segmentation (PVS)** :
   - `PvsObject`: an object is defined by a name, an output group, and prompts: a mandatory positive
     visual prompt (box and/or point ROIs, one ROI group, possibly defined on several frames to refine
-    tracking downstream) plus an optional point-only negative visual prompt (one ROI group). Can be one of 2 modes:
-    - `CLASS`: 
-    - `OBJECT`: 
+    tracking downstream) plus an optional point-only negative visual prompt (one ROI group). Is one of 2 modes:
+    - `CLASS`: on a single frame, all Rois of the group are resolved as independent objects. A
+      cross multiple frames, all ROIs with the same name and group are instances of the same object
+    - `OBJECT`:  on a single frame, all ROIs of the group are resolved as parts of the same object.
+      Across multiple frames, all ROIs of the same group are instances of the same object.
   - GUI: `PvsObjectTableModel`, `PvsGroupIdCellEditor` : table where each row is one object; the
     negative-prompt column only offers ROI groups that contain at least one point ROI.
 - **New plugin "SAM PVS on Video"** (`SamPvsVideo_Plugin`): promptable visual segmentation with SAM2
-  or SAM3 (model type detected automatically from the checkpoint).
-  - No text prompt, no class/concept - only box/point ROI-based object identity.
+  or SAM3.
+  - Box/point ROI prompts (positive and negative) (no text prompt, no class/concept)
   - Objects are tracked forward only, each starting on whichever frame its own first prompt appears;
     a later prompt for an already-tracked object refines it going forward without affecting earlier frames.
   - Macro-recordable.
@@ -61,9 +63,14 @@
   `Sam3AdvancedParametersDialog`, `Sam3GroupIdCellEditor`) now use the shared `RoiGroupOption`,
   `DialogUiSupport` and `ModelPathDialogs` classes instead of `sampcs`-local ones (no behavior change).
 - `RoiPromptExtractor.isUsableRoiType`: the usable ROIs now include all "area" ROIs, except for composite ROIs.
+- `RoiPromptExtractor`: multi-points ROIs whose points lie on several positions (several frames) are split
+  into one per position (`splitMultiPositionPoints`).
 
 ### Fixed
-- `RoiPromptExtractor`: fallback when getting the position (place in stack) of a ROI if point ROI.
+- `RoiPromptExtractor`: when getting the position (frame in stack) of a point ROI, falls back to the position 
+  of its first point (instead of 0)
+- python scripts: persist result arrays in a queue while Java retrieve them (prevent Python from deleting them 
+  before Java has had time to retrieve them)
 
 ### Removed
 - `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 
