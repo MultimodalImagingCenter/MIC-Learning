@@ -100,7 +100,6 @@ public class RoiPromptExtractor {
         for (Roi roi : splitMultiPositionPoints(rois)) {
             if (!isUsableRoiType(roi)) continue;
             int position = positionAlong(roi, axis);
-            if (position==0) position=1;
             byFrame.computeIfAbsent(position, k -> new ArrayList<>()).add(roi);
         }
         return byFrame;
@@ -126,6 +125,32 @@ public class RoiPromptExtractor {
     }
 
     /**
+     * For each ROI group present in {@code rois}, (if group contain at least one usable ROI)
+     * counts how many usable ROI by group (after {@link RoiPromptExtractor#splitMultiPositionPoints})
+     *
+     * @param rois   ROIs to scan
+     * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
+     * @param frames the frames to check coverage against (1-indexed)
+     * @param pointsOnly if true, only POINT rois are counted (e.g. for negative prompts)
+     */
+    public Map<Integer, Integer> getUsableGroupsWithCount(Roi[] rois, int axis, Collection<Integer> frames, boolean pointsOnly) {
+        Map<Integer, Integer> groupsWithCount = new TreeMap<>();
+        if (rois == null) return groupsWithCount;
+        for (Roi roi : splitMultiPositionPoints(rois)) {
+            // check ROI is usable
+            if (!isUsableRoiType(roi)) continue;
+            if (pointsOnly && roi.getType() != Roi.POINT) continue;
+            // check ROI is in frame range
+            int position = positionAlong(roi, axis);
+            if (!frames.contains(position)) continue;
+            // add number of ROI to sum
+            int groupId = roi.getGroup();
+            groupsWithCount.merge(groupId, 1, Integer::sum);
+        }
+        return groupsWithCount;
+    }
+
+    /**
      * Which of {@code frames} have no usable ROI belonging to {@code groupId} - e.g. to warn the
      * user before running that a concept's visual prompt won't fire on some frames.
      *
@@ -143,25 +168,6 @@ public class RoiPromptExtractor {
             if (!present) missing.add(frame);
         }
         return missing;
-    }
-
-    /**
-     * Which ROI groups in {@code rois} contain at least one usable POINT roi on at least one of
-     * {@code frames}
-     *
-     * @param rois   ROIs to scan
-     * @param axis   3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
-     * @param frames the frames to check (1-indexed)
-     */
-    public Set<Integer> groupsWithUsablePointRoi(Roi[] rois, int axis, Collection<Integer> frames) {
-        Map<Integer, List<Roi>> roisByFrame = groupRoisByFrame(rois, axis);
-        Set<Integer> groups = new TreeSet<>();
-        for (int frame : frames) {
-            for (Roi roi : roisByFrame.getOrDefault(frame, Collections.emptyList())) {
-                if (roi.getType() == Roi.POINT) groups.add(roi.getGroup());
-            }
-        }
-        return groups;
     }
 
     /**

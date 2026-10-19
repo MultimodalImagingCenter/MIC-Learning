@@ -1,10 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
-import fr.curie.miclearning.apposeplugin.AbstractPromptDialog;
-import fr.curie.miclearning.apposeplugin.DialogHelpBar;
-import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
-import fr.curie.miclearning.apposeplugin.RoiGroupOption;
-import fr.curie.miclearning.apposeplugin.RoiGroupOptionWithCoverage;
+import fr.curie.miclearning.apposeplugin.*;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
@@ -411,19 +407,9 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         Roi[] allRois = getRoiManager().getRoisAsArray();
 
         // positive: any group with a usable ROI (box or point) on at least one processed frame
-        Map<Integer, Integer> coveredFramesByGroup = roiPromptExtractor.countGroupCoverage(allRois, axis, frames);
-        List<RoiGroupOption> positiveOptions = new ArrayList<>();
-        int totalFrames = frames.size();
-        for (Map.Entry<Integer, Integer> entry : coveredFramesByGroup.entrySet()) {
-            positiveOptions.add(new RoiGroupOptionWithCoverage(entry.getKey(), entry.getValue(), totalFrames));
-        }
-
-        // negative: subset of the positive options that also has a usable POINT ROI somewhere
-        Set<Integer> pointGroups = roiPromptExtractor.groupsWithUsablePointRoi(allRois, axis, frames);
-        List<RoiGroupOption> negativeOptions = new ArrayList<>();
-        for (RoiGroupOption option : positiveOptions) {
-            if (pointGroups.contains(option.getGroupId())) negativeOptions.add(option);
-        }
+        List<RoiGroupOption> positiveOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, false));
+        // negative: only point ROIs can be negative prompts
+        List<RoiGroupOption> negativeOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, true));
 
         positiveGroupEditor.setAvailableGroups(positiveOptions);
         negativeGroupEditor.setAvailableGroups(negativeOptions);
@@ -446,6 +432,15 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                 + "\nAdd one to create object and start segmentation.");
         else helpBar.clearWarning(NO_USABLE_ROI_OWNER);
         table.repaint();
+    }
+
+    /** one combo box option per group id, labelled with its ROI count */
+    private static List<RoiGroupOption> toOptions(Map<Integer, Integer> roiCountByGroup) {
+        List<RoiGroupOption> options = new ArrayList<>();
+        for (Map.Entry<Integer, Integer> entry : roiCountByGroup.entrySet()) {
+            options.add(new RoiGroupOptionWithCount(entry.getKey(), entry.getValue()));
+        }
+        return options;
     }
 
     private boolean outputWithRoiGroupSelected() {
