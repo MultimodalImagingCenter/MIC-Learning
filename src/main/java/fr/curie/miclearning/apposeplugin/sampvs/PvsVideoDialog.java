@@ -243,7 +243,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                             + "this object, and any later frame refines it going forward.";
                     break;
                 case PvsObjectTableModel.COL_NEGATIVE_VISUAL:
-                    text = "ROI group used as a negative visual prompt (optional, point ROIs only)."
+                    text = "ROI group used as a negative visual prompt (optional, POINT ROIs ONLY). "
                             + "Must differ from the Positive visual group. "
                             + "\nCan be placed on several frames.";
                     break;

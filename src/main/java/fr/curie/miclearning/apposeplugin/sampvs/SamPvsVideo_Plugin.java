@@ -106,7 +106,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         }
 
         long startTime = System.nanoTime();
-
+        IJ.log("\n");
         // --- 3. Resolve the table rows into actually-tracked objects, build the sparse
         // per-frame per-object prompts, and the run config ---
         // an OBJECT-mode row is resolved as one tracked object, refined by every one of
@@ -121,8 +121,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         for (ResolvedObject r : resolved) classIdMap.put(r.name, r.outputGroup);
 
         int posLastFrame = chosenLastFrame - 1; // 0-indexed, inclusive
-        // frames before the earliest object prompt are ignored entirely - not sliced into the
-        // shared-memory buffer, not encoded, not processed at all.
+        // frames before the earliest object prompt are ignored entirely
         int posFirstFrame = framePrompts.isEmpty() ? 0 : Collections.min(framePrompts.keySet());
 
         PvsVideoRunConfig config;
@@ -424,12 +423,18 @@ public class SamPvsVideo_Plugin implements PlugIn {
         ResolvedObject resolvedObject = new ResolvedObject(object);
         resolved.add(resolvedObject);
 
+        boolean tracked = false; // a negative-only prompt can only refine an object already prompted on an earlier frame
         for (int frame = 1; frame <= chosenLastFrame; frame++) {
             List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
             if (roisAtFrame.isEmpty()) continue;
             RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
                     roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup());
-            if (promptRois.getPositive().isEmpty()) continue; // no prompt for this object on this frame
+            if (promptRois.getPositive().isEmpty() && (!tracked || promptRois.getNegative().isEmpty())) {
+                if (!promptRois.getNegative().isEmpty()) IJ.log("warning: negative prompts for object " + object.getName() +" on frame "+ frame + " will be ignored." +
+                        " (no positive prompt on any previous images)");
+                continue;
+            }
+            tracked = true;
             framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
             resolvedObject.addPromptCounts(promptRois);
         }
@@ -467,6 +472,18 @@ public class SamPvsVideo_Plugin implements PlugIn {
                 framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
                 resolved.get(objIndex).addPromptCounts(promptRois);
             }
+
+            // negative-only refinement for every instance already tracked but without positive prompt on this frame
+            if (sharedNegative.isEmpty()) continue;
+            for (int objIndex : objIndexByRoiName.values()) {
+                Map<Integer, RoiPromptExtractor.PromptRois> promptsAtFrame = framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>());
+                if (promptsAtFrame.containsKey(objIndex)) continue;
+                RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.combinePromptRois(Collections.emptyList(), sharedNegative);
+                promptsAtFrame.put(objIndex, promptRois);
+                resolved.get(objIndex).addPromptCounts(promptRois);
+            }
+            if (objIndexByRoiName.isEmpty()) IJ.log("warning: negative prompts for class " + object.getName() +" on frame "+ frame + " will be ignored." +
+                    " (no positive prompt on any previous images)");;
         }
     }
 
@@ -487,7 +504,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
             line.append(" - positive group: ").append(object.positiveGroup).append(" (")
                     .append(object.positivePromptCount).append(" roi").append(object.positivePromptCount > 1 ? "s)" : ")");
-            if (object.negativeGroup != null) line.append(", negative group: ").append(object.negativeGroup).append(" (")
+            if (object.negativeGroup != null && object.negativePromptCount>0) line.append(", negative group: ").append(object.negativeGroup).append(" (")
                     .append(object.negativePromptCount).append(" roi").append(object.negativePromptCount > 1 ? "s)" : ")");
             line.append(" -> output group: ").append(object.outputGroup);
             IJ.log(line.toString());

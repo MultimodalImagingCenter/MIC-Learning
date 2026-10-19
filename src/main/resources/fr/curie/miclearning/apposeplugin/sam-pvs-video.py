@@ -190,9 +190,9 @@ def package_and_send_frame_results(frame_idx, masks_uint8_list, boxes_xywh_norm_
 # ============================================================
 # 4. Make predictions
 # ============================================================
-# One single forward pass over the video: objects register themselves lazily, on whichever frame
+# One single forward pass over the video: objects register themselves on whichever frame
 # their own first prompt appears (defaultdict), and a later prompt for an already-tracked object
-# simply adds another prompt-memory encoding (refinement) without resetting its tracking memory.
+# simply adds another prompt-memory encoding (refinement) without resetting its tracking memory
 log_to_java("running prediction...")
 
 memory_per_obj_dict = defaultdict(lambda: SAMVideoMemoryBank(max_frame_memory=n_frames_in_memory))
@@ -211,7 +211,19 @@ for frame_idx in range(n_frames_to_process):
             pos_box_list, pos_point_list = split_rois(obj_prompts_raw.get("positive_rois", []), h_img, w_img)
             _, neg_point_list = split_rois(obj_prompts_raw.get("negative_rois", []), h_img, w_img)
             if len(pos_box_list) == 0 and len(pos_point_list) == 0:
-                log_to_java(f"object {obj_idx}: no usable positive prompt on frame {frame_idx + frame_offset + 1} - skipped")
+                # negative-only prompt: refine the current tracked mask (given as mask hint, like
+                # SAM2's add_new_points_or_box), only possible for an already tracked object
+                if len(neg_point_list) == 0 or obj_idx not in memory_per_obj_dict:
+                    log_to_java(f"object {obj_idx}: no usable positive prompt on frame {frame_idx + frame_offset + 1} - skipped")
+                    continue
+                log_to_java(f"refining object {obj_idx} with negative prompts (frame {frame_idx + frame_offset + 1})")
+                tracked_mask, _, _, _ = track_model.step_video_masking(
+                    encoded_img, **memory_per_obj_dict[obj_idx].to_dict()
+                )
+                _, init_mem = track_model.encode_prompt_memory(
+                    encoded_img, None, None, neg_point_list, mask_hint=tracked_mask
+                )
+                memory_per_obj_dict[obj_idx].store_prompt_result(init_mem)
                 continue
             log_to_java(f"registering prompt for object {obj_idx} (frame {frame_idx + frame_offset + 1})")
             parts = split_prompts_into_parts(pos_box_list, pos_point_list)
