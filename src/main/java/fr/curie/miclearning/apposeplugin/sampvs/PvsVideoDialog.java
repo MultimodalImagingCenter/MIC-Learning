@@ -44,6 +44,8 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
     // interface elements specific to objects (model path/output checkboxes live in the base)
     private JTextField lastFrameField;
+    private JCheckBox semanticMaskCB;
+    private JCheckBox instanceMaskPerClassCB;
 
     // populated only once the user presses OK
     private PvsModelParameters finalModelParams;
@@ -226,7 +228,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
             if (viewCol < 0) return null;
             int modelCol = table.convertColumnIndexToModel(viewCol);
             String roiGroupNotUsed = outputWithRoiGroupSelected() ? "" : "\nUnused for instance masks.";
-            String nameNotUsed = outputWithNameSelected() ? "" : "\nUnused for instance masks.";
+            String nameNotUsed = outputWithNameSelected() ? "" : "\nUnused for instance and semantic masks.";
             String text;
             switch (modelCol) {
                 case PvsObjectTableModel.COL_NAME:
@@ -244,7 +246,8 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                             + "\nCan be placed on several frames.";
                     break;
                 case PvsObjectTableModel.COL_OUTPUT_GROUP:
-                    text = "Id tagging this object's outputs: the ROI group for output ROIs." + roiGroupNotUsed;
+                    text = "Id tagging this object's outputs: the ROI group for output ROIs, and the pixel value for the semantic mask."
+                            + roiGroupNotUsed;
                     break;
                 case PvsObjectTableModel.COL_MODE:
                     text = "Class (default): each ROI in the positive group is its own independently-tracked object, named \"<name>-1\", \"<name>-2\"..."
@@ -361,20 +364,30 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         addBoxRoisCB = new JCheckBox("Add bounding boxes to ROI Manager", false);
         addShapeRoisCB = new JCheckBox("Add shape ROIs to ROI Manager", true);
         instanceMaskCB = new JCheckBox("Create instance masks (unique value per object)", false);
+        semanticMaskCB = new JCheckBox("Create semantic masks (unique value per output group)", false);
+        instanceMaskPerClassCB = new JCheckBox("Create instance mask per row (one channel per table row)", false);
 
-        // the "Output group" column is only meaningful for ROI outputs - repaint it when that changes
+        // the "Output group" and "Name" columns are only meaningful for some outputs - repaint them when that changes
         addBoxRoisCB.addItemListener(e -> table.repaint());
         addShapeRoisCB.addItemListener(e -> table.repaint());
+        semanticMaskCB.addItemListener(e -> table.repaint());
+        instanceMaskPerClassCB.addItemListener(e -> table.repaint());
 
         helpBar.attachHelp(addBoxRoisCB, "Adds one rectangle ROI per detection, named 'box_' + the object's output name. "
                 + "\nRoi placed in the ROI group set by that object's \"Output group\".");
         helpBar.attachHelp(addShapeRoisCB, "Adds one shape ROI per detection, named 'mask_' + the object's output name. "
                 + "\nRoi placed in the ROI group set by that object's \"Output group\".");
         helpBar.attachHelp(instanceMaskCB, "One image per frame where each detected instance gets its own unique pixel value.");
+        helpBar.attachHelp(semanticMaskCB, "One image per frame where each pixel takes the value of its object's \"Output group\" "
+                + "(0 = background).");
+        helpBar.attachHelp(instanceMaskPerClassCB, "Like instance masks, but one channel per table row: "
+                + "\nall objects resolved from the same row share its channel.");
 
         checkboxesPanel.add(addBoxRoisCB);
         checkboxesPanel.add(addShapeRoisCB);
         checkboxesPanel.add(instanceMaskCB);
+        checkboxesPanel.add(semanticMaskCB);
+        checkboxesPanel.add(instanceMaskPerClassCB);
 
         panel.add(checkboxesPanel, BorderLayout.CENTER);
         return panel;
@@ -444,11 +457,13 @@ public class PvsVideoDialog extends AbstractPromptDialog {
     }
 
     private boolean outputWithRoiGroupSelected() {
-        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected())
+                || (semanticMaskCB != null && semanticMaskCB.isSelected());
     }
 
     private boolean outputWithNameSelected() {
-        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected())
+                || (instanceMaskPerClassCB != null && instanceMaskPerClassCB.isSelected());
     }
 
     // ==== OK / Cancel ====
@@ -535,6 +550,8 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         options.addToRoiManagerBB = addBoxRoisCB.isSelected();
         options.addToRoiManagerShapes = addShapeRoisCB.isSelected();
         options.createInstanceMask = instanceMaskCB.isSelected();
+        options.createSemanticMask = semanticMaskCB.isSelected();
+        options.createInstanceMaskPerClass = instanceMaskPerClassCB.isSelected();
         return options;
     }
 

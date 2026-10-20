@@ -35,8 +35,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static fr.curie.miclearning.tools.detection.Detection3dUtils.addTrackedRoisToManager;
-import static fr.curie.miclearning.tools.detection.Detection3dUtils.createInstanceMaskStackWithFixedIds;
+import static fr.curie.miclearning.tools.detection.Detection3dUtils.*;
 import static ij.plugin.frame.RoiManager.getRoiManager;
 
 /**
@@ -118,7 +117,11 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
         List<String> objectNames = resolved.stream().map(r -> r.name).collect(Collectors.toList());
         Map<String, Integer> classIdMap = new HashMap<>();
-        for (ResolvedObject r : resolved) classIdMap.put(r.name, r.outputGroup);
+        Map<String, String> rowNameByObjectName = new HashMap<>(); // for the instance mask per class: one channel per table row
+        for (ResolvedObject r : resolved) {
+            classIdMap.put(r.name, r.outputGroup);
+            rowNameByObjectName.put(r.name, r.rowName);
+        }
 
         int posLastFrame = chosenLastFrame - 1; // 0-indexed, inclusive
         // frames before the earliest object prompt are ignored entirely
@@ -149,10 +152,11 @@ public class SamPvsVideo_Plugin implements PlugIn {
         printParameters(config, resolved);
 
         // --- 4. Run ---
-        runPvs(config, mfdManager, startTime);
+        runPvs(config, mfdManager, rowNameByObjectName, startTime);
     }
 
-    private void runPvs(PvsVideoRunConfig config, MultiFrameDataManager mfdManager, long startTime) {
+    private void runPvs(PvsVideoRunConfig config, MultiFrameDataManager mfdManager,
+                        Map<String, String> rowNameByObjectName, long startTime) {
         IJ.showStatus("sam pvs: environment initialization");
         BlockingQueue<Map<String, Object>> resultsQueue = new LinkedBlockingQueue<>();
         ThreadFactory consumerThreadFactory = r -> {
@@ -180,7 +184,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
 
             IJ.log(" --- Generating outputs... ");
             IJ.showStatus("sam pvs: generating outputs");
-            generateOutputs(mfdManager, config);
+            generateOutputs(mfdManager, config, rowNameByObjectName);
 
         } catch (IOException | BuildException e) {
             IJ.error("Unable to prepare Python environment", String.valueOf(e.getMessage()));
@@ -211,7 +215,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         }
     }
 
-    private void generateOutputs(MultiFrameDataManager mfdManager, PvsVideoRunConfig config) {
+    private void generateOutputs(MultiFrameDataManager mfdManager, PvsVideoRunConfig config, Map<String, String> rowNameByObjectName) {
         DetectionUtils.OutputOptions options = config.getOutputOptions();
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
@@ -223,6 +227,18 @@ public class SamPvsVideo_Plugin implements PlugIn {
         if (options.createInstanceMask) {
             ImagePlus stackMask = createInstanceMaskStackWithFixedIds(imp, mfdManager);
             if (stackMask != null) stackMask.show();
+        }
+
+        if (options.createSemanticMask) {
+            ImagePlus semanticMask = DetectionUtils.createSemanticMaskStack(imp, mfdManager.getDetectionsByFrame());
+            if (semanticMask != null) semanticMask.show();
+        }
+
+        if (options.createInstanceMaskPerClass) {
+            // one channel per table row, in table order
+            List<String> rowNames = objects.stream().map(PvsObject::getName).collect(Collectors.toList());
+            ImagePlus instanceMaskPerClass = createInstanceMaskPerClassStackWithFixedIds(imp, mfdManager, rowNames, rowNameByObjectName);
+            if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }
 
@@ -313,6 +329,8 @@ public class SamPvsVideo_Plugin implements PlugIn {
         outputOptions.addToRoiManagerShapes = Boolean.parseBoolean(Macro.getValue(options, "add_shape_rois", "false"));
         outputOptions.deletePreviousRoi = false;
         outputOptions.createInstanceMask = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask", "false"));
+        outputOptions.createSemanticMask = Boolean.parseBoolean(Macro.getValue(options, "create_semantic_mask", "false"));
+        outputOptions.createInstanceMaskPerClass = Boolean.parseBoolean(Macro.getValue(options, "create_instance_mask_per_class", "false"));
     }
 
     private int clampFrame(int value) {
@@ -390,6 +408,8 @@ public class SamPvsVideo_Plugin implements PlugIn {
         if (outputOptions.addToRoiManagerBB) Recorder.recordOption("add_box_rois", String.valueOf(true));
         if (outputOptions.addToRoiManagerShapes) Recorder.recordOption("add_shape_rois", String.valueOf(true));
         if (outputOptions.createInstanceMask) Recorder.recordOption("create_instance_mask", String.valueOf(true));
+        if (outputOptions.createSemanticMask) Recorder.recordOption("create_semantic_mask", String.valueOf(true));
+        if (outputOptions.createInstanceMaskPerClass) Recorder.recordOption("create_instance_mask_per_class", String.valueOf(true));
     }
 
     /**
@@ -463,8 +483,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
                 if (objIndex == null) {
                     objIndex = resolved.size();
                     String instanceName = object.getName() + "-" + (objIndexByRoiName.size() + 1);
-                    resolved.add(new ResolvedObject(instanceName, object.getOutputGroup(),
-                            object.getPositiveVisualGroup(), object.getNegativeVisualGroup()));
+                    resolved.add(new ResolvedObject(instanceName, object));
                     objIndexByRoiName.put(roiName, objIndex);
                 }
 
@@ -520,6 +539,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
      */
     private static final class ResolvedObject {
         final String name;
+        final String rowName; // name of the table row this object was resolved from
         final int outputGroup;
         final Integer positiveGroup;
         final Integer negativeGroup;
@@ -527,11 +547,16 @@ public class SamPvsVideo_Plugin implements PlugIn {
         int negativePromptCount = 0;
 
         ResolvedObject(PvsObject source) {
-            this(source.getName(), source.getOutputGroup(), source.getPositiveVisualGroup(), source.getNegativeVisualGroup());
+            this(source.getName(), source);
         }
 
-        ResolvedObject(String name, int outputGroup, Integer positiveGroup, Integer negativeGroup) {
+        ResolvedObject(String name, PvsObject source) {
+            this(name, source.getName(), source.getOutputGroup(), source.getPositiveVisualGroup(), source.getNegativeVisualGroup());
+        }
+
+        ResolvedObject(String name, String rowName, int outputGroup, Integer positiveGroup, Integer negativeGroup) {
             this.name = name;
+            this.rowName = rowName;
             this.outputGroup = outputGroup;
             this.positiveGroup = positiveGroup;
             this.negativeGroup = negativeGroup;

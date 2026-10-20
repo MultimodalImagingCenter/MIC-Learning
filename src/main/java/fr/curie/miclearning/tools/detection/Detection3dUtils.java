@@ -78,7 +78,6 @@ public class Detection3dUtils {
 
     // ID continuity from one frame to the other (same object on multiple frames)
     public static ImagePlus createInstanceMaskStackWithFixedIds(ImagePlus imp, MultiFrameDataManager mfdManager) {
-        int totalFrames = mfdManager.getFrameNumber();
         int width = imp.getWidth();
         int height = imp.getHeight();
 
@@ -133,10 +132,7 @@ public class Detection3dUtils {
     /**
      * Stack version of {@link #createInstanceMaskStackWithFixedIds}, split by class: builds a 4D
      * hyperstack with one time-point per processed frame and, within each time-point, one channel
-     * per class (from {@code classIdMap}, ordered by group id then name). Each channel is that
-     * class's instances, with the same "ID continuity from one frame to the other" as the plain
-     * instance mask (a tracked object keeps the same pixel value in every frame/channel it appears
-     * in); a class with no detection on a frame gets an empty channel.
+     * per class (from {@code classIdMap}). a class with no detection on a frame gets an empty channel.
      *
      * @param imp        source image
      * @param mfdManager registry of tracked detections, by frame and by object id
@@ -157,32 +153,69 @@ public class Detection3dUtils {
             return null;
         }
 
-        int width = imp.getWidth();
-        int height = imp.getHeight();
-
         // classes (name, groupId) ordered by groupId then name - defines the C axis
         List<Map.Entry<String, Integer>> classes = new ArrayList<>(classIdMap.entrySet());
         classes.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()));
+
+        List<String> channelNames = new ArrayList<>();
+        Map<String, String> channelByClassName = new HashMap<>();
+        for (Map.Entry<String, Integer> cls : classes) {
+            channelNames.add(cls.getKey());
+            channelByClassName.put(cls.getKey(), cls.getKey()); // for simple case, 1 class = 1 channel
+        }
+        return createInstanceMaskPerClassStackWithFixedIds(imp, mfdManager, channelNames, channelByClassName);
+    }
+
+    /**
+     * Same as {@link #createInstanceMaskPerClassStackWithFixedIds(ImagePlus, MultiFrameDataManager, Map)},
+     * but several detection class names can share one channel (e.g. every object resolved from the
+     * same table row).
+     *
+     * @param imp                source image
+     * @param mfdManager         registry of tracked detections, by frame and by object id
+     * @param channelNames       the channels, in C axis order
+     * @param channelByClassName detection class name -> name of its channel (one of {@code channelNames});
+     *                           detections whose class name isn't mapped are left out
+     * @return a hyperstack ImagePlus (channels = nChannels, slices = 1, frames = nFrames), or
+     *         {@code null} when there is nothing to build
+     */
+    public static ImagePlus createInstanceMaskPerClassStackWithFixedIds(
+            ImagePlus imp, MultiFrameDataManager mfdManager, List<String> channelNames, Map<String, String> channelByClassName) {
+
+        if (channelNames == null || channelNames.isEmpty()) {
+            IJ.log("No channel provided. Cannot create instance-mask-per-class hyperstack.");
+            return null;
+        }
+        Map<Integer, List<ProcessedDetection>> detectionsByFrame = mfdManager.getDetectionsByFrame();
+        if (detectionsByFrame.isEmpty()) {
+            IJ.log("No detections available. Cannot create instance-mask-per-class hyperstack.");
+            return null;
+        }
+
+        int width = imp.getWidth();
+        int height = imp.getHeight();
 
         ImageStack originalStack = imp.getStack();
         ImageStack stack = new ImageStack(width, height);
 
         // hyperstack order is czt (channel, then slice, then frame): for each frame, append one
-        // channel per class, in the same frame order createInstanceMaskStackWithFixedIds uses.
+        // slice per channel
         int nFramesBuilt = 0;
         for (int f = mfdManager.getFirstFrame(); f <= mfdManager.getLastFrame(); f++) {
             List<ProcessedDetection> detections = detectionsByFrame.getOrDefault(f, Collections.emptyList());
-            Map<String, List<ProcessedDetection>> byClassName = new HashMap<>();
+            Map<String, List<ProcessedDetection>> byChannel = new HashMap<>();
             for (ProcessedDetection det : detections) {
                 if (det.getShapeRoi() == null) continue;
-                byClassName.computeIfAbsent(det.getClassName(), k -> new ArrayList<>()).add(det);
+                String channel = channelByClassName.get(det.getClassName());
+                if (channel == null) continue;
+                byChannel.computeIfAbsent(channel, k -> new ArrayList<>()).add(det);
             }
 
             String frameLabel = originalStack.getSliceLabel(f + 1);
-            for (Map.Entry<String, Integer> cls : classes) {
-                List<ProcessedDetection> classDetections = byClassName.getOrDefault(cls.getKey(), Collections.emptyList());
-                ImageProcessor processor = createAndFillProcessorWithFixedIds(classDetections, width, height);
-                stack.addSlice(cls.getKey() + " - " + frameLabel + " (" + classDetections.size() + " instances)", processor);
+            for (String channel : channelNames) {
+                List<ProcessedDetection> channelDetections = byChannel.getOrDefault(channel, Collections.emptyList());
+                ImageProcessor processor = createAndFillProcessorWithFixedIds(channelDetections, width, height);
+                stack.addSlice(channel + " - " + frameLabel + " (" + channelDetections.size() + " instances)", processor);
             }
             nFramesBuilt++;
         }
@@ -193,12 +226,11 @@ public class Detection3dUtils {
         }
 
         ImagePlus result = new ImagePlus(imp.getTitle() + " - instance mask per class", stack);
-        result.setDimensions(classes.size(), 1, nFramesBuilt);
+        result.setDimensions(channelNames.size(), 1, nFramesBuilt);
         result.setOpenAsHyperStack(true);
-        IJ.log("Instance-mask-per-class hyperstack created (" + classes.size() + " class(es) x " + nFramesBuilt + " frame(s)).");
+        IJ.log("Instance-mask-per-class hyperstack created (" + channelNames.size() + " class(es) x " + nFramesBuilt + " frame(s)).");
         result.setDisplayRange(0, Math.max(255.0, result.getStatistics().max));
         setGlasbeyLut(result);
         return result;
     }
-
 }
