@@ -9,6 +9,8 @@ import ij.Prefs;
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * Modal dialog for the rarely-tuned SAM3 detection parameters, and (for video) the tracking
@@ -40,8 +42,8 @@ class Sam3AdvancedParametersDialog extends JDialog {
     /**
      * Shows the dialog with detection + tracking settings ; blocks until the dialog is closed.
      *
-     * @return the tracking model path chosen, or {@code currentTrackingModelPath} if left
-     * unchanged, invalid, or the dialog was cancelled
+     * @return the tracking model path chosen, {@code null} if the field was left empty (use the
+     * detection model for tracking), or {@code currentTrackingModelPath} if the dialog was canceled
      */
     static String showForVideo(Dialog owner, Sam3ModelParameters params, String currentTrackingModelPath, int minWidth) {
         Sam3AdvancedParametersDialog dialog = new Sam3AdvancedParametersDialog(owner, params, true, currentTrackingModelPath, minWidth);
@@ -121,8 +123,9 @@ class Sam3AdvancedParametersDialog extends JDialog {
         c.insets = new Insets(2, 4, 2, 4);
         c.fill = GridBagConstraints.HORIZONTAL;
 
-        String defaultPath = trackingModelPath != null ? trackingModelPath
-                : ModelPathDialogs.resolveDefaultModelPath(PREF_LAST_TRACK_MODEL_KEY, "sam3.pt");
+        // only the saved tracking model is proposed: an empty field means "same as the detection model"
+        String savedPath = Prefs.get(PREF_LAST_TRACK_MODEL_KEY, null);
+        String defaultPath = (savedPath != null && Files.isRegularFile(Paths.get(savedPath))) ? savedPath : "";
         trackingModelPathField = new JTextField(defaultPath, 40);
         String trackingModelHint = "Path to a SAM2 or SAM3 model checkpoint used for tracking instead of the detection model.\n"
                 + "Leave empty to use the detection model for both.";
@@ -225,8 +228,17 @@ class Sam3AdvancedParametersDialog extends JDialog {
 
     private void onOk() {
         if (includeTracking) {
-            String validated = ModelPathDialogs.validateAndSaveModelPath(trackingModelPathField.getText().trim(), PREF_LAST_TRACK_MODEL_KEY);
-            if (validated != null) trackingModelPath = validated;
+            String typedPath = trackingModelPathField.getText().trim();
+            if (typedPath.isEmpty()) {
+                // empty field: forget the saved tracking model and track with the detection model
+                Prefs.set(PREF_LAST_TRACK_MODEL_KEY, null);
+                Prefs.savePreferences();
+                trackingModelPath = null;
+            } else {
+                String validated = ModelPathDialogs.validateAndSaveModelPath(typedPath, PREF_LAST_TRACK_MODEL_KEY);
+                if (validated == null) return; // invalid path - keep the dialog open so the user can fix it
+                trackingModelPath = validated;
+            }
         }
 
         params.setMaskScoreThreshold(parseDouble(maskThresholdField.getText(), params.getMaskScoreThreshold()));

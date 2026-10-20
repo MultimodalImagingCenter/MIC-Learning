@@ -43,7 +43,7 @@ public class ModelPathDialogs {
             Prefs.set(lastModelPrefKey, modelPathString);
             Prefs.savePreferences();
             return modelPathString;
-        } else if (Files.isDirectory(modelPath)) {
+        } else if (Files.isDirectory(modelPath) && (!modelPathString.trim().isEmpty())) {
             IJ.error("Selection Error", "The selected path is a folder, not a model checkpoint file (.pt):\n" + modelPathString
                     + "\nPlease select the model file itself.");
             return null;
