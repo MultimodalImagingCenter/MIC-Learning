@@ -105,15 +105,14 @@ images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 concept_labels = conceptLabels
 concept_texts = conceptTexts
 concept_text_used = conceptTextUsed
-concept_positive_rois = conceptPositiveRois  # one rois list per concept: [[x,y,w,h] or [x,y], ...]
-concept_negative_rois = conceptNegativeRois
+concept_visual_prompts = conceptVisualPrompts  # one map per concept: {"positive_rois": [[x,y,w,h] or [x,y], ...], "negative_rois": [...]} (area ROIs sent as bounding boxes)
 n_concepts = len(concept_labels)
 
 # kwargs for detect_model.encode_exemplars(), or None for a concept with no usable prompt at all
 concept_detection_prompts = []
 for concept_idx in range(n_concepts):
-    pos_box_list, pos_point_list = split_rois(concept_positive_rois[concept_idx], h_img, w_img)
-    neg_box_list, neg_point_list = split_rois(concept_negative_rois[concept_idx], h_img, w_img)
+    pos_box_list, pos_point_list = split_rois(concept_visual_prompts[concept_idx]["positive_rois"], h_img, w_img)
+    neg_box_list, neg_point_list = split_rois(concept_visual_prompts[concept_idx]["negative_rois"], h_img, w_img)
     has_positive_visual = len(pos_box_list) > 0 or len(pos_point_list) > 0
     if not concept_text_used[concept_idx] and not has_positive_visual:
         log_to_java(f"concept '{concept_labels[concept_idx]}': no prompt on the prompt frame - skipped")
@@ -264,7 +263,7 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
         # save results for this object
         mask_uint8 = (raw_det_mask > mask_threshold).byte().cpu().numpy().squeeze()
         new_masks.append(mask_uint8)
-        new_scores.append(det_scores[0, idx_offset])
+        new_scores.append(det_scores[0, det_idx])
         new_ids.append(new_idx)
         raw_det_box = det_boxes[:, [det_idx]]
         x1, y1 = raw_det_box[0, 0, 0]

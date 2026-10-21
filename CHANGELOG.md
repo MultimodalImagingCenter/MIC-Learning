@@ -77,6 +77,7 @@
   of its first point (instead of 0)
 - python scripts: persist result arrays in a queue while Java retrieve them (prevent Python from deleting them 
   before Java has had time to retrieve them)
+- `sam3-pcs-video.py`: new detections get their own detection score (was read with the wrong index)
 
 ### Removed
 - `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 
