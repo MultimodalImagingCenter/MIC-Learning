@@ -231,7 +231,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         }
 
         if (options.createSemanticMask) {
-            ImagePlus semanticMask = DetectionUtils.createSemanticMaskStack(imp, mfdManager.getDetectionsByFrame());
+            ImagePlus semanticMask = DetectionUtils.createSemanticMaskStack(imp, mfdManager);
             if (semanticMask != null) semanticMask.show();
         }
 

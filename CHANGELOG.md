@@ -1,5 +1,5 @@
 # Changelog
-## [1.4.0] - current
+## [1.4.0] - 2026-10-21
 ### Added
 - Classes to define and  **"concepts" for Sam3 promptable concept segmentation (PCS)** :
   - `Sam3Concept` : a concept is defined by a name, an output group and prompts: 
@@ -83,6 +83,7 @@
 - python scripts: persist result arrays in a queue while Java retrieve them (prevent Python from deleting them 
   before Java has had time to retrieve them)
 - `sam3-pcs-video.py`: new detections get their own detection score (was read with the wrong index)
+- `DetectionUtils.createSemanticMaskStack`: no longer skip empty frames
 
 ### Removed
 - `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 

@@ -233,7 +233,7 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     private void warnIfPartialCoverage(Roi[] allRois, List<Integer> frames, int groupId, PcsConcept concept, String kind) {
         List<Integer> missingFrames = roiPromptExtractor.findFramesMissingGroup(allRois, axis, groupId, frames);
         if (!missingFrames.isEmpty()) {
-            IJ.log("WARNING: concept " + concept.getName() + " - " + kind + " group " + groupId
+            IJ.log("\nWARNING: concept " + concept.getName() + " - " + kind + " group " + groupId
                     + " has no ROI on frame(s): " + missingFrames);
         }
     }

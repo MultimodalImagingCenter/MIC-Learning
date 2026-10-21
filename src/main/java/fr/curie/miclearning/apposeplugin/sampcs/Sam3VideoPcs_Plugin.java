@@ -252,7 +252,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         }
 
         if (options.createSemanticMask) {
-            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, mfdManager.getDetectionsByFrame());
+            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, mfdManager);
             if (semanticMaskStack != null) semanticMaskStack.show();
         }
 
@@ -493,7 +493,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
             IJ.log(line.toString());
         }
         int nFrameBtwDetec = params.getNFrameBtwDetections();
-        if (nFrameBtwDetec >= config.getFrameCount()) IJ.log("Detection only on frame " + config.getPromptFrame());
+        if (nFrameBtwDetec >= config.getFrameCount()) IJ.log("detection only on frame " + config.getPromptFrame());
         else IJ.log("detection every " + (nFrameBtwDetec>1 ? nFrameBtwDetec + " frames" : "frame"));
         IJ.log("confidence threshold for detection: " + params.getConfidenceThreshold());
         IJ.log("----------------------");
