@@ -14,9 +14,15 @@ import java.util.*;
  */
 public class RoiPromptExtractor {
 
-    /** Only point and rectangle ROIs are usable as SAM3 visual prompts. */
+    /** Only point ROIs and area ROIs (rectangle, ellipses, polygon and freehand) are usable as SAM visual prompts.
+     * Composite area are not accepted as prompts (no easy way to split them in distinct ROIs), silently discarded. */
     public static boolean isUsableRoiType(Roi roi) {
-        return (roi.isArea() && roi.getType()!= Roi.COMPOSITE)|| roi.getType() == Roi.POINT; // composite Roi are not accepted as prompts
+        return (roi.isArea() && roi.getType()!= Roi.COMPOSITE)|| roi.getType() == Roi.POINT;
+    }
+
+    /** Non-rectangular area ROIs (ellipse, polygon, freehand...) are sent as polygon masks instead of bounding boxes. */
+    public static boolean isMaskRoi(Roi roi){
+        return isUsableRoiType(roi) && roi.isArea() && !(roi.getType() == Roi.RECTANGLE && roi.getCornerDiameter() == 0); // rounded and rotated rectangles are not axis-aligned boxes, so they are treated as masks
     }
 
     /**
@@ -88,8 +94,23 @@ public class RoiPromptExtractor {
         return 0;
     }
 
+    private double[] rectangleCoords(Roi roi){
+        Rectangle rect = roi.getBounds();
+        return new double[]{rect.x, rect.y, rect.width, rect.height};
+    }
+
+    private double[] polygonCoords(Roi roi){
+        FloatPolygon p = roi.getFloatPolygon();
+        double[] flatCoords = new double[p.npoints*2];
+        for (int i=0; i<p.npoints; i++) {
+            flatCoords[2*i] = p.xpoints[i];
+            flatCoords[2*i+1] = p.ypoints[i];
+        }
+        return flatCoords;
+    }
+
     /**
-     * Groups the usable ROIs (rectangle or point) in {@code rois} by frame position,
+     * Groups the usable ROIs (point or area) in {@code rois} by frame position,
      *
      * @param rois ROIs list
      * @param axis         3 for Z axis, 4 for Time axis (matches ImagePlus.getDimensions() indexing)
@@ -171,7 +192,7 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Collects the usable ROIs (rectangle or point) on the given frame - 3D image,
+     * Collects the usable ROIs (point or area) on the given frame - 3D image,
      * only one axis used
      *
      * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
@@ -190,7 +211,7 @@ public class RoiPromptExtractor {
     }
 
     /**
-     * Collects the groups of the usable ROIs (rectangle or point) on the given frame - 3D image,
+     * Collects the groups of the usable ROIs (point or area) on the given frame - 3D image,
      * only one axis used
      *
      * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
@@ -208,40 +229,27 @@ public class RoiPromptExtractor {
         return groups;
     }
 
-    /**
-     * Collects the usable ROIs (rectangle or point) on the given frame - 4D image,
-     * only one axis used
-     *
-     * @param rois list of Roi in the RoiManager to scan (can be all or selected only) (may be empty, not null)
-     * @param axis         0
-     * @param slice        1-indexed position along Z axis = Z-position
-     * @param frame        1-indexed position along time axis = T-position
-     */
-    public List<Roi> getRoisAtFrame(Roi[] rois, int axis, int slice, int frame) {
-        List<Roi> result = new ArrayList<>();
-        if (rois == null) return result;
-        for (Roi roi : splitMultiPositionPoints(rois)) { // see splitMultiPositionPoints: point positions are stack indices, would need conversion for a 4D image
-            if (!isUsableRoiType(roi)) continue;
-            int t = tPositionOf(roi);
-            int z = zPositionOf(roi);
-            if ((t == frame || t == 0) && (z == slice || z == 0)) result.add(roi); // position == 0 means no specific position, roi defined on all frames of this axis
-        }
-        return result;
-    }
 
     /**
-     * Splits the given ROIs into positive/negative prompt coordinate lists.
-     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs: one {@code [x, y]} per contained point.
+     * Splits the given ROIs into positive/negative/positive-mask/negative-mask prompt coordinate lists.
+     * Rectangle ROIs: {@code [x, y, w, h]}; point ROIs: one {@code [x, y]} per contained point ;
+     * ellipse, polygon, freehand, rotated rectangle: {@code [x1, y1, x2, y2, ...]} flatten outline coordinates
+     * if {@code maskRoisAsMasks}, otherwise their bounding box {@code [x, y, w, h]}.
      * <p>
      *
-     * @param roisAtFrame      the ROIs to split
+     * @param roisAtFrame      the ROIs to split (all roi of a given frame)
      * @param positiveGroupId group to treat as positive prompts ({@code null} if unused)
      * @param negativeGroupId  group to treat as negative prompt ({@code null} if unused)
+     * @param maskRoisAsMasks  true to send non-rectangular area ROIs as polygon masks (PVS),
+     *                         false to send them as bounding boxes (PCS: the detector takes no mask)
      */
     public PromptRois buildPromptRois(List<Roi> roisAtFrame, Integer positiveGroupId,
-                                      Integer negativeGroupId) {
+                                      Integer negativeGroupId, boolean maskRoisAsMasks) {
         List<double[]> positive = new ArrayList<>(); // positive_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
         List<double[]> negative = new ArrayList<>(); // negative_rois format: [[x,y,w,h], [x,y], ...] (absolute values)
+        List<double[]> positiveMasks = new ArrayList<>(); // polygon outline coordinates [[x1, y1, x2, y2, ...], ...]
+        List<double[]> negativeMasks = new ArrayList<>(); // polygon outline coordinates [[x1, y1, x2, y2, ...], ...]
+
         boolean positivePromptUsed = positiveGroupId != null;
         boolean negativePromptUsed = negativeGroupId != null;
 
@@ -251,11 +259,15 @@ public class RoiPromptExtractor {
             boolean isNegativeGroup = negativePromptUsed && groupId == negativeGroupId;
             if (!isPositiveGroup && !isNegativeGroup) continue;
 
-            if (roi.isArea()) {
-                Rectangle rect = roi.getBounds();
-                double[] coord = {rect.x, rect.y, rect.width, rect.height};
-                if (isPositiveGroup) positive.add(coord);
-                if (isNegativeGroup) negative.add(coord);
+            // if maskRoisAsMasks==true, non-rectangular ROIs are saved as polygon coordinates in separate lists
+            if (maskRoisAsMasks && isMaskRoi(roi)){
+                if (isPositiveGroup) positiveMasks.add(polygonCoords(roi));
+                if (isNegativeGroup) negativeMasks.add(polygonCoords(roi));
+            }
+            // if maskRoisAsMasks==false, non-rectangular ROIs are processed through their bounding box
+            else if (roi.isArea()) {
+                if (isPositiveGroup) positive.add(rectangleCoords(roi));
+                if (isNegativeGroup) negative.add(rectangleCoords(roi));
             } else if (roi.getType() == Roi.POINT) {
                 for (Point point : roi.getContainedPoints()) {
                     double[] coord = {point.getX(), point.getY()};
@@ -265,12 +277,19 @@ public class RoiPromptExtractor {
             }
         }
 
-        return new PromptRois(positive, negative);
+        return new PromptRois(positive, negative, positiveMasks, negativeMasks);
     }
 
     /** Combines independently-computed positive/negative coordinate lists into one {@link PromptRois}. */
     public PromptRois combinePromptRois(List<double[]> positive, List<double[]> negative) {
         return new PromptRois(new ArrayList<>(positive), new ArrayList<>(negative));
+    }
+
+    /** Combines independently-computed positive/negative coordinate lists into one {@link PromptRois}. */
+    public PromptRois combinePromptRois(List<double[]> positive, List<double[]> negative,
+                                        List<double[]> positiveMasks, List<double[]> negativeMasks) {
+        return new PromptRois(new ArrayList<>(positive), new ArrayList<>(negative),
+                new ArrayList<>(positiveMasks), new ArrayList<>(negativeMasks));
     }
 
 
@@ -297,19 +316,4 @@ public class RoiPromptExtractor {
         String name = Roi.getGroupName(groupId);
         return name == null ? String.valueOf(groupId) : (groupId + " (" + name + ")");
     }
-
-    /** Positive/negative ROI coordinates ready to be sent to the Python side. */
-    public static final class PromptRois {
-        private final List<double[]> positive;
-        private final List<double[]> negative;
-
-        private PromptRois(List<double[]> positive, List<double[]> negative) {
-            this.positive = Collections.unmodifiableList(positive);
-            this.negative = Collections.unmodifiableList(negative);
-        }
-
-        public List<double[]> getPositive() { return positive; }
-        public List<double[]> getNegative() { return negative; }
-    }
-
 }

@@ -65,6 +65,12 @@
 - `RoiPromptExtractor.isUsableRoiType`: the usable ROIs now include all "area" ROIs, except for composite ROIs.
 - `RoiPromptExtractor`: multi-points ROIs whose points lie on several positions (several frames) are split
   into one per position (`splitMultiPositionPoints`).
+- `PromptRois` is a top-level class (was nested in `RoiPromptExtractor`), with polygon mask lists
+  (`getPositiveMasks`/`getNegativeMasks`) and helpers `hasPositive`, `hasNegative`, `positiveCount`, `negativeCount`
+- `RoiPromptExtractor.buildPromptRois` takes a `maskRoisAsMasks` flag: `true` for PVS (non-rectangular area ROIs
+  sent as polygon masks), `false` for PCS (sent as their bounding box, the SAM3 detector takes no mask).
+- SAM3 PCS plugins (image and video): any area ROI (rectangle, ellipse, polygon, freehand) is used through its
+  bounding box. Visual prompts are now sent to Python as one map per concept.
 
 ### Fixed
 - `RoiPromptExtractor`: when getting the position (frame in stack) of a point ROI, falls back to the position 
