@@ -66,6 +66,7 @@ device, dtype = "cpu", torch.float32
 if torch.cuda.is_available():
     device, dtype = "cuda", torch.bfloat16
 log_to_java(f"building model, using device: {device}...")
+model_path = modelPath
 sam_core = make_sam_from_state_dict(model_path)
 detect_model = sam_core.get_detector_context()
 detect_model.to(device=device, dtype=dtype)
@@ -74,19 +75,29 @@ detect_model.to(device=device, dtype=dtype)
 # 2. Pre-process input images
 # ============================================================
 log_to_java("pre processing images...")
+images_input=imagesInput
 narr = images_input.ndarray()
 
 # fix dimension order (from (B,H,W,C) rgb to (B,H,W,C) bgr)
 images_bgr = narr[..., ::-1]
 n_frames, h_img, w_img = images_bgr.shape[:3]
 
+# retrieve parameters
+max_side_length=maxSideLength
+confidence_threshold = confidenceThreshold
+mask_threshold = maskThreshold
+
 # array needs to be saved in a contiguous memory block
 images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
-
 imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": True}
 
-# concept_labels/concept_texts/concept_text_used are frame-invariant, index-aligned lists;
-# frame_prompts[frame_idx][concept_idx] = {"positive_rois": [...], "negative_rois": [...]} (per-frame visual prompts)
+# retrieve prompts
+# concept_labels/concept_texts/concept_text_used are frame-invariant, index-aligned lists: conceptLabels[concept_idx]="...";
+# framePrompts[frame_idx][concept_idx] = {"positive_rois": [...], "negative_rois": [...]} (per-frame visual prompts, area ROIs sent as bounding boxes)
+concept_labels = conceptLabels
+concept_texts = conceptTexts
+concept_text_used = conceptTextUsed
+frame_prompts = framePrompts
 n_concepts = len(concept_labels)
 
 # queue for storing results arrays while Java retrieves it

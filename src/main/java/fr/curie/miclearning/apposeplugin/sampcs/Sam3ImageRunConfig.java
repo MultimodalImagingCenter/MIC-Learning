@@ -1,5 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 
 import java.util.ArrayList;
@@ -27,9 +28,8 @@ public final class Sam3ImageRunConfig {
     private final List<Boolean> conceptTextUsed;
     private final Map<String, Integer> classIdMap; // concept label -> output RoiManager group id (may repeat across concepts)
 
-    // one entry per frame, one inner entry per concept :
-    // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
-    private final List<List<Map<String, List<double[]>>>> framePrompts;
+    // one entry per frame, one inner entry per concept
+    private final List<List<PromptRois>> framePrompts;
 
     private Sam3ImageRunConfig(Builder b) {
         this.modelPath = b.modelPath;
@@ -51,7 +51,7 @@ public final class Sam3ImageRunConfig {
     public List<String> getConceptTexts() {return conceptTexts;}
     public List<Boolean> getConceptTextUsed() {return conceptTextUsed;}
     public Map<String, Integer> getClassIdMap() {return classIdMap;}
-    public List<List<Map<String, List<double[]>>>> getFramePrompts() {return framePrompts;}
+    public List<List<PromptRois>> getFramePrompts() {return framePrompts;}
 
     public static final class Builder {
         private String modelPath;
@@ -62,7 +62,7 @@ public final class Sam3ImageRunConfig {
         private List<String> conceptTexts = new ArrayList<>();
         private List<Boolean> conceptTextUsed = new ArrayList<>();
         private Map<String, Integer> classIdMap = new HashMap<>();
-        private List<List<Map<String, List<double[]>>>> framePrompts = new ArrayList<>();
+        private List<List<PromptRois>> framePrompts = new ArrayList<>();
 
         public Builder modelPath(String modelPath) {
             this.modelPath = modelPath;
@@ -104,7 +104,7 @@ public final class Sam3ImageRunConfig {
             return this;
         }
 
-        public Builder framePrompts(List<List<Map<String, List<double[]>>>> framePrompts) {
+        public Builder framePrompts(List<List<PromptRois>> framePrompts) {
             this.framePrompts = framePrompts != null ? framePrompts : new ArrayList<>();
             return this;
         }
@@ -121,10 +121,10 @@ public final class Sam3ImageRunConfig {
             for (int c = 0; c < conceptLabels.size(); c++) {
                 final int conceptIdx = c;
                 boolean hasPositiveVisual = framePrompts.stream()
-                        .anyMatch(frame -> !frame.get(conceptIdx).get("positive_rois").isEmpty());
+                        .anyMatch(frame -> frame.get(conceptIdx).hasPositive());
                 if (!conceptTextUsed.get(c) && !hasPositiveVisual) {
                     throw new IllegalStateException("Concept " + conceptLabels.get(c)
-                            + ": needs a text prompt or at least one positive visual prompt (box or point ROI).");
+                            + ": needs a text prompt or at least one positive visual prompt (point or area ROI).");
                 }
             }
             return new Sam3ImageRunConfig(this);

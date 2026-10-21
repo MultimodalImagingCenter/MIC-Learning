@@ -1,6 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.ImagePlus;
@@ -11,8 +12,10 @@ import org.apposed.appose.TaskException;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.ArrayList;
 
 /**
  * SAM3-video specific wrapper: builds the shared-memory video buffer and the Appose inputs map
@@ -69,13 +72,30 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         inputs.put("conceptLabels", config.getConceptLabels());
         inputs.put("conceptTexts", config.getConceptTexts());
         inputs.put("conceptTextUsed", config.getConceptTextUsed());
-        inputs.put("conceptPositiveRois", config.getConceptPositiveRois());
-        inputs.put("conceptNegativeRois", config.getConceptNegativeRois());
+        inputs.put("conceptVisualPrompts", buildPromptsInput(config));
 
         inputs.put("frameOffset", config.getFirstFrame()); // informational only, used for logging on the python side
 
         return inputs;
     }
+
+    /**
+     * Transform the promptRois list structure into pure
+     * String-keyed map Appose can send to Python
+     */
+    private static ArrayList<Map<String, Object>> buildPromptsInput(Sam3VideoRunConfig config) {
+            ArrayList<Map<String, Object>> allPromptRois= new ArrayList<>(); // map of all visual prompts, for all concepts
+            // for each concept
+            for (PromptRois promptRois : config.getConceptPromptRois()) {
+                Map<String, Object> promptMap = new LinkedHashMap<>(); // map of all visual prompt for this concept
+                promptMap.put("positive_rois", promptRois.getPositive());
+                promptMap.put("negative_rois", promptRois.getNegative());
+                // no masks: area ROIs are sent as bounding boxes for PCS
+                allPromptRois.add(promptMap);
+            }
+        return allPromptRois;
+    }
+
 
     @Override
     public void close() {
