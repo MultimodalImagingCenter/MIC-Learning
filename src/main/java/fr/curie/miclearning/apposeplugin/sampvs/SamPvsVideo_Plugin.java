@@ -1,5 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
@@ -41,7 +42,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
 /**
  * ImageJ plugin: promptable-visual-segmentation on video, with SAM2 or SAM3
  * An arbitrary number of independent objects, each identified by visual prompts
- * (box and/or point ROIs, no text, no class). One object = One Roi Group
+ * (point and/or area ROIs, no text, no class). One object = One Roi Group
  * Tracking runs forward only,
  * starting for each object on whichever frame its own first prompt appears; a later prompt for an
  * already-tracked object refines it going forward without affecting earlier frames.
@@ -112,7 +113,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
         // its positive-group ROIs on every frame. A CLASS-mode row is resolved into one tracked
         // object per distinct ROI name seen in its positive group
         Roi[] roisForRun = roiManager.getRoisAsArray(); // all ROIs in the RoiManager when the user presses "ok"
-        Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts = new TreeMap<>();
+        Map<Integer, Map<Integer, PromptRois>> framePrompts = new TreeMap<>();
         List<ResolvedObject> resolved = resolveObjects(roisForRun, framePrompts);
 
         List<String> objectNames = resolved.stream().map(r -> r.name).collect(Collectors.toList());
@@ -423,7 +424,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
      * (n = 1, 2, ...). A later ROI only refines one of these if it reuses that exact name - any
      * other name starts a new object.
      */
-    private List<ResolvedObject> resolveObjects(Roi[] roisForRun, Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+    private List<ResolvedObject> resolveObjects(Roi[] roisForRun, Map<Integer, Map<Integer, PromptRois>> framePrompts) {
         List<ResolvedObject> resolved = new ArrayList<>();
         for (PvsObject object : objects) {
             if (!object.isPositiveVisualUsed()) {
@@ -438,7 +439,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
     }
 
     private void resolveObjectRow(PvsObject object, Roi[] roisForRun, List<ResolvedObject> resolved,
-                                   Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+                                   Map<Integer, Map<Integer, PromptRois>> framePrompts) {
         int objIndex = resolved.size();
         ResolvedObject resolvedObject = new ResolvedObject(object);
         resolved.add(resolvedObject);
@@ -447,10 +448,10 @@ public class SamPvsVideo_Plugin implements PlugIn {
         for (int frame = 1; frame <= chosenLastFrame; frame++) {
             List<Roi> roisAtFrame = roiPromptExtractor.getRoisAtFrame(roisForRun, axis, frame);
             if (roisAtFrame.isEmpty()) continue;
-            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
-                    roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup());
-            if (promptRois.getPositive().isEmpty() && (!tracked || promptRois.getNegative().isEmpty())) {
-                if (!promptRois.getNegative().isEmpty()) IJ.log("warning: negative prompts for object " + object.getName() +" on frame "+ frame + " will be ignored." +
+            PromptRois promptRois = withoutNegativeMasks(roiPromptExtractor.buildPromptRois(
+                    roisAtFrame, object.getPositiveVisualGroup(), object.getNegativeVisualGroup(), true));
+            if (!promptRois.hasPositive() && (!tracked || !promptRois.hasNegative())) {
+                if (promptRois.hasNegative()) IJ.log("warning: negative prompts for object " + object.getName() +" on frame "+ frame + " will be ignored." +
                         " (no positive prompt on any previous images)");
                 continue;
             }
@@ -461,7 +462,7 @@ public class SamPvsVideo_Plugin implements PlugIn {
     }
 
     private void resolveClassRow(PvsObject object, Roi[] roisForRun, List<ResolvedObject> resolved,
-                                  Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+                                  Map<Integer, Map<Integer, PromptRois>> framePrompts) {
         Map<String, Integer> objIndexByRoiName = new HashMap<>();
 
         for (int frame = 1; frame <= chosenLastFrame; frame++) {
@@ -469,41 +470,51 @@ public class SamPvsVideo_Plugin implements PlugIn {
             if (roisAtFrame.isEmpty()) continue;
 
             // negative prompt is shared by every instance of this class on this frame, not matched by name
-            List<double[]> sharedNegative = roiPromptExtractor
-                    .buildPromptRois(roisAtFrame, null, object.getNegativeVisualGroup()).getNegative();
+            PromptRois sharedNegatives = withoutNegativeMasks(roiPromptExtractor
+                    .buildPromptRois(roisAtFrame, null, object.getNegativeVisualGroup(), true));
 
             for (Roi roi : roisAtFrame) {
                 if (roi.getGroup() != object.getPositiveVisualGroup()) continue;
-                RoiPromptExtractor.PromptRois onlyThisRoi = roiPromptExtractor.buildPromptRois(
-                        Collections.singletonList(roi), object.getPositiveVisualGroup(), null);
-                if (onlyThisRoi.getPositive().isEmpty()) continue;
+                PromptRois onlyThisRoi = roiPromptExtractor.buildPromptRois(
+                        Collections.singletonList(roi), object.getPositiveVisualGroup(), null, true);
+                if (!onlyThisRoi.hasPositive()) continue;
 
                 String roiName = roi.getName();
-                Integer objIndex = objIndexByRoiName.get(roiName);
-                if (objIndex == null) {
+                Integer objIndex = objIndexByRoiName.get(roiName); // if name is the exact same as a previously seen ROI, the prompts are added to the same object
+                if (objIndex == null) { // if this is the first time this resolvedObject is seen
                     objIndex = resolved.size();
                     String instanceName = object.getName() + "-" + (objIndexByRoiName.size() + 1);
                     resolved.add(new ResolvedObject(instanceName, object));
                     objIndexByRoiName.put(roiName, objIndex);
                 }
-
-                RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.combinePromptRois(onlyThisRoi.getPositive(), sharedNegative);
+                // all resolvedObjects with a ROI on this frame produce a promptRoi, with the positive prompt + the shared negative prompts
+                PromptRois promptRois = roiPromptExtractor.combinePromptRois(onlyThisRoi.getPositive(), sharedNegatives.getNegative(), onlyThisRoi.getPositiveMasks(), Collections.emptyList());
                 framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>()).put(objIndex, promptRois);
                 resolved.get(objIndex).addPromptCounts(promptRois);
             }
 
             // negative-only refinement for every instance already tracked but without positive prompt on this frame
-            if (sharedNegative.isEmpty()) continue;
-            for (int objIndex : objIndexByRoiName.values()) {
-                Map<Integer, RoiPromptExtractor.PromptRois> promptsAtFrame = framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>());
-                if (promptsAtFrame.containsKey(objIndex)) continue;
-                RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.combinePromptRois(Collections.emptyList(), sharedNegative);
+            if (!sharedNegatives.hasNegative()) continue;
+            for (int objIndex : objIndexByRoiName.values()) { // only the resolvedObject already registered for this class
+                Map<Integer, PromptRois> promptsAtFrame = framePrompts.computeIfAbsent(frame - 1, k -> new TreeMap<>());
+                if (promptsAtFrame.containsKey(objIndex)) continue; // if object already on frame, its promptRois is already build with the shared negative prompts
+                // for each object without a positive prompt on frame -> create a promptROI with the shared negative prompts (and empty positive prompt)
+                PromptRois promptRois = roiPromptExtractor.combinePromptRois(Collections.emptyList(), sharedNegatives.getNegative(), Collections.emptyList(), Collections.emptyList());
                 promptsAtFrame.put(objIndex, promptRois);
                 resolved.get(objIndex).addPromptCounts(promptRois);
             }
-            if (objIndexByRoiName.isEmpty()) IJ.log("warning: negative prompts for class " + object.getName() +" on frame "+ frame + " will be ignored." +
+            if (objIndexByRoiName.isEmpty()) IJ.log("warning: negative prompt(s) for class " + object.getName() +" on frame "+ frame + " will be ignored." +
                     " (no positive prompt on any previous images)");;
         }
+    }
+
+    /**
+     * PVS negative prompts are points only: negative area ROIs other than rectangles (ellipse, freehand...)
+     * are dropped here
+     */
+    private PromptRois withoutNegativeMasks(PromptRois promptRois) {
+        return roiPromptExtractor.combinePromptRois(promptRois.getPositive(), promptRois.getNegative(),
+                promptRois.getPositiveMasks(), Collections.emptyList());
     }
 
     private void printParameters(PvsVideoRunConfig config, List<ResolvedObject> resolved) {
@@ -562,9 +573,9 @@ public class SamPvsVideo_Plugin implements PlugIn {
             this.negativeGroup = negativeGroup;
         }
 
-        void addPromptCounts(RoiPromptExtractor.PromptRois promptRois) {
-            positivePromptCount += promptRois.getPositive().size();
-            negativePromptCount += promptRois.getNegative().size();
+        void addPromptCounts(PromptRois promptRois) {
+            positivePromptCount += promptRois.positiveCount();
+            negativePromptCount += promptRois.negativeCount();
         }
     }
 

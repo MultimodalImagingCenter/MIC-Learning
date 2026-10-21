@@ -176,7 +176,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
         JLabel titleLabel = createSectionTitle("Objects");
         helpBar.attachHelp(titleLabel,
-                "Each row defines what to segment and track, with positive visual prompt(s) (box and/or point ROIs)." +
+                "Each row defines what to segment and track, with positive visual prompt(s) (point and/or area ROIs)." +
                         "\nBy default (\"Class\" mode), every ROI of the positive group is tracked as its own independent object." +
                         "\nIn \"Object\" mode, all ROIs of the group describe one single object (see the Mode column).");
         panel.add(titleLabel, BorderLayout.NORTH);
@@ -235,7 +235,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                     text = "Name used for this object's outputs (ROI names, logs). Must be unique." + nameNotUsed;
                     break;
                 case PvsObjectTableModel.COL_POSITIVE_VISUAL:
-                    text = "ROI group used as a positive visual prompt (box and/or point ROIs). Required."
+                    text = "ROI group used as a positive visual prompt (point and/or area ROIs). Required."
                             + "Can be placed on several frames: "
                             + "\nthe first frame with a usable ROI starts tracking "
                             + "this object, and any later frame refines it going forward.";
@@ -272,7 +272,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                         || modelCol == PvsObjectTableModel.COL_NEGATIVE_VISUAL;
                 if (isVisualColumn && !tableModel.isCellEditable(row, modelCol)) {
                     helpBar.showInfo("visualPromptDisabled",
-                            "No usable ROI (box or point) in the ROI Manager for the frame(s) being processed. "
+                            "No usable ROI (point or area) in the ROI Manager for the frame(s) being processed. "
                                     + "\nAdd one to enable visual prompts.",
                             DialogHelpBar.DEFAULT_INSTRUCTION_COLOR);
                 }
@@ -419,7 +419,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         List<Integer> frames = currentFrameRange();
         Roi[] allRois = getRoiManager().getRoisAsArray();
 
-        // positive: any group with a usable ROI (box or point) on at least one processed frame
+        // positive: any group with a usable ROI (point or area) on at least one processed frame
         List<RoiGroupOption> positiveOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, false));
         // negative: only point ROIs can be negative prompts
         List<RoiGroupOption> negativeOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, true));
@@ -441,7 +441,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
         // print warning if no ROI on frame
         if (positiveOptions.isEmpty()) helpBar.warn(NO_USABLE_ROI_OWNER,
-                "No usable ROI (box or point) in the ROI Manager for the frame(s) being processed. "
+                "No usable ROI (point or area) in the ROI Manager for the frame(s) being processed. "
                 + "\nAdd one to create object and start segmentation.");
         else helpBar.clearWarning(NO_USABLE_ROI_OWNER);
         table.repaint();
@@ -555,23 +555,23 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         return options;
     }
 
-    /** Logs, per object, whether its chosen negative group contains stray box ROIs (ignored - negative prompts are points only). */
+    /** Logs, per object, whether its chosen negative group contains area ROIs (ignored - negative prompts are points only). */
     private void logWarnings(List<PvsObject> currentObjects, int lastFrame) {
         Roi[] allRois = getRoiManager().getRoisAsArray();
         for (PvsObject object : currentObjects) {
             if (!object.isNegativeVisualUsed()) continue;
-            boolean hasStrayBox = false;
-            for (int frame = 1; frame <= lastFrame && !hasStrayBox; frame++) {
+            boolean hasArea = false;
+            for (int frame = 1; frame <= lastFrame && !hasArea; frame++) {
                 for (Roi roi : roiPromptExtractor.getRoisAtFrame(allRois, axis, frame)) {
-                    if (roi.getGroup() == object.getNegativeVisualGroup() && roi.getType() == Roi.RECTANGLE) {
-                        hasStrayBox = true;
+                    if (roi.getGroup() == object.getNegativeVisualGroup() && roi.isArea()) {
+                        hasArea = true;
                         break;
                     }
                 }
             }
-            if (hasStrayBox) {
+            if (hasArea) {
                 IJ.log("WARNING: object " + object.getName() + " - negative group " + object.getNegativeVisualGroup()
-                        + " contains box ROI(s), which are ignored (only point ROIs are used as negative prompts).");
+                        + " contains area ROI(s), which are ignored (only point ROIs are used as negative prompts).");
             }
         }
     }

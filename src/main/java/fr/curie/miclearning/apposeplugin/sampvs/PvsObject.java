@@ -6,7 +6,7 @@ import java.util.Objects;
  * One row of the object table for {@link SamPvsVideo_Plugin} an object/group of object to segment and
  * track, defined by visual prompts:
  * <ul>
- *   <li>a mandatory positive visual prompt (box and/or point ROIs, possibly on several frames)</li>
+ *   <li>a mandatory positive visual prompt (point and/or area ROIs, possibly on several frames)</li>
  *   <li>and an optional point-only negative prompt</li>
  * </ul>
  * <p>

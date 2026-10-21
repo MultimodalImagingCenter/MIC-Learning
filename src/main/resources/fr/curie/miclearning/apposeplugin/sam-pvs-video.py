@@ -54,7 +54,6 @@ def split_rois(rois, img_height, img_width):
             log_to_java(f"unknown prompt size: prompt {roi}")
     return box_list, point_list
 
-
 def split_prompts_into_parts(box_list, fg_point_list):
     """
     SAM accepts at most one box per mask, so an object prompted with several boxes is split into
@@ -81,6 +80,47 @@ def split_prompts_into_parts(box_list, fg_point_list):
         parts.append(([], loose_points))
     return parts
 
+def polygon_to_mask(flat_xy, img_height, img_width):
+    """flat [x0,y0,x1,y1,...] pixel polygon -> HxW uint8 mask (1 = inside)."""
+    points = np.asarray(flat_xy, dtype=np.float64).reshape(-1, 2) # [[x0,y0], [x1,y1], ...] # point coordinates comes from roi.getFloatPolygon() (gives the outline as float values)
+    points_int32 = np.round(points).astype(np.int32) # cv2.fillPoly only accepts int32 points. Converting floats with astype also truncates (12.9 → 12), so round first.
+    mask = np.zeros((img_height, img_width), dtype=np.uint8)    # create empty image with dims HxW
+    cv2.fillPoly(mask, [points_int32], color=1)
+    return mask
+
+MASK_LOGIT = 10.0  # +/- logit value for user masks: sigmoid(10) ~ 0.99995 = "certainly object"
+
+def binary_mask_to_logits(mask_uint8, target_hw):
+    """resize (INTER_AREA, pixel kept if >= half covered) to target_hw, return a 1x1xHxW float tensor of +10 / -10."""
+    # SAM's own masks are logits (>0 = object). Converting the user mask to the same form lets it be merged with model masks (amax = union)
+    target_h, target_w = target_hw
+    # cv2.resize takes (width, height), the reverse of numpy's (height, width)
+    # # INTER_AREA averages all the source pixels that fall into each output pixel
+    resized = cv2.resize(mask_uint8.astype(np.float32), (target_w, target_h), interpolation=cv2.INTER_AREA) # convert mask to float before resizing -> the resized values are fractions
+    logits = np.where(resized >= 0.5, MASK_LOGIT, -MASK_LOGIT).astype(np.float32)
+    # HxW -> 1x1xHxW (batch, mask index, H, W) ([None, None] adds the 2 axis)
+    return torch.from_numpy(logits)[None, None].to(device=device, dtype=dtype)
+
+
+decoder_hw = None  # mask decoder output size (H, W): constant for a run (same frame size and image encoding config)
+
+def get_decoder_hw(encoded_img):
+    """Mask decoder output size, found once by running the decoder with a dummy point (works for every SAM version)."""
+    global decoder_hw
+    if decoder_hw is None:
+        probe_mask, _ = track_model.encode_prompt_memory(encoded_img, None, [(0.5, 0.5)], None)
+        decoder_hw = tuple(probe_mask.shape[-2:])
+    return decoder_hw
+
+
+def refine_with_negative_points(encoded_img, mask_logits, neg_point_list):
+    """
+    Let SAM remove the regions around negative points from a user mask:
+     1/ SAM re-segments with the mask as hint
+     2/ the intersection (min of logits) keeps only what is inside both (initial mask and result of re-sgmentation
+    """
+    refined_mask, _ = track_model.encode_prompt_memory(encoded_img, None, None, neg_point_list, mask_hint=mask_logits)
+    return torch.minimum(mask_logits, refined_mask)
 
 # ============================================================
 # 1. Build SAM model (SAM2 or SAM3 - detected automatically from the checkpoint)
@@ -117,10 +157,10 @@ imgenc_config_dict = {"max_side_length": max_side_length, "use_square_sizing": T
 frame_offset = frameOffset # first frame's original (absolute) index, only to report frame indices in their original numbering
 
 # -- 2.3 sparse per-frame, per-object prompts
-# received as {"<frame_idx>": {"<object_idx>": {"positive_rois": [...], "negative_rois": [...]}}}
+# received as {"<frame_idx>": {"<object_idx>": {"positive_rois": [...], "negative_rois": [...], "positive_masks": [...], "negative_masks": [...]}}}
 frame_prompts_raw = framePrompts
 frame_prompts = {
-    int(frame_key): {int(obj_key): obj_val for obj_key, obj_val in per_object.items()}
+    int(frame_key): {int(obj_key): obj_rois for obj_key, obj_rois in per_object.items()}
     for frame_key, per_object in frame_prompts_raw.items()
 }
 
@@ -209,10 +249,12 @@ for frame_idx in range(n_frames_to_process):
     if prompts_at_frame:
         for obj_idx, obj_prompts_raw in prompts_at_frame.items():
             pos_box_list, pos_point_list = split_rois(obj_prompts_raw.get("positive_rois", []), h_img, w_img)
-            _, neg_point_list = split_rois(obj_prompts_raw.get("negative_rois", []), h_img, w_img)
-            if len(pos_box_list) == 0 and len(pos_point_list) == 0:
-                # negative-only prompt: refine the current tracked mask (given as mask hint, like
-                # SAM2's add_new_points_or_box), only possible for an already tracked object
+            pos_mask_list= [polygon_to_mask(p, h_img, w_img) for p in obj_prompts_raw.get("positive_masks", [])]
+            _, neg_point_list = split_rois(obj_prompts_raw.get("negative_rois", []), h_img, w_img) # negative rectangle prompts are dropped here
+            # case 1: only negative points
+            if len(pos_box_list) == 0 and len(pos_point_list) == 0 and len(pos_mask_list) == 0:
+                # negative-only prompt: refine the current tracked mask (given as mask hint),
+                #  only possible for an already tracked object
                 if len(neg_point_list) == 0 or obj_idx not in memory_per_obj_dict:
                     log_to_java(f"object {obj_idx}: no usable positive prompt on frame {frame_idx + frame_offset + 1} - skipped")
                     continue
@@ -225,19 +267,24 @@ for frame_idx in range(n_frames_to_process):
                 )
                 memory_per_obj_dict[obj_idx].store_prompt_result(init_mem)
                 continue
+
+            # case 2: at least one positive prompt
             log_to_java(f"registering prompt for object {obj_idx} (frame {frame_idx + frame_offset + 1})")
-            parts = split_prompts_into_parts(pos_box_list, pos_point_list)
-            if len(parts) == 1:
+            parts = split_prompts_into_parts(pos_box_list, pos_point_list) if (pos_box_list or pos_point_list) else []
+
+            # case 2-1: only one ROI part and no mask
+            if len(parts) == 1 and len(pos_mask_list) == 0:
                 obj_prompts = {
                     "box_xy1xy2_norm_list": pos_box_list,
                     "fg_xy_norm_list": pos_point_list,
                     "bg_xy_norm_list": neg_point_list,
                 }
                 _, init_mem = track_model.encode_prompt_memory(encoded_img, **obj_prompts)
+
+            # case 2-2: multiple roi parts and/or masks
             else:
-                # several boxes for one object: segment each part separately, then build the
-                # object's prompt memory from the union of the part masks
-                # log_to_java(f"   object {obj_idx}: {len(parts)} parts merged into one object")
+                # several boxes and/or user masks: each box/point part is segmented by SAM, user masks are
+                # used as drawn (minus negative points); the object's prompt memory is built from the union
                 part_masks = []
                 for part_box_list, part_point_list in parts:
                     part_mask, _ = track_model.encode_prompt_memory(
@@ -247,7 +294,22 @@ for frame_idx in range(n_frames_to_process):
                         bg_xy_norm_list=neg_point_list,
                     )
                     part_masks.append(part_mask)
+
+                if pos_mask_list:
+                    # user masks at the decoder size: same shape as SAM's part masks and the size SAM expects for a mask hint
+                    target_hw = get_decoder_hw(encoded_img)
+                    # merge user masks
+                    user_masks = torch.stack([binary_mask_to_logits(mask, target_hw) for mask in pos_mask_list]).amax(dim=0) # max of mask logits = union of the masks
+                    # re-segment with negative points, if any
+                    if neg_point_list:
+                        user_masks = refine_with_negative_points(encoded_img, user_masks, neg_point_list)
+                    part_masks.append(user_masks)
+
+                # merge results from box/points and polygon
                 merged_mask = torch.stack(part_masks).amax(dim=0)  # max of mask logits = union of the masks
+                if not (merged_mask > 0).any():
+                    log_to_java(f"object {obj_idx}: empty prompt mask on frame {frame_idx + frame_offset + 1} - skipped")
+                    continue
                 init_mem = track_model.encode_prompt_memory_from_mask(encoded_img, merged_mask)
             memory_per_obj_dict[obj_idx].store_prompt_result(init_mem)
 

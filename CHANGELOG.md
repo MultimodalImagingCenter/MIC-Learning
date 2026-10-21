@@ -24,7 +24,7 @@
   for image stacks (one time-point per processed frame, one channel per concept).
 - Classes to define **"objects" for promptable visual segmentation (PVS)** :
   - `PvsObject`: an object is defined by a name, an output group, and prompts: a mandatory positive
-    visual prompt (box and/or point ROIs, one ROI group, possibly defined on several frames to refine
+    visual prompt (point, box and/or mask ROIs, one ROI group, possibly defined on several frames to refine
     tracking downstream) plus an optional point-only negative visual prompt (one ROI group). Is one of 2 modes:
     - `CLASS`: on a single frame, all Rois of the group are resolved as independent objects. A
       cross multiple frames, all ROIs with the same name and group are instances of the same object
@@ -34,7 +34,12 @@
     negative-prompt column only offers ROI groups that contain at least one point ROI.
 - **New plugin "SAM PVS on Video"** (`SamPvsVideo_Plugin`): promptable visual segmentation with SAM2
   or SAM3.
-  - Box/point ROI prompts (positive and negative) (no text prompt, no class/concept)
+  - Visual prompts only:
+    - positive: point ROIs, rectangle ROIs (used as boxes) and non-rectangular area ROIs (ellipse, polygon,
+      freehand, rotated/rounded rectangle, used as **masks**: their outline is sent to Python as a polygon,
+      rasterized there (`polygon_to_mask`) and encoded as prompt memory directly (`encode_prompt_memory_from_mask`)). 
+      Box/point parts and masks of the same object are merged (union) into one prompt mask.
+    - negative: point ROIs only. Area ROIs in a negative group are ignored
   - Objects are tracked forward only, each starting on whichever frame its own first prompt appears;
     a later prompt for an already-tracked object refines it going forward without affecting earlier frames.
   - Macro-recordable.
