@@ -89,7 +89,15 @@ public class PvsObjectTableModel extends AbstractTableModel {
         PvsObject object = objects.get(rowIndex);
         switch (columnIndex) {
             case COL_NAME:
-                object.setName(uniqueName(value == null ? "" : value.toString(), object));
+                String newName = value == null ? "" : value.toString().trim();
+                if (newName.isEmpty()) {
+                    // empty name: give control back to automatic names
+                    object.clearUserName();
+                    object.setName(uniqueName(automaticName(object), object));
+                } else if (!newName.equals(object.getName())) {
+                    // only count it as "a user rename it" if the cell content actually differs
+                    object.setUserName(uniqueName(newName, object));
+                }
                 break;
             case COL_POSITIVE_VISUAL:
                 object.setPositiveVisualGroup((Integer) value);
@@ -97,27 +105,26 @@ public class PvsObjectTableModel extends AbstractTableModel {
                 if (Objects.equals(object.getNegativeVisualGroup(), object.getPositiveVisualGroup())) {
                     object.setNegativeVisualGroup(null);
                 }
-                // if a group for the visual positive prompt is given
-                if ((object.getPositiveVisualGroup() != null) && (object.getPositiveVisualGroup() != 0)) {
-                    // if the output group is still the default value (i.e. the id):
-                    // change output group to input group (even if output group already exist)
-                    if (object.isOutputGroupDefault()) {
-                        object.setOutputGroup((Integer) value);
-                    }
-                    //if the group given as positive prompt has a name (saved in ROI manager settings) and the name is still the default value
-                    // change the name to the one of the positive prompt
-                    String name = Roi.getGroupName((Integer) value);
-                    if (object.isNameDefault() && name!=null && !name.isEmpty()) {
-                        object.setName(uniqueName(name, object));
-                    }
 
-                }
+                //if the group given as positive prompt has a name (saved in ROI manager settings) and the name is still the default value
+                // change the name to the one of the positive prompt
+                object.setName(uniqueName(automaticName(object), object));
+                // if a group for the visual positive prompt is given
+                // if the output group is still the default value (i.e. the id):
+                // change output group to input group (even if output group already exist)
+                object.setOutputGroup(clampGroupId(automaticOutputGroup(object), object.getOutputGroup()));
                 break;
             case COL_NEGATIVE_VISUAL:
                 object.setNegativeVisualGroup((Integer) value);
                 break;
             case COL_OUTPUT_GROUP:
-                object.setOutputGroup(clampGroupId((Integer) value, object.getOutputGroup()));
+                int newGroup = value == null ? 0 : (Integer) value;
+                if (newGroup == 0){object.clearUserOutputGroup();
+                    object.setOutputGroup(clampGroupId(automaticOutputGroup(object), object.getOutputGroup()));}
+                else {
+                    newGroup = clampGroupId(newGroup, object.getOutputGroup());
+                    object.setUserOutputGroup(newGroup);
+                }
                 break;
             case COL_MODE:
                 object.setMode((PvsObject.Mode) value);
@@ -199,6 +206,30 @@ public class PvsObjectTableModel extends AbstractTableModel {
             candidate = base + "-" + suffix++;
         }
         return candidate;
+    }
+
+    /** Name an object gets when the user did not choose one: user name > positive group name > id */
+    private static String automaticName(PvsObject object) {
+        String objectName = object.getName();
+        if (!object.isNameDefault() && objectName!= null && !objectName.isEmpty()) return objectName;
+        Integer group = object.getPositiveVisualGroup();
+        if (group != null && group != 0) {
+            String groupName = Roi.getGroupName(group);
+            if (groupName != null && !groupName.isEmpty()) return groupName;
+            return group.toString();
+        }
+        return "";
+    }
+
+    /** output group an object gets when the user did not choose one: user output group > positive visual group  > id. */
+    private static int automaticOutputGroup(PvsObject object) {
+        int objectOutputGroup= object.getOutputGroup();
+        if (!object.isOutputGroupDefault() && objectOutputGroup!= 0) return objectOutputGroup;
+        if (object.isPositiveVisualUsed()){
+            int positiveGroup = object.getPositiveVisualGroup();
+            if(positiveGroup!=0) return positiveGroup;}
+        int id = object.getId();
+        return id>255 ? (id%255)+1 : id;
     }
 
     private boolean nameTaken(String name, PvsObject self) {

@@ -14,7 +14,10 @@ public class PcsConcept {
     private final int id;
 
     // name given by the user, by default id, should be unique
+    // does not impact the segmentation/tracking
     private String name;
+    // true once the user typed a name in the table; automatic renames (text prompt, group name) never set it
+    private boolean nameSetByUser = false;
 
     //Prompts
     private String textPrompt = "";
@@ -26,6 +29,8 @@ public class PcsConcept {
 
     // output group id assigned to this concept's detections (independent of the input groups)
     private int outputGroup;
+    // true once the user typed a group in the table
+    private boolean outputGroupSetByUser = false;
 
     public PcsConcept(int id, int outputGroup) {
         this.id = id;
@@ -43,6 +48,10 @@ public class PcsConcept {
 
     public String getName() {return name;}
     public void setName(String name) {this.name = name;}
+    /** Name explicitly chosen by the user: automatic renames are disabled from then on. */
+    public void setUserName(String name) {this.name = name; this.nameSetByUser = true;}
+    /** Gives control of the name back to automatic renames. */
+    public void clearUserName() {this.nameSetByUser = false;}
 
     public String getTextPrompt() {return textPrompt;}
     public void setTextPrompt(String textPrompt) {this.textPrompt = textPrompt == null ? "" : textPrompt;}
@@ -58,15 +67,22 @@ public class PcsConcept {
 
     public int getOutputGroup() {return outputGroup;}
     public void setOutputGroup(int outputGroup) {this.outputGroup = outputGroup;}
+    /** output group explicitly chosen by the user: automatic group setting are disabled from then on. */
+    public void setUserOutputGroup(int outputGroup) {this.outputGroup = outputGroup; this.outputGroupSetByUser = true;}
+    /** Gives control of the output group back to automatic group setting. */
+    public void clearUserOutputGroup() {
+        this.outputGroupSetByUser = false;
+    }
 
-    /** True while the name still holds its default value (the numeric {@link #id}) (i.e. true if the user never renamed it) */
+
+    /** True while the name was not set by the user (it then holds the id, the text prompt or the positive group name, possibly with a "-x" suffix) */
     public boolean isNameDefault() {
-        return name.equals(String.valueOf(id));
+        return !nameSetByUser;
     }
 
     /** True while the output value still holds its default value (the numeric {@link #id} ( or id %255 +1 if id>255)) (i.e. true if the user never changed it) */
     public boolean isOutputGroupDefault() {
-        return outputGroup == (id>255 ? (id%255)+1 : id);
+        return !outputGroupSetByUser;
     }
 
     /** At least one positive prompt (text or positive visual) must be defined. */

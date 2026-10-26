@@ -6,7 +6,7 @@ import java.util.Objects;
  * One row of the object table for {@link SamPvsVideo_Plugin} an object/group of object to segment and
  * track, defined by visual prompts:
  * <ul>
- *   <li>a mandatory positive visual prompt (box and/or point ROIs, possibly on several frames)</li>
+ *   <li>a mandatory positive visual prompt (point and/or area ROIs, possibly on several frames)</li>
  *   <li>and an optional point-only negative prompt</li>
  * </ul>
  * <p>
@@ -16,7 +16,7 @@ import java.util.Objects;
  *    across multiple frames, all ROIs of the same group are instances of the same object.</li>
  *   <li>a class: on a single frame, all Rois of the group are resolved as independent objects :
  *   across multiple frames, all ROIs with the same name and group are instances of the same object.</li>
- *   TODO: add a third type, objects defined by 1 single Roi (regardless of group)
+ *   TODO: add a third type, objects defined by 1 single Roi (regardless of group) ?
  * </ul>
  */
 public class PvsObject {
@@ -48,6 +48,8 @@ public class PvsObject {
     // name given by the user, by default id, should be unique
     // does not impact the segmentation/tracking
     private String name;
+    // true once the user typed a name in the table; automatic renames (group name) never set it
+    private boolean nameSetByUser = false;
 
     private Mode mode = Mode.CLASS; // by default, a new PVS object is actually a class
 
@@ -57,6 +59,8 @@ public class PvsObject {
 
     // output group id assigned to this object's detections, by default input group
     private int outputGroup;
+    // true once the user typed a group in the table
+    private boolean outputGroupSetByUser = false;
 
     public PvsObject(int id) {
         this.id = id;
@@ -74,6 +78,10 @@ public class PvsObject {
 
     public String getName() {return name;}
     public void setName(String name) {this.name = name;}
+    /** Name explicitly chosen by the user: automatic renames are disabled from then on. */
+    public void setUserName(String name) {this.name = name; this.nameSetByUser = true;}
+    /** Gives control of the name back to automatic renames. */
+    public void clearUserName() {this.nameSetByUser = false;}
 
     public Mode getMode() {return mode;}
     public void setMode(Mode mode) {this.mode = mode;}
@@ -88,15 +96,19 @@ public class PvsObject {
 
     public int getOutputGroup() {return outputGroup;}
     public void setOutputGroup(int outputGroup) {this.outputGroup = outputGroup;}
+    /** output group explicitly chosen by the user: automatic group setting are disabled from then on. */
+    public void setUserOutputGroup(int outputGroup) {this.outputGroup = outputGroup; this.outputGroupSetByUser = true;}
+    /** Gives control of the output group back to automatic group setting. */
+    public void clearUserOutputGroup() {this.outputGroupSetByUser = false;}
 
     /** True while the name still holds its default value (the numeric {@link #id}) (i.e. true if the user never renamed it) */
     public boolean isNameDefault() {
-        return name.equals(String.valueOf(id));
+        return !nameSetByUser;
     }
 
     /** True while the output value still holds its default value (the numeric {@link #id} ( or id %255 +1 if id>255)) (i.e. true if the user never changed it) */
     public boolean isOutputGroupDefault() {
-        return outputGroup == (id > 255 ? (id % 255) + 1 : id);
+        return !outputGroupSetByUser;
     }
 
     /** A positive visual prompt is always required */

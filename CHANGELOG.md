@@ -1,5 +1,5 @@
 # Changelog
-## [1.4.0] - current
+## [1.4.0] - 2026-10-21
 ### Added
 - Classes to define and  **"concepts" for Sam3 promptable concept segmentation (PCS)** :
   - `Sam3Concept` : a concept is defined by a name, an output group and prompts: 
@@ -24,13 +24,22 @@
   for image stacks (one time-point per processed frame, one channel per concept).
 - Classes to define **"objects" for promptable visual segmentation (PVS)** :
   - `PvsObject`: an object is defined by a name, an output group, and prompts: a mandatory positive
-    visual prompt (box and/or point ROIs, one ROI group, possibly defined on several frames to refine
-    tracking downstream) plus an optional point-only negative visual prompt (one ROI group).
+    visual prompt (point, box and/or mask ROIs, one ROI group, possibly defined on several frames to refine
+    tracking downstream) plus an optional point-only negative visual prompt (one ROI group). Is one of 2 modes:
+    - `CLASS`: on a single frame, all Rois of the group are resolved as independent objects. A
+      cross multiple frames, all ROIs with the same name and group are instances of the same object
+    - `OBJECT`:  on a single frame, all ROIs of the group are resolved as parts of the same object.
+      Across multiple frames, all ROIs of the same group are instances of the same object.
   - GUI: `PvsObjectTableModel`, `PvsGroupIdCellEditor` : table where each row is one object; the
     negative-prompt column only offers ROI groups that contain at least one point ROI.
 - **New plugin "SAM PVS on Video"** (`SamPvsVideo_Plugin`): promptable visual segmentation with SAM2
-  or SAM3 (model type detected automatically from the checkpoint).
-  - No text prompt, no class/concept - only box/point ROI-based object identity.
+  or SAM3.
+  - Visual prompts only:
+    - positive: point ROIs, rectangle ROIs (used as boxes) and non-rectangular area ROIs (ellipse, polygon,
+      freehand, rotated/rounded rectangle, used as **masks**: their outline is sent to Python as a polygon,
+      rasterized there (`polygon_to_mask`) and encoded as prompt memory directly (`encode_prompt_memory_from_mask`)). 
+      Box/point parts and masks of the same object are merged (union) into one prompt mask.
+    - negative: point ROIs only. Area ROIs in a negative group are ignored
   - Objects are tracked forward only, each starting on whichever frame its own first prompt appears;
     a later prompt for an already-tracked object refines it going forward without affecting earlier frames.
   - Macro-recordable.
@@ -59,9 +68,22 @@
   `Sam3AdvancedParametersDialog`, `Sam3GroupIdCellEditor`) now use the shared `RoiGroupOption`,
   `DialogUiSupport` and `ModelPathDialogs` classes instead of `sampcs`-local ones (no behavior change).
 - `RoiPromptExtractor.isUsableRoiType`: the usable ROIs now include all "area" ROIs, except for composite ROIs.
+- `RoiPromptExtractor`: multi-points ROIs whose points lie on several positions (several frames) are split
+  into one per position (`splitMultiPositionPoints`).
+- `PromptRois` is a top-level class (was nested in `RoiPromptExtractor`), with polygon mask lists
+  (`getPositiveMasks`/`getNegativeMasks`) and helpers `hasPositive`, `hasNegative`, `positiveCount`, `negativeCount`
+- `RoiPromptExtractor.buildPromptRois` takes a `maskRoisAsMasks` flag: `true` for PVS (non-rectangular area ROIs
+  sent as polygon masks), `false` for PCS (sent as their bounding box, the SAM3 detector takes no mask).
+- SAM3 PCS plugins (image and video): any area ROI (rectangle, ellipse, polygon, freehand) is used through its
+  bounding box. Visual prompts are now sent to Python as one map per concept.
 
 ### Fixed
-- `RoiPromptExtractor`: fallback when getting the position (place in stack) of a ROI if point ROI.
+- `RoiPromptExtractor`: when getting the position (frame in stack) of a point ROI, falls back to the position 
+  of its first point (instead of 0)
+- python scripts: persist result arrays in a queue while Java retrieve them (prevent Python from deleting them 
+  before Java has had time to retrieve them)
+- `sam3-pcs-video.py`: new detections get their own detection score (was read with the wrong index)
+- `DetectionUtils.createSemanticMaskStack`: no longer skip empty frames
 
 ### Removed
 - `Sam3TextPromptPcsMultiImg_Plugin.java` and associated classes (`Sam3TextPromptPcsMultiImgPythonRunner`, 

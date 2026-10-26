@@ -76,13 +76,15 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
             String text;
             switch (modelCol) {
                 case Sam3ConceptTableModel.COL_POSITIVE_VISUAL:
-                    text = "ROI group used as a positive visual prompt. Needs at least one usable ROI (box or point) in " +
+                    text = "ROI group used as a positive visual prompt. Needs at least one usable ROI (point or area) in " +
                             "\nthe ROI Manager on the prompt frame only. " +
-                            "Rois on other frames won't be processed.";
+                            "Rois on other frames won't be processed." +
+                            "\nArea ROIs (rectangle, ellipse, polygon, freehand) are used through their bounding box.";
                     break;
                 case Sam3ConceptTableModel.COL_NEGATIVE_VISUAL:
-                    text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (box or point) "
-                            + "\nthe ROI Manager on the prompt frame only. Must differ from the Positive visual group.";
+                    text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (point or area) "
+                            + "\nthe ROI Manager on the prompt frame only. Must differ from the Positive visual group."
+                            + "\nArea ROIs (rectangle, ellipse, polygon, freehand) are used through their bounding box.";
                     break;
                 default:
                     return null;
@@ -103,8 +105,8 @@ public class Sam3VideoDialog extends Sam3ConceptDialogBase {
                         || modelCol == Sam3ConceptTableModel.COL_NEGATIVE_VISUAL;
                 if (isVisualColumn && !tableModel.isCellEditable(row, modelCol)) {
                     helpBar.showInfo("visualPromptDisabled",
-                            "No usable ROI (box or point) in the ROI Manager on the current prompt frame."
-                                    + "\nTo enable visual prompts, add point/box ROI(s) to the ROI manager "
+                            "No usable ROI (point or area) in the ROI Manager on the current prompt frame."
+                                    + "\nTo enable visual prompts, add point/area ROI(s) to the ROI manager "
                                     + "or pick a different prompt frame.",
                             DialogHelpBar.DEFAULT_INSTRUCTION_COLOR);
                 }

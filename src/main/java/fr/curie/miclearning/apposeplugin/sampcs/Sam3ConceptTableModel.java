@@ -86,16 +86,23 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
         PcsConcept concept = concepts.get(rowIndex);
         switch (columnIndex) {
-            case COL_NAME:
-                concept.setName(uniqueName(value == null ? "" : value.toString(), concept));
+            case COL_NAME: {
+                String newName = value == null ? "" : value.toString().trim();
+                if (newName.isEmpty()) {
+                    // empty name: give control back to automatic names
+                    concept.clearUserName();
+                    concept.setName(uniqueName(automaticName(concept), concept));
+                } else if (!newName.equals(concept.getName())) {
+                    // only count it as "a user rename it" if the cell content actually differs
+                    concept.setUserName(uniqueName(newName, concept));
+                }
                 break;
+            }
             case COL_TEXT_PROMPT: {
                 String newText = value == null ? "" : value.toString();
                 concept.setTextPrompt(newText);
-                // if a text prompt is given and the name still is the default value (i.e. the id): change name to prompt
-                if (concept.isNameDefault() && !newText.trim().isEmpty()) {
-                    concept.setName(uniqueName(newText, concept));
-                }
+                // if a text prompt is given and the user never renamed the concept: change name to prompt
+                concept.setName(uniqueName(automaticName(concept), concept));
                 break;
             }
             case COL_POSITIVE_VISUAL:
@@ -104,27 +111,22 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
                 if (Objects.equals(concept.getNegativeVisualGroup(), concept.getPositiveVisualGroup())) {
                     concept.setNegativeVisualGroup(null);
                 }
-                // if a group for the visual positive prompt is given
-                if ((concept.getPositiveVisualGroup() != null) && (concept.getPositiveVisualGroup() != 0)) {
-                    // if the output group is still the default value (i.e. the id):
-                    // change output group to input group (even if output group already exist)
-                    if (concept.isOutputGroupDefault()) {
-                        concept.setOutputGroup((Integer) value);
-                    }
-                    //if the group given as positive prompt has a name (saved in ROI manager settings) and the name is still the default value
-                    // change the name to the one of the positive prompt
-                    String name = Roi.getGroupName((Integer) value);
-                    if (concept.isNameDefault() && name!=null && !name.isEmpty()) {
-                        concept.setName(uniqueName(name, concept));
-                    }
-
-                }
+                //if the group given as positive prompt has a name & the user never renamed the concept
+                // & there is no text prompt : change the name to the one of the positive prompt group
+                concept.setName(uniqueName(automaticName(concept), concept));
+                concept.setOutputGroup(clampGroupId(automaticOutputGroup(concept), concept.getOutputGroup()));
                 break;
             case COL_NEGATIVE_VISUAL:
                 concept.setNegativeVisualGroup((Integer) value);
                 break;
             case COL_OUTPUT_GROUP:
-                concept.setOutputGroup(clampGroupId((Integer) value, concept.getOutputGroup()));
+                int newGroup = value == null ? 0 : (Integer) value;
+                if (newGroup == 0){concept.clearUserOutputGroup();
+                    concept.setOutputGroup(clampGroupId(automaticOutputGroup(concept), concept.getOutputGroup()));}
+                else {
+                    newGroup = clampGroupId(newGroup, concept.getOutputGroup());
+                    concept.setUserOutputGroup(newGroup);
+                }
                 break;
             default:
                 throw new IllegalArgumentException("Unknown column: " + columnIndex);
@@ -202,6 +204,32 @@ public class Sam3ConceptTableModel extends AbstractTableModel {
             candidate = base + "-" + suffix++;
         }
         return candidate;
+    }
+
+    /** Name a concept gets when the user did not choose one: user name > text prompt > positive group name > id. */
+    private static String automaticName(PcsConcept concept) {
+        String conceptName = concept.getName();
+        if (!concept.isNameDefault() && conceptName!= null && !conceptName.isEmpty()) return conceptName;
+        String textPrompt = concept.getTextPrompt();
+        if (concept.isTextPromptUsed() && textPrompt!=null && !textPrompt.isEmpty()) return textPrompt;
+        Integer group = concept.getPositiveVisualGroup();
+        if (group != null && group != 0) {
+            String groupName = Roi.getGroupName(group);
+            if (groupName != null && !groupName.isEmpty()) return groupName;
+            return group.toString();
+        }
+        return "";
+    }
+
+    /** output group a concept gets when the user did not choose one: user output group > positive visual group  > id. */
+    private static int automaticOutputGroup(PcsConcept concept) {
+        int conceptOutputGroup= concept.getOutputGroup();
+        if (!concept.isOutputGroupDefault() && conceptOutputGroup!= 0) return conceptOutputGroup;
+        if (concept.isPositiveVisualUsed()){
+            int positiveGroup = concept.getPositiveVisualGroup();
+            if(positiveGroup!=0) return positiveGroup;}
+        int id = concept.getId();
+        return id>255 ? (id%255)+1 : id;
     }
 
     private boolean nameTaken(String name, PcsConcept self) {

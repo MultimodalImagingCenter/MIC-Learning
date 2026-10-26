@@ -80,13 +80,15 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
             String text;
             switch (modelCol) {
                 case Sam3ConceptTableModel.COL_POSITIVE_VISUAL:
-                    text = "ROI group used as a positive visual prompt. Needs one usable ROI (box or point) in the ROI Manager "
+                    text = "ROI group used as a positive visual prompt. Needs one usable ROI (point or area) in the ROI Manager "
                             + "on each processed frame." +
-                            "\nEach frame will be processed independently.";
+                            "\nEach frame will be processed independently." +
+                            "\nArea ROIs (rectangle, ellipse, polygon, freehand) are used through their bounding box.";
                     break;
                 case Sam3ConceptTableModel.COL_NEGATIVE_VISUAL:
-                    text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (box or point) "
-                            + "on each processed frame. \nMust differ from the Positive visual group.";
+                    text = "ROI group used as a negative visual prompt (optional). Needs one usable ROI (point or area) "
+                            + "on each processed frame. \nMust differ from the Positive visual group."
+                            + "\nArea ROIs (rectangle, ellipse, polygon, freehand) are used through their bounding box.";
                     break;
                 default:
                     return null;
@@ -231,7 +233,7 @@ public class Sam3ImageDialog extends Sam3ConceptDialogBase {
     private void warnIfPartialCoverage(Roi[] allRois, List<Integer> frames, int groupId, PcsConcept concept, String kind) {
         List<Integer> missingFrames = roiPromptExtractor.findFramesMissingGroup(allRois, axis, groupId, frames);
         if (!missingFrames.isEmpty()) {
-            IJ.log("WARNING: concept " + concept.getName() + " - " + kind + " group " + groupId
+            IJ.log("\nWARNING: concept " + concept.getName() + " - " + kind + " group " + groupId
                     + " has no ROI on frame(s): " + missingFrames);
         }
     }

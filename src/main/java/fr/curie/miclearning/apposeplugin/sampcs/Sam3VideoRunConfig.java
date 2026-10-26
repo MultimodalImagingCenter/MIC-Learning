@@ -1,5 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 
 import java.util.ArrayList;
@@ -25,8 +26,9 @@ public final class Sam3VideoRunConfig {
     private final List<String> conceptLabels;
     private final List<String> conceptTexts; // real text prompt, or "visual" placeholder when unused
     private final List<Boolean> conceptTextUsed;
-    private final List<List<double[]>> conceptPositiveRois; // one rois list per concept, resolved from the prompt frame
-    private final List<List<double[]>> conceptNegativeRois;
+    private final List<PromptRois> conceptPromptRois; // resolved from the prompt frame
+
+
     private final Map<String, Integer> classIdMap; // concept label -> output RoiManager group id
 
     private final int promptFrame; // index of the frame of the original image where the prompt are defined, where the sampcs starts 0-indexed, inclusive
@@ -43,8 +45,7 @@ public final class Sam3VideoRunConfig {
         this.conceptLabels = Collections.unmodifiableList(new ArrayList<>(b.conceptLabels));
         this.conceptTexts = Collections.unmodifiableList(new ArrayList<>(b.conceptTexts));
         this.conceptTextUsed = Collections.unmodifiableList(new ArrayList<>(b.conceptTextUsed));
-        this.conceptPositiveRois = Collections.unmodifiableList(new ArrayList<>(b.conceptPositiveRois));
-        this.conceptNegativeRois = Collections.unmodifiableList(new ArrayList<>(b.conceptNegativeRois));
+        this.conceptPromptRois = Collections.unmodifiableList(new ArrayList<>(b.conceptPromptRois));
         this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
         this.promptFrame = b.promptFrame;
         this.endFrame = b.endFrame;
@@ -59,8 +60,7 @@ public final class Sam3VideoRunConfig {
     public List<String> getConceptLabels() { return conceptLabels; }
     public List<String> getConceptTexts() { return conceptTexts; }
     public List<Boolean> getConceptTextUsed() { return conceptTextUsed; }
-    public List<List<double[]>> getConceptPositiveRois() { return conceptPositiveRois; }
-    public List<List<double[]>> getConceptNegativeRois() { return conceptNegativeRois; }
+    public List<PromptRois> getConceptPromptRois() { return conceptPromptRois; }
     public Map<String, Integer> getClassIdMap() { return classIdMap; }
     public int getPromptFrame() { return promptFrame; }
     public int getEndFrame() { return endFrame; }
@@ -76,8 +76,7 @@ public final class Sam3VideoRunConfig {
         private List<String> conceptLabels = new ArrayList<>();
         private List<String> conceptTexts = new ArrayList<>();
         private List<Boolean> conceptTextUsed = new ArrayList<>();
-        private List<List<double[]>> conceptPositiveRois = new ArrayList<>();
-        private List<List<double[]>> conceptNegativeRois = new ArrayList<>();
+        private List<PromptRois> conceptPromptRois = new ArrayList<>();
         private Map<String, Integer> classIdMap = new HashMap<>();
         private int firstFrame;
         private int promptFrame;
@@ -113,15 +112,11 @@ public final class Sam3VideoRunConfig {
             return this;
         }
 
-        public Builder conceptPositiveRois(List<List<double[]>> conceptPositiveRois) {
-            this.conceptPositiveRois = conceptPositiveRois != null ? conceptPositiveRois : new ArrayList<>();
+        public Builder conceptPromptRois(List<PromptRois> conceptPromptRois) {
+            this.conceptPromptRois = conceptPromptRois != null ? conceptPromptRois : new ArrayList<>();
             return this;
         }
 
-        public Builder conceptNegativeRois(List<List<double[]>> conceptNegativeRois) {
-            this.conceptNegativeRois = conceptNegativeRois != null ? conceptNegativeRois : new ArrayList<>();
-            return this;
-        }
 
         public Builder classIdMap(Map<String, Integer> classIdMap) {
             this.classIdMap = classIdMap != null ? classIdMap : new HashMap<>();
@@ -167,7 +162,7 @@ public final class Sam3VideoRunConfig {
             }
             boolean anyUsablePrompt = false;
             for (int i = 0; i < conceptLabels.size(); i++) {
-                boolean hasPositiveVisual = i < conceptPositiveRois.size() && !conceptPositiveRois.get(i).isEmpty();
+                boolean hasPositiveVisual = i < conceptPromptRois.size() && conceptPromptRois.get(i).hasPositive();
                 boolean textUsed = i < conceptTextUsed.size() && conceptTextUsed.get(i);
                 if (textUsed || hasPositiveVisual) {
                     anyUsablePrompt = true;

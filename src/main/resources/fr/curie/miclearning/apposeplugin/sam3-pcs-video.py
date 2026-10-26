@@ -105,15 +105,14 @@ images_bgr = np.ascontiguousarray(images_bgr).astype(np.uint8)
 concept_labels = conceptLabels
 concept_texts = conceptTexts
 concept_text_used = conceptTextUsed
-concept_positive_rois = conceptPositiveRois  # one rois list per concept: [[x,y,w,h] or [x,y], ...]
-concept_negative_rois = conceptNegativeRois
+concept_visual_prompts = conceptVisualPrompts  # one map per concept: {"positive_rois": [[x,y,w,h] or [x,y], ...], "negative_rois": [...]} (area ROIs sent as bounding boxes)
 n_concepts = len(concept_labels)
 
 # kwargs for detect_model.encode_exemplars(), or None for a concept with no usable prompt at all
 concept_detection_prompts = []
 for concept_idx in range(n_concepts):
-    pos_box_list, pos_point_list = split_rois(concept_positive_rois[concept_idx], h_img, w_img)
-    neg_box_list, neg_point_list = split_rois(concept_negative_rois[concept_idx], h_img, w_img)
+    pos_box_list, pos_point_list = split_rois(concept_visual_prompts[concept_idx]["positive_rois"], h_img, w_img)
+    neg_box_list, neg_point_list = split_rois(concept_visual_prompts[concept_idx]["negative_rois"], h_img, w_img)
     has_positive_visual = len(pos_box_list) > 0 or len(pos_point_list) > 0
     if not concept_text_used[concept_idx] and not has_positive_visual:
         log_to_java(f"concept '{concept_labels[concept_idx]}': no prompt on the prompt frame - skipped")
@@ -204,20 +203,28 @@ all_ids_used = []  # list of all used id
 # 3. Per-frame helpers shared by the prompt frame and the tracking loop
 # ============================================================
 
+def encode_for_detection(frame, track_encoded_img):
+    """Return the detection model's image encoding of `frame`, reusing the tracking one when they are identical."""
+    if needs_detect_reencode:
+        return detect_model.encode_image(frame, **imgenc_config_dict_detect)
+    return track_encoded_img
+
+
 def run_detection_and_register_new_objects(frame, track_encoded_img, det_exemplars, concept_idx, memory_dicts,
-                                            all_ids_used, known_boxes_xywh_norm_list, count_label):
+                                            all_ids_used, known_boxes_xywh_norm_list, count_label,
+                                            det_encoded_img=None):
     """
     Run SAM3 detection (text + visual prompts) for ONE concept on `frame`, keep only the detections
     that don't already overlap a currently-tracked box (of that same concept) and register each surviving
     detection as a new tracked object tagged with `concept_idx`.
 
     Passing an empty `known_boxes_xywh_norm_list` makes every detection count as "new"
+    `det_encoded_img` is the detection model's encoding of `frame`, computed here if not given.
 
     Returns the new detections as parallel lists: (masks_uint8, boxes_xywh_norm, scores, ids).
     """
-    det_encoded_img = track_encoded_img
-    if needs_detect_reencode:
-        det_encoded_img = detect_model.encode_image(frame, **imgenc_config_dict_detect)
+    if det_encoded_img is None:
+        det_encoded_img = encode_for_detection(frame, track_encoded_img)
     det_masks, det_boxes, det_scores, pres_scores = detect_model.generate_detections(
         det_encoded_img, det_exemplars, detection_filter_threshold=detection_score_threshold
     )
@@ -256,7 +263,7 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
         # save results for this object
         mask_uint8 = (raw_det_mask > mask_threshold).byte().cpu().numpy().squeeze()
         new_masks.append(mask_uint8)
-        new_scores.append(det_scores[0, idx_offset])
+        new_scores.append(det_scores[0, det_idx])
         new_ids.append(new_idx)
         raw_det_box = det_boxes[:, [det_idx]]
         x1, y1 = raw_det_box[0, 0, 0]
@@ -267,19 +274,22 @@ def run_detection_and_register_new_objects(frame, track_encoded_img, det_exempla
 
 
 def detect_new_objects_all_concepts(frame, encoded_img, memory_dicts, known_boxes_xywh_norm_list=None,
-                                     known_ids_list=None, count_label_suffix="detected"):
+                                     known_ids_list=None, count_label_suffix="detected", det_encoded_img=None):
     """
     Runs `run_detection_and_register_new_objects` once per concept
 
     `known_boxes_xywh_norm_list`/`known_ids_list` describe every currently-tracked object on this
     frame (across all concepts, as parallel lists) - each concept only compares against the subset
     of those that belong to itself
+    `det_encoded_img` is the detection model's encoding of `frame`, computed once here if not given.
 
     Returns parallel lists (masks, boxes, scores, ids, concept_ids) of every new detection, across
     all concepts.
     """
     known_boxes_xywh_norm_list = known_boxes_xywh_norm_list or []
     known_ids_list = known_ids_list or []
+    if det_encoded_img is None:
+        det_encoded_img = encode_for_detection(frame, encoded_img)
 
     masks_all, boxes_all, scores_all, ids_all, concept_ids_all = [], [], [], [], []
     for concept_idx, det_exemplars in enumerate(concept_det_exemplars):
@@ -290,7 +300,8 @@ def detect_new_objects_all_concepts(frame, encoded_img, memory_dicts, known_boxe
         new_masks, new_boxes, new_scores, new_ids = run_detection_and_register_new_objects(
             frame, encoded_img, det_exemplars, concept_idx, memory_dicts,
             all_ids_used, known_boxes_this_concept,
-            count_label=f"{count_label_suffix} for concept '{concept_labels[concept_idx]}'"
+            count_label=f"{count_label_suffix} for concept '{concept_labels[concept_idx]}'",
+            det_encoded_img=det_encoded_img,
         )
         masks_all.extend(new_masks)
         boxes_all.extend(new_boxes)
@@ -379,6 +390,8 @@ frame = images_bgr[frame_idx]
 
 # Encode image data, then each concept's exemplars (text + visual prompt)
 encoded_img = track_model.encode_image(frame, **imgenc_config_dict_track)
+# exemplars must be encoded from the detection model's own image encoding
+det_encoded_img = encode_for_detection(frame, encoded_img)
 concept_det_exemplars = []
 for concept_idx in range(n_concepts):
     prompts = concept_detection_prompts[concept_idx]
@@ -386,13 +399,14 @@ for concept_idx in range(n_concepts):
         concept_det_exemplars.append(None)
         continue
     concept_det_exemplars.append(detect_model.encode_exemplars(
-        encoded_img, **prompts, include_coordinate_encodings=include_coordinate_encodings,
+        det_encoded_img, **prompts, include_coordinate_encodings=include_coordinate_encodings,
     ))
 
 masks_uint8_on_frame, boxes_on_frame, scores_on_frame, ids_on_frame, concept_ids_on_frame = detect_new_objects_all_concepts(
     frame, encoded_img,
     memory_dicts=[memory_per_obj_dict_forward, memory_per_obj_dict_backward],
     count_label_suffix="object(s) detected on prompt frame",
+    det_encoded_img=det_encoded_img,
 )
 
 n_obj = package_and_send_frame_results(frame_idx, masks_uint8_on_frame, boxes_on_frame, scores_on_frame,

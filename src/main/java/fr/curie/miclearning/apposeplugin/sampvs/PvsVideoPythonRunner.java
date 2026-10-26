@@ -1,7 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
 import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
-import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
 import ij.ImagePlus;
 import net.imglib2.appose.NDArrays;
@@ -64,19 +64,23 @@ public class PvsVideoPythonRunner implements AutoCloseable {
     }
 
     /**
-     * Flattens the  frame -> object-index -> prompt structure into pure
+     * Flattens the  frame -> object-index -> promptRois structure into pure
      * String-keyed map Appose can send to Python
      * Frame keys are reindexed relative to {@link PvsVideoRunConfig#getFirstFrame()}
      */
     private static Map<String, Object> buildFramePromptsInput(PvsVideoRunConfig config) {
         Map<String, Object> framePromptsInput = new LinkedHashMap<>();
-        for (Map.Entry<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> frameEntry : config.getFramePrompts().entrySet()) {
-            Map<String, Object> perObject = new LinkedHashMap<>();
-            for (Map.Entry<Integer, RoiPromptExtractor.PromptRois> objEntry : frameEntry.getValue().entrySet()) {
-                RoiPromptExtractor.PromptRois promptRois = objEntry.getValue();
-                Map<String, Object> promptMap = new LinkedHashMap<>();
+        // for each frame
+        for (Map.Entry<Integer, Map<Integer, PromptRois>> frameEntry : config.getFramePrompts().entrySet()) {
+            Map<String, Object> perObject = new LinkedHashMap<>(); // map of all prompts, of all objects, on this frame
+            // for each object
+            for (Map.Entry<Integer, PromptRois> objEntry : frameEntry.getValue().entrySet()) {
+                PromptRois promptRois = objEntry.getValue();
+                Map<String, Object> promptMap = new LinkedHashMap<>(); // map of all prompt for this object, for this frame
                 promptMap.put("positive_rois", promptRois.getPositive());
                 promptMap.put("negative_rois", promptRois.getNegative());
+                promptMap.put("positive_masks", promptRois.getPositiveMasks());
+                promptMap.put("negative_masks", promptRois.getNegativeMasks());
                 perObject.put(String.valueOf(objEntry.getKey()), promptMap);
             }
             int relativeFrame = frameEntry.getKey() - config.getFirstFrame();

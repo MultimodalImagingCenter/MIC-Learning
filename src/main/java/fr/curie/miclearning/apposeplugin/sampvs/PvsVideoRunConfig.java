@@ -1,6 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
-import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 
 import java.util.ArrayList;
@@ -26,7 +26,7 @@ public final class PvsVideoRunConfig {
     private final Map<String, Integer> classIdMap; // object name -> output RoiManager group id
 
     // 0-indexed frame -> 0-indexed object index -> the prompt(s) defined on that frame for that object
-    private final Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts;
+    private final Map<Integer, Map<Integer, PromptRois>> framePrompts;
 
     private final int firstFrame; // 0-indexed, inclusive; earliest frame any object has a prompt on - processing starts here
     private final int lastFrame; // 0-indexed, inclusive
@@ -48,7 +48,7 @@ public final class PvsVideoRunConfig {
     public String getModelPath() { return modelPath; }
     public List<String> getObjectNames() { return objectNames; }
     public Map<String, Integer> getClassIdMap() { return classIdMap; }
-    public Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> getFramePrompts() { return framePrompts; }
+    public Map<Integer, Map<Integer, PromptRois>> getFramePrompts() { return framePrompts; }
     public int getFirstFrame() { return firstFrame; }
     public int getLastFrame() { return lastFrame; }
     public int getFrameCount() { return lastFrame - firstFrame + 1; }
@@ -59,7 +59,7 @@ public final class PvsVideoRunConfig {
         private String modelPath;
         private List<String> objectNames = new ArrayList<>();
         private Map<String, Integer> classIdMap = new HashMap<>();
-        private Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts = new TreeMap<>();
+        private Map<Integer, Map<Integer, PromptRois>> framePrompts = new TreeMap<>();
         private int firstFrame;
         private int lastFrame;
         private PvsModelParameters modelParams;
@@ -80,7 +80,7 @@ public final class PvsVideoRunConfig {
             return this;
         }
 
-        public Builder framePrompts(Map<Integer, Map<Integer, RoiPromptExtractor.PromptRois>> framePrompts) {
+        public Builder framePrompts(Map<Integer, Map<Integer, PromptRois>> framePrompts) {
             this.framePrompts = framePrompts != null ? framePrompts : new TreeMap<>();
             return this;
         }
@@ -124,7 +124,7 @@ public final class PvsVideoRunConfig {
             }
             boolean anyUsablePrompt = framePrompts.values().stream()
                     .flatMap(perObject -> perObject.values().stream())
-                    .anyMatch(prompt -> !prompt.getPositive().isEmpty());
+                    .anyMatch(prompt -> prompt.hasPositive());
             if (!anyUsablePrompt) {
                 throw new IllegalStateException("No positive visual prompt provided for any object.");
             }

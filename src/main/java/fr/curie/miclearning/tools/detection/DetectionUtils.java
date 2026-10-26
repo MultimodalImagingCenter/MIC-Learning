@@ -1078,21 +1078,17 @@ public class DetectionUtils {
     }
 
 
-    public static ImagePlus createSemanticMaskStack(ImagePlus imp, Map<Integer, List<ProcessedDetection>> detectionsByFrame) {
-        ImageStack impStack = imp.getStack();
-        if (impStack.getSize() < detectionsByFrame.size()) {
-            IJ.log("Error: More slices are registered in detectionsByFrame than in initial stack");
-            return null;
-        }
-
+    public static ImagePlus createSemanticMaskStack(ImagePlus imp, MultiFrameDataManager mfdManager) {
         int width = imp.getWidth();
         int height = imp.getHeight();
 
+        ImageStack originalStack = imp.getStack();
         ImageStack maskStack = new ImageStack(width, height);
-        for (Map.Entry<Integer, List<ProcessedDetection>> entry : detectionsByFrame.entrySet()) {
-            List<ProcessedDetection> detections = entry.getValue();
+        Map<Integer, List<ProcessedDetection>> detectionsByFrame = mfdManager.getDetectionsByFrame();
+        for (int f = mfdManager.getFirstFrame(); f <= mfdManager.getLastFrame(); f++) {
+            List<ProcessedDetection> detections = detectionsByFrame.getOrDefault(f, new ArrayList<>());
             ImageProcessor sliceProcessor = createSemanticMaskProcessor(detections, width, height);
-            String sliceLabel = impStack.getSliceLabel(entry.getKey() + 1);
+            String sliceLabel = originalStack.getSliceLabel(f + 1);
             maskStack.addSlice(sliceLabel, sliceProcessor);
         }
 

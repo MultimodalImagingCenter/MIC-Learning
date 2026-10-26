@@ -1,6 +1,7 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
 import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
@@ -121,8 +122,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
         Roi[] allRois = roiManager.getRoisAsArray(); // all ROIs in the RoiManager when the user presses "ok"
 
         // one entry per frame, one inner entry per concept :
-        // {"positive_rois": List<double[]>, "negative_rois": List<double[]>}
-        List<List<Map<String, List<double[]>>>> framePrompts = new ArrayList<>();
+        List<List<PromptRois>> framePrompts = new ArrayList<>();
         if (stackMode == DetectionMode.SINGLE_IMAGE) {
             framePrompts.add(buildFrameConceptPrompts(roiPromptExtractor.getRoisAtFrame(allRois, axis, current_slice)));
         } else {
@@ -164,17 +164,14 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     }
 
     /** Resolves each concept's positive/negative visual prompt from a list of ROI for ONE frame. */
-    private List<Map<String, List<double[]>>> buildFrameConceptPrompts(List<Roi> roisAtFrame) {
-        List<Map<String, List<double[]>>> promptsRoisByConcept = new ArrayList<>();
+    private List<PromptRois> buildFrameConceptPrompts(List<Roi> roisAtFrame) {
+        List<PromptRois> promptsRoisByConcept = new ArrayList<>();
         for (PcsConcept concept : concepts) {
-            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
-            concept.increasePositivePromptCount(promptRois.getPositive().size());
-            concept.increaseNegativePromptCount(promptRois.getNegative().size());
+            PromptRois promptRois = roiPromptExtractor.buildPromptRois(roisAtFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup(), false);
+            concept.increasePositivePromptCount(promptRois.positiveCount());
+            concept.increaseNegativePromptCount(promptRois.negativeCount());
 
-            Map<String, List<double[]>> entry = new HashMap<>();
-            entry.put("positive_rois", promptRois.getPositive());
-            entry.put("negative_rois", promptRois.getNegative());
-            promptsRoisByConcept.add(entry);
+            promptsRoisByConcept.add(promptRois);
         }
         return promptsRoisByConcept;
     }

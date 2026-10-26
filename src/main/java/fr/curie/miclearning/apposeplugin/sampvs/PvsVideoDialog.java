@@ -1,10 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampvs;
 
-import fr.curie.miclearning.apposeplugin.AbstractPromptDialog;
-import fr.curie.miclearning.apposeplugin.DialogHelpBar;
-import fr.curie.miclearning.apposeplugin.ModelPathDialogs;
-import fr.curie.miclearning.apposeplugin.RoiGroupOption;
-import fr.curie.miclearning.apposeplugin.RoiGroupOptionWithCoverage;
+import fr.curie.miclearning.apposeplugin.*;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.IJ;
 import ij.ImagePlus;
@@ -48,6 +44,8 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
     // interface elements specific to objects (model path/output checkboxes live in the base)
     private JTextField lastFrameField;
+    private JCheckBox semanticMaskCB;
+    private JCheckBox instanceMaskPerClassCB;
 
     // populated only once the user presses OK
     private PvsModelParameters finalModelParams;
@@ -178,7 +176,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
         JLabel titleLabel = createSectionTitle("Objects");
         helpBar.attachHelp(titleLabel,
-                "Each row defines what to segment and track, with positive visual prompt(s) (box and/or point ROIs)." +
+                "Each row defines what to segment and track, with positive visual prompt(s) (point and/or area ROIs)." +
                         "\nBy default (\"Class\" mode), every ROI of the positive group is tracked as its own independent object." +
                         "\nIn \"Object\" mode, all ROIs of the group describe one single object (see the Mode column).");
         panel.add(titleLabel, BorderLayout.NORTH);
@@ -230,25 +228,26 @@ public class PvsVideoDialog extends AbstractPromptDialog {
             if (viewCol < 0) return null;
             int modelCol = table.convertColumnIndexToModel(viewCol);
             String roiGroupNotUsed = outputWithRoiGroupSelected() ? "" : "\nUnused for instance masks.";
-            String nameNotUsed = outputWithNameSelected() ? "" : "\nUnused for instance masks.";
+            String nameNotUsed = outputWithNameSelected() ? "" : "\nUnused for instance and semantic masks.";
             String text;
             switch (modelCol) {
                 case PvsObjectTableModel.COL_NAME:
                     text = "Name used for this object's outputs (ROI names, logs). Must be unique." + nameNotUsed;
                     break;
                 case PvsObjectTableModel.COL_POSITIVE_VISUAL:
-                    text = "ROI group used as a positive visual prompt (box and/or point ROIs). Required."
+                    text = "ROI group used as a positive visual prompt (point and/or area ROIs). Required."
                             + "Can be placed on several frames: "
                             + "\nthe first frame with a usable ROI starts tracking "
                             + "this object, and any later frame refines it going forward.";
                     break;
                 case PvsObjectTableModel.COL_NEGATIVE_VISUAL:
-                    text = "ROI group used as a negative visual prompt (optional, point ROIs only)."
+                    text = "ROI group used as a negative visual prompt (optional, POINT ROIs ONLY). "
                             + "Must differ from the Positive visual group. "
                             + "\nCan be placed on several frames.";
                     break;
                 case PvsObjectTableModel.COL_OUTPUT_GROUP:
-                    text = "Id tagging this object's outputs: the ROI group for output ROIs." + roiGroupNotUsed;
+                    text = "Id tagging this object's outputs: the ROI group for output ROIs, and the pixel value for the semantic mask."
+                            + roiGroupNotUsed;
                     break;
                 case PvsObjectTableModel.COL_MODE:
                     text = "Class (default): each ROI in the positive group is its own independently-tracked object, named \"<name>-1\", \"<name>-2\"..."
@@ -273,7 +272,7 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                         || modelCol == PvsObjectTableModel.COL_NEGATIVE_VISUAL;
                 if (isVisualColumn && !tableModel.isCellEditable(row, modelCol)) {
                     helpBar.showInfo("visualPromptDisabled",
-                            "No usable ROI (box or point) in the ROI Manager for the frame(s) being processed. "
+                            "No usable ROI (point or area) in the ROI Manager for the frame(s) being processed. "
                                     + "\nAdd one to enable visual prompts.",
                             DialogHelpBar.DEFAULT_INSTRUCTION_COLOR);
                 }
@@ -365,20 +364,30 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         addBoxRoisCB = new JCheckBox("Add bounding boxes to ROI Manager", false);
         addShapeRoisCB = new JCheckBox("Add shape ROIs to ROI Manager", true);
         instanceMaskCB = new JCheckBox("Create instance masks (unique value per object)", false);
+        semanticMaskCB = new JCheckBox("Create semantic masks (unique value per output group)", false);
+        instanceMaskPerClassCB = new JCheckBox("Create instance mask per row (one channel per table row)", false);
 
-        // the "Output group" column is only meaningful for ROI outputs - repaint it when that changes
+        // the "Output group" and "Name" columns are only meaningful for some outputs - repaint them when that changes
         addBoxRoisCB.addItemListener(e -> table.repaint());
         addShapeRoisCB.addItemListener(e -> table.repaint());
+        semanticMaskCB.addItemListener(e -> table.repaint());
+        instanceMaskPerClassCB.addItemListener(e -> table.repaint());
 
         helpBar.attachHelp(addBoxRoisCB, "Adds one rectangle ROI per detection, named 'box_' + the object's output name. "
                 + "\nRoi placed in the ROI group set by that object's \"Output group\".");
         helpBar.attachHelp(addShapeRoisCB, "Adds one shape ROI per detection, named 'mask_' + the object's output name. "
                 + "\nRoi placed in the ROI group set by that object's \"Output group\".");
         helpBar.attachHelp(instanceMaskCB, "One image per frame where each detected instance gets its own unique pixel value.");
+        helpBar.attachHelp(semanticMaskCB, "One image per frame where each pixel takes the value of its object's \"Output group\" "
+                + "(0 = background).");
+        helpBar.attachHelp(instanceMaskPerClassCB, "Like instance masks, but one channel per table row: "
+                + "\nall objects resolved from the same row share its channel.");
 
         checkboxesPanel.add(addBoxRoisCB);
         checkboxesPanel.add(addShapeRoisCB);
         checkboxesPanel.add(instanceMaskCB);
+        checkboxesPanel.add(semanticMaskCB);
+        checkboxesPanel.add(instanceMaskPerClassCB);
 
         panel.add(checkboxesPanel, BorderLayout.CENTER);
         return panel;
@@ -410,20 +419,10 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         List<Integer> frames = currentFrameRange();
         Roi[] allRois = getRoiManager().getRoisAsArray();
 
-        // positive: any group with a usable ROI (box or point) on at least one processed frame
-        Map<Integer, Integer> coveredFramesByGroup = roiPromptExtractor.countGroupCoverage(allRois, axis, frames);
-        List<RoiGroupOption> positiveOptions = new ArrayList<>();
-        int totalFrames = frames.size();
-        for (Map.Entry<Integer, Integer> entry : coveredFramesByGroup.entrySet()) {
-            positiveOptions.add(new RoiGroupOptionWithCoverage(entry.getKey(), entry.getValue(), totalFrames));
-        }
-
-        // negative: subset of the positive options that also has a usable POINT ROI somewhere
-        Set<Integer> pointGroups = roiPromptExtractor.groupsWithUsablePointRoi(allRois, axis, frames);
-        List<RoiGroupOption> negativeOptions = new ArrayList<>();
-        for (RoiGroupOption option : positiveOptions) {
-            if (pointGroups.contains(option.getGroupId())) negativeOptions.add(option);
-        }
+        // positive: any group with a usable ROI (point or area) on at least one processed frame
+        List<RoiGroupOption> positiveOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, false));
+        // negative: only point ROIs can be negative prompts
+        List<RoiGroupOption> negativeOptions = toOptions(roiPromptExtractor.getUsableGroupsWithCount(allRois, axis, frames, true));
 
         positiveGroupEditor.setAvailableGroups(positiveOptions);
         negativeGroupEditor.setAvailableGroups(negativeOptions);
@@ -442,18 +441,29 @@ public class PvsVideoDialog extends AbstractPromptDialog {
 
         // print warning if no ROI on frame
         if (positiveOptions.isEmpty()) helpBar.warn(NO_USABLE_ROI_OWNER,
-                "No usable ROI (box or point) in the ROI Manager for the frame(s) being processed. "
+                "No usable ROI (point or area) in the ROI Manager for the frame(s) being processed. "
                 + "\nAdd one to create object and start segmentation.");
         else helpBar.clearWarning(NO_USABLE_ROI_OWNER);
         table.repaint();
     }
 
+    /** one combo box option per group id, labelled with its ROI count */
+    private static List<RoiGroupOption> toOptions(Map<Integer, Integer> roiCountByGroup) {
+        List<RoiGroupOption> options = new ArrayList<>();
+        for (Map.Entry<Integer, Integer> entry : roiCountByGroup.entrySet()) {
+            options.add(new RoiGroupOptionWithCount(entry.getKey(), entry.getValue()));
+        }
+        return options;
+    }
+
     private boolean outputWithRoiGroupSelected() {
-        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected())
+                || (semanticMaskCB != null && semanticMaskCB.isSelected());
     }
 
     private boolean outputWithNameSelected() {
-        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected());
+        return (addBoxRoisCB != null && addBoxRoisCB.isSelected()) || (addShapeRoisCB != null && addShapeRoisCB.isSelected())
+                || (instanceMaskPerClassCB != null && instanceMaskPerClassCB.isSelected());
     }
 
     // ==== OK / Cancel ====
@@ -540,26 +550,28 @@ public class PvsVideoDialog extends AbstractPromptDialog {
         options.addToRoiManagerBB = addBoxRoisCB.isSelected();
         options.addToRoiManagerShapes = addShapeRoisCB.isSelected();
         options.createInstanceMask = instanceMaskCB.isSelected();
+        options.createSemanticMask = semanticMaskCB.isSelected();
+        options.createInstanceMaskPerClass = instanceMaskPerClassCB.isSelected();
         return options;
     }
 
-    /** Logs, per object, whether its chosen negative group contains stray box ROIs (ignored - negative prompts are points only). */
+    /** Logs, per object, whether its chosen negative group contains area ROIs (ignored - negative prompts are points only). */
     private void logWarnings(List<PvsObject> currentObjects, int lastFrame) {
         Roi[] allRois = getRoiManager().getRoisAsArray();
         for (PvsObject object : currentObjects) {
             if (!object.isNegativeVisualUsed()) continue;
-            boolean hasStrayBox = false;
-            for (int frame = 1; frame <= lastFrame && !hasStrayBox; frame++) {
+            boolean hasArea = false;
+            for (int frame = 1; frame <= lastFrame && !hasArea; frame++) {
                 for (Roi roi : roiPromptExtractor.getRoisAtFrame(allRois, axis, frame)) {
-                    if (roi.getGroup() == object.getNegativeVisualGroup() && roi.getType() == Roi.RECTANGLE) {
-                        hasStrayBox = true;
+                    if (roi.getGroup() == object.getNegativeVisualGroup() && roi.isArea()) {
+                        hasArea = true;
                         break;
                     }
                 }
             }
-            if (hasStrayBox) {
+            if (hasArea) {
                 IJ.log("WARNING: object " + object.getName() + " - negative group " + object.getNegativeVisualGroup()
-                        + " contains box ROI(s), which are ignored (only point ROIs are used as negative prompts).");
+                        + " contains area ROI(s), which are ignored (only point ROIs are used as negative prompts).");
             }
         }
     }

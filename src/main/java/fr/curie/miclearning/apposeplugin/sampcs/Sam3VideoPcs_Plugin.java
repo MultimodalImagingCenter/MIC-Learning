@@ -1,5 +1,6 @@
 package fr.curie.miclearning.apposeplugin.sampcs;
 
+import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.apposeplugin.VideoPcsResultsConsumer;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
@@ -110,13 +111,12 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         // - an output group / group id (value in the classIdMap)
         // - a combination of prompts, defined once :
         //   - a text prompt ("visual" placeholder if null)
-        //   - visual prompt(s) (positive and/or negative), defined on prompt frame only (optional)
+        //   - visual prompt(s) (positive and/or negative, box or point or masks), defined on prompt frame only (optional)
 
         List<String> conceptLabels = new ArrayList<>();
         List<String> conceptTexts = new ArrayList<>();
         List<Boolean> conceptTextUsed = new ArrayList<>();
-        List<List<double[]>> conceptPositiveRois = new ArrayList<>();
-        List<List<double[]>> conceptNegativeRois = new ArrayList<>();
+        List<PromptRois> conceptsPromptRois = new ArrayList<>();
         Map<String, Integer> classIdMap = new HashMap<>();
 
         Roi[] roisForRun = roiManager.getRoisAsArray(); // all ROIs in the RoiManager when the user presses "ok"
@@ -132,12 +132,11 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
 
             // extract ROIs from the positive and negative groups (if any)
             // on the prompt frame only
-            RoiPromptExtractor.PromptRois promptRois = roiPromptExtractor.buildPromptRois(
-                    roisAtPromptFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup());
-            conceptPositiveRois.add(promptRois.getPositive());
-            conceptNegativeRois.add(promptRois.getNegative());
-            concept.setPositivePromptCount(promptRois.getPositive().size());
-            concept.setNegativePromptCount(promptRois.getNegative().size());
+            PromptRois promptRois = roiPromptExtractor.buildPromptRois(
+                    roisAtPromptFrame, concept.getPositiveVisualGroup(), concept.getNegativeVisualGroup(), false);
+            conceptsPromptRois.add(promptRois);
+            concept.setPositivePromptCount(promptRois.positiveCount());
+            concept.setNegativePromptCount(promptRois.negativeCount());
         }
 
         // 3.2 prepare config
@@ -155,8 +154,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
                     .conceptLabels(conceptLabels)
                     .conceptTexts(conceptTexts)
                     .conceptTextUsed(conceptTextUsed)
-                    .conceptPositiveRois(conceptPositiveRois)
-                    .conceptNegativeRois(conceptNegativeRois)
+                    .conceptPromptRois(conceptsPromptRois)
                     .frameRange(posFirstFrame, posPromptFrame, posEndFrame)
                     .detectionParams(modelParams)
                     .outputOptions(outputOptions)
@@ -254,7 +252,7 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         }
 
         if (options.createSemanticMask) {
-            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, mfdManager.getDetectionsByFrame());
+            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, mfdManager);
             if (semanticMaskStack != null) semanticMaskStack.show();
         }
 
@@ -478,24 +476,24 @@ public class Sam3VideoPcs_Plugin implements PlugIn {
         List<String> labels = config.getConceptLabels();
         List<String> texts = config.getConceptTexts();
         List<Boolean> textUsed = config.getConceptTextUsed();
-        List<List<double[]>> positiveRois = config.getConceptPositiveRois();
-        List<List<double[]>> negativeRois = config.getConceptNegativeRois();
+        List<PromptRois> promptRois = config.getConceptPromptRois();
         for (int i = 0; i < labels.size(); i++) {
             StringBuilder line = new StringBuilder("  - ").append(labels.get(i)).append(" -> prompt:");
             if (textUsed.get(i)) line.append("  text=\"").append(texts.get(i)).append("\"");
-            if (!positiveRois.get(i).isEmpty()) line.append("  positive visual: group ")
+            PromptRois visualPrompt = promptRois.get(i);
+            if (visualPrompt.hasPositive()) line.append("  positive visual: group ")
                     .append(concepts.get(i).getPositiveVisualGroup()).append(" (")
-                    .append(positiveRois.get(i).size()).append(" roi")
-                    .append(positiveRois.get(i).size()>1?"s)":")");
-            if (!negativeRois.get(i).isEmpty()) line.append("  negative visual: group ")
+                    .append(visualPrompt.positiveCount()).append(" roi")
+                    .append(visualPrompt.positiveCount()>1?"s)":")");
+            if (visualPrompt.hasNegative()) line.append("  negative visual: group ")
                     .append(concepts.get(i).getNegativeVisualGroup()).append(" (")
-                    .append(negativeRois.get(i).size()).append(" roi")
-                    .append(negativeRois.get(i).size()>1?"s)":")");
+                    .append(visualPrompt.negativeCount()).append(" roi")
+                    .append(visualPrompt.negativeCount()>1?"s)":")");
             line.append(" -> output group: ").append(concepts.get(i).getOutputGroup());
             IJ.log(line.toString());
         }
         int nFrameBtwDetec = params.getNFrameBtwDetections();
-        if (nFrameBtwDetec >= config.getFrameCount()) IJ.log("Detection only on frame " + config.getPromptFrame());
+        if (nFrameBtwDetec >= config.getFrameCount()) IJ.log("detection only on frame " + config.getPromptFrame());
         else IJ.log("detection every " + (nFrameBtwDetec>1 ? nFrameBtwDetec + " frames" : "frame"));
         IJ.log("confidence threshold for detection: " + params.getConfidenceThreshold());
         IJ.log("----------------------");
