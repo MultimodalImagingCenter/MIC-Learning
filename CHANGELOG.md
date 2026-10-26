@@ -1,4 +1,7 @@
 # Changelog
+
+## [1.5.0] - current
+
 ## [1.4.0] - 2026-10-21
 ### Added
 - Classes to define and  **"concepts" for Sam3 promptable concept segmentation (PCS)** :
