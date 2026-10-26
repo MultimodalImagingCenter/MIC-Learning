@@ -332,27 +332,61 @@
                     <release>8</release>
                 </configuration>
             </plugin>
-
-            <!-- plugin pour copier le .jar dans le dossier plugins de fiji-->
+<!-- generate javadoc -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.2</version>
+
+                <configuration>
+                    <doclint>none</doclint>
+                    <source>8</source>
+                </configuration>
+
                 <executions>
                     <execution>
+                        <id>attach-javadocs</id>
                         <phase>package</phase>
-                        <goals><goal>run</goal></goals>
-                        <configuration>
-                            <target>
-                                <copy file="${project.build.directory}/${project.build.finalName}-all.jar"
-                                      tofile="/home/noemie/Applications/Fiji.app/plugins/mic_learning.jar"
-                                />
-                            </target>
-                        </configuration>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
                     </execution>
                 </executions>
+            </plugin>
+    <!-- signing jar for security (maven) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.8</version>
+
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+
+                <configuration>
+                    <bestPractices>true</bestPractices>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.11.0</version>
+                <extensions>true</extensions>
+
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>false</autoPublish>
+                </configuration>
             </plugin>
         </plugins>
     </build>
 
 </project>
+
