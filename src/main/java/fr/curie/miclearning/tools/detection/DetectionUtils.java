@@ -51,9 +51,6 @@ public class DetectionUtils {
         }
     }
 
-
-
-
     // --- DetectedObject processing ---
 
     public static List<ProcessedDetection> processDetections(
@@ -95,7 +92,6 @@ public class DetectionUtils {
             return processFromNonTiledDetection(imp, detection, externalClassIdMap);
         }
     }
-
 
     private static List<ProcessedDetection> processFromNonTiledDetection(
             ImagePlus imp,
@@ -627,7 +623,6 @@ public class DetectionUtils {
         return processedResults;
     }
 
-
     public static List<ProcessedDetection> detectionFromInstancePerClasses(ImagePlus imp) {
         return detectionFromInstancePerClasses(imp, null);
     }
@@ -898,7 +893,6 @@ public class DetectionUtils {
         manager.runCommand("Show All"); // Make ROIs visible
     }
 
-
     /**
      * Creates a stack of binary masks, one slice per instance (shape).
      * The pixel value  is the group ID
@@ -991,22 +985,17 @@ public class DetectionUtils {
         return instanceImage;
     }
 
-    public static ImagePlus createInstanceMaskStack(ImagePlus imp, Map<Integer, List<ProcessedDetection>> detectionsByFrame) {
-        ImageStack impStack = imp.getStack();
-        if (impStack.getSize() < detectionsByFrame.size()) {
-            IJ.log("Error: More slices are registered in detectionsByFrame than in initial stack");
-            return null;
-        }
-
+    public static ImagePlus createInstanceMaskStack(ImagePlus imp, MultiFrameDataManager mfdManager) {
         int width = imp.getWidth();
         int height = imp.getHeight();
 
         ImageStack maskStack = new ImageStack(width, height);
         ImageStack originalStack = imp.getStack();
-        for (Map.Entry<Integer, List<ProcessedDetection>> entry : detectionsByFrame.entrySet()) {
-            List<ProcessedDetection> detections = entry.getValue();
+        Map<Integer, List<ProcessedDetection>> detectionsByFrame = mfdManager.getDetectionsByFrame();
+        for (int f = mfdManager.getFirstFrame(); f <= mfdManager.getLastFrame(); f++) {
+            List<ProcessedDetection> detections = detectionsByFrame.getOrDefault(f, new ArrayList<>());;
             ImageProcessor sliceProcessor = createInstanceMaskProcessor(detections, width, height);
-            String sliceLabel = originalStack.getSliceLabel(entry.getKey() + 1);
+            String sliceLabel = originalStack.getSliceLabel(f + 1);
             maskStack.addSlice(sliceLabel, sliceProcessor);
         }
 
@@ -1103,19 +1092,6 @@ public class DetectionUtils {
         setGlasbeyLut(finalImp);
         return finalImp;
     }
-
-    /**
-     * Creates a stack where each slice represents a class, and instances within that class
-     * have unique pixel values
-     *
-     * @param imp              The source ImagePlus (for dimensions).
-     * @param processedResults The list of processed detections.
-     * @return An ImagePlus containing the instance-per-class stack, or null if no shapes.
-     */
-    public static ImagePlus createInstanceMaskPerClass(ImagePlus imp, List<ProcessedDetection> processedResults) {
-        return createInstanceMaskPerClass(imp, processedResults, null);
-    }
-
 
     /**
      * Creates a stack where each slice represents a class. If a classIdMap is provided,
@@ -1228,21 +1204,21 @@ public class DetectionUtils {
      * detection on a frame gets an empty channel.
 
      * @param imp               source image
-     * @param detectionsByFrame frame index (0-based) -> detections on that frame
+     * @param mfdManager
      * @param classIdMap        class name -> output group id; defines the channel slices and their order
      * @return a hyperstack ImagePlus (channels = 1, slices = nClasses, frames = nFrames), or
      *         {@code null} when there is nothing to build
      */
     public static ImagePlus createInstanceMaskPerClassStack(
             ImagePlus imp,
-            Map<Integer, List<ProcessedDetection>> detectionsByFrame,
+            MultiFrameDataManager mfdManager,
             Map<String, Integer> classIdMap) {
 
         if (classIdMap == null || classIdMap.isEmpty()) {
             IJ.log("No class ID map provided. Cannot create instance-mask-per-class hyperstack.");
             return null;
         }
-        if (detectionsByFrame == null || detectionsByFrame.isEmpty()) {
+        if (mfdManager == null) {
             IJ.log("No detections available. Cannot create instance-mask-per-class hyperstack.");
             return null;
         }
@@ -1254,16 +1230,14 @@ public class DetectionUtils {
         List<Map.Entry<String, Integer>> classes = new ArrayList<>(classIdMap.entrySet());
         classes.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()));
 
-        // frames in ascending index order - defines the T axis
-        List<Integer> frameKeys = new ArrayList<>(detectionsByFrame.keySet());
-        Collections.sort(frameKeys);
+        Map<Integer, List<ProcessedDetection>> detectionsByFrame = mfdManager.getDetectionsByFrame();
 
         ImageStack originalStack = imp.getStack();
         ImageStack stack = new ImageStack(width, height);
 
         // hyperstack order is czt (channel, then slice, then frame)
         // for each frame append one channel per class.
-        for (int frameKey : frameKeys) {
+        for (int frameKey = mfdManager.getFirstFrame(); frameKey <= mfdManager.getLastFrame(); frameKey++) {
             // create list of valid detection (with shape ROI) by class
             Map<String, List<ProcessedDetection>> byClassName = new HashMap<>();
             for (ProcessedDetection det : detectionsByFrame.getOrDefault(frameKey, Collections.emptyList())) {
@@ -1286,10 +1260,10 @@ public class DetectionUtils {
         }
 
         ImagePlus result = new ImagePlus(imp.getTitle() + " - instance mask per class", stack);
-        result.setDimensions(classes.size(), 1, frameKeys.size());
+        result.setDimensions(classes.size(), 1, mfdManager.getFrameNumber());
         result.setOpenAsHyperStack(true);
         IJ.log("Instance-mask-per-class hyperstack created (" + classes.size() + " class(es) x "
-                + frameKeys.size() + " frame(s)).");
+                + mfdManager.getFrameNumber() + " frame(s)).");
         result.setDisplayRange(0, 255);
         setGlasbeyLut(result);
         return result;

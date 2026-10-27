@@ -21,6 +21,7 @@ public final class Sam3ImageRunConfig {
     private final Sam3ModelParameters detectionParams;
     private final DetectionUtils.OutputOptions outputOptions;
     private final DetectionUtils.DetectionMode stackMode;
+    private final int frameOffset;
 
     // frame-invariant, index-aligned across all three
     private final List<String> conceptLabels;
@@ -41,6 +42,7 @@ public final class Sam3ImageRunConfig {
         this.conceptTextUsed = Collections.unmodifiableList(new ArrayList<>(b.conceptTextUsed));
         this.classIdMap = Collections.unmodifiableMap(new HashMap<>(b.classIdMap));
         this.framePrompts = Collections.unmodifiableList(new ArrayList<>(b.framePrompts));
+        this.frameOffset = b.stackMode == DetectionUtils.DetectionMode.SINGLE_IMAGE ? b.frameOffset : 0;
     }
 
     public String getModelPath() {return modelPath;}
@@ -52,6 +54,7 @@ public final class Sam3ImageRunConfig {
     public List<Boolean> getConceptTextUsed() {return conceptTextUsed;}
     public Map<String, Integer> getClassIdMap() {return classIdMap;}
     public List<List<PromptRois>> getFramePrompts() {return framePrompts;}
+    public int getFrameOffset() {return frameOffset;}
 
     public static final class Builder {
         private String modelPath;
@@ -63,6 +66,7 @@ public final class Sam3ImageRunConfig {
         private List<Boolean> conceptTextUsed = new ArrayList<>();
         private Map<String, Integer> classIdMap = new HashMap<>();
         private List<List<PromptRois>> framePrompts = new ArrayList<>();
+        private int frameOffset;
 
         public Builder modelPath(String modelPath) {
             this.modelPath = modelPath;
@@ -81,6 +85,11 @@ public final class Sam3ImageRunConfig {
 
         public Builder stackMode(DetectionUtils.DetectionMode stackMode) {
             this.stackMode = stackMode;
+            return this;
+        }
+
+        public Builder frameOffset(int frameOffset) {
+            this.frameOffset = frameOffset;
             return this;
         }
 
