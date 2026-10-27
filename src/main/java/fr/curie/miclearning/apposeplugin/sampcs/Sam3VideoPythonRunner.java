@@ -74,7 +74,7 @@ public class Sam3VideoPythonRunner implements AutoCloseable {
         inputs.put("conceptTextUsed", config.getConceptTextUsed());
         inputs.put("conceptVisualPrompts", buildPromptsInput(config));
 
-        inputs.put("frameOffset", config.getFirstFrame()); // informational only, used for logging on the python side
+        inputs.put("frameOffset", config.getFirstFrame()); // used to register results on the correct relative frame, required for output generation
 
         return inputs;
     }

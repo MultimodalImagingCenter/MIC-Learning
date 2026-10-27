@@ -160,12 +160,20 @@ public class PvsVideoDialog extends AbstractPromptDialog {
                         "Copy the model file inside it.\n"
                         + "\n" +
                         "SAM2 model\n" +
-                        "SAM2 checkpoints are available from Meta's SAM2 GitHub repository (https://github.com/facebookresearch/sam2#download-checkpoints).\n" +
+                        "SAM2 checkpoints are available:\n" +
+                        "  a/ from Meta's SAM2 GitHub repository (https://github.com/facebookresearch/sam2#download-checkpoints);\n" +
+                        "  b/ or from Meta's SAM2 HuggingFace repositories (https://huggingface.co/facebook/models).\n" +
                         "To download them, you need to:\n" +
-                        "   1/ Inside Meta's SAM3 GitHub repository, find the \"Download Checkpoints\" section. \n" +
-                        "   2/ Download one of the sam2.1 checkpoint (\"sam2.1_hiera_tiny.pt\", \"sam2.1_hiera_small.pt\", \"sam2.1_hiera_base_plus.pt\" or \"sam2.1_hiera_large.pt\").\n" +
-                        "   3/ If it does not exist, create a \"models\" folder inside the ImageJ directory. " +
-                        "Copy the model file inside it."
+                        "   a1/ Inside Meta's SAM2 GitHub repository, find the \"Download Checkpoints\" section. \n" +
+                        "   a2/ Download one of the sam2.1 checkpoint (\"sam2.1_hiera_tiny.pt\", \"sam2.1_hiera_small.pt\", \"sam2.1_hiera_base_plus.pt\" or \"sam2.1_hiera_large.pt\").\n" +
+                        "   a3/ If it does not exist, create a \"models\" folder inside the ImageJ directory. " +
+                        "Copy the model file inside it.\n" +
+                        "or\n"+
+                        "   b1/ Choose one of the Meta's SAM2 or SAM2.1 HuggingFace repositories (eg. https://huggingface.co/facebook/sam2.1-hiera-tiny or https://huggingface.co/facebook/sam2.1-hiera-small).\n" +
+                        "   c2/ Inside the chosen repository, open the \"Files and versions\" tab.\n"+
+                        "   c3/ Download the checkpoint file: \"sam2_<model-type>.pt\" or \"sam2.1_<model-type>.pt\" (eg. sam2.1_hiera_tiny.pt or sam2.1_hiera_small.pt).\n" +
+                        "   c4/ If it does not exist, create a \"models\" folder inside the ImageJ directory. " +
+                        "Copy the model file inside it.\n"
         ));
         return instructionsButton;
     }
