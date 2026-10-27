@@ -4,6 +4,7 @@ import fr.curie.miclearning.apposeplugin.ApposeTaskRunner;
 import fr.curie.miclearning.apposeplugin.MultiImagePcsResultsConsumer;
 import fr.curie.miclearning.apposeplugin.PromptRois;
 import fr.curie.miclearning.tools.appose.ApposeUtils;
+import fr.curie.miclearning.tools.detection.DetectionUtils;
 import ij.ImagePlus;
 import net.imglib2.appose.NDArrays;
 import net.imglib2.appose.ShmImg;
@@ -59,6 +60,7 @@ public class Sam3ImagePythonRunner implements AutoCloseable {
         inputs.put("conceptTextUsed", config.getConceptTextUsed());
         inputs.put("framePrompts", buildFramePromptsInput(config));
 
+        inputs.put("frameOffset",config.getStackMode()== DetectionUtils.DetectionMode.SINGLE_IMAGE ? config.getFrameOffset() : 0); // used to register results on the correct relative frame, required for output generation
         return inputs;
     }
 

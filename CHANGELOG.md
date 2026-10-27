@@ -1,6 +1,13 @@
 # Changelog
 
-## [1.5.0] - current
+## [1.4.1] - 2026-10-27
+### Added
+- `frameOffset` parameter in `Sam3ImagePcs_Plugin`, `Sam3ImagePythonRunner` and `Sam3ImageRunConfig`, to store the position of the processed frame in `SingleFrame` mode.
+### Changed
+- `Sam3ImagePcs_Plugin` now registers all detections in a `MultiFrameDataManager` instead of a plain `Map<Integer, List<ProcessedDetection>>`. `MultiImagePcsResultsConsumer` was adapted accordingly.
+- `DetectionUtils.createInstanceMaskStack` and `DetectionUtils.createInstanceMaskPerClassStack` now take a `MultiFrameDataManager` as input instead of a `Map<Integer, List<ProcessedDetection>>`, consistent with `DetectionUtils.createSemanticMaskStack`.
+### Fixed
+- Compilation error in `Sam3ImagePcs_Plugin` caused by an input type mismatch with `DetectionUtils.createInstanceMaskStack`.
 
 ## [1.4.0] - 2026-10-21
 ### Added

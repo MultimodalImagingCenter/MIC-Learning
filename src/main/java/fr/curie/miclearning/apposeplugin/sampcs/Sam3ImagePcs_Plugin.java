@@ -6,6 +6,7 @@ import fr.curie.miclearning.apposeplugin.RoiPromptExtractor;
 import fr.curie.miclearning.tools.detection.Detection3dUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils;
 import fr.curie.miclearning.tools.detection.DetectionUtils.DetectionMode;
+import fr.curie.miclearning.tools.detection.MultiFrameDataManager;
 import fr.curie.miclearning.tools.detection.ProcessedDetection;
 import ij.IJ;
 import ij.ImagePlus;
@@ -34,7 +35,7 @@ import static ij.plugin.frame.RoiManager.getRoiManager;
  */
 public class Sam3ImagePcs_Plugin implements PlugIn {
     protected static ImagePlus imp;
-    private int nFrames;
+    private int nFrames; // number of frame in the stack (defined once, regardless of stackMode)
     private int axis; // 3 = Z axis, 4 = Time axis (matches ImagePlus.getDimensions() indexing)
     private int current_slice = 0; // 0 if all slices are processed, position of the processed frame otherwise, 1-indexed
 
@@ -46,7 +47,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
     private DetectionMode stackMode;
     private List<PcsConcept> concepts;
 
-    private final Map<Integer, List<ProcessedDetection>> detectionsByFrame = new HashMap<>();
+    private MultiFrameDataManager mfdManager;
 
     private static final String ENV_FILE_PATH = "/fr/curie/miclearning/apposeplugin/sam3m.toml"; // inside the resources folder
     private static final String SCRIPT_PATH = "/fr/curie/miclearning/apposeplugin/sam3-pcs-singleimage-m.py"; // inside the resources folder
@@ -93,8 +94,11 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
 
         if (stackMode == DetectionMode.SINGLE_IMAGE) {
             current_slice = imp.getCurrentSlice();
+            if (current_slice == 0) current_slice = 1; // safeguard, should not happen (slice index is 0 only if the stack is 1 slice, in this case the checkbox "process all stack" is not displayed, default mode = stack)
             imp = new ImagePlus(imp.getTitle(), imp.getProcessor());
+            mfdManager = new MultiFrameDataManager(current_slice-1,current_slice-1);
         }
+        else mfdManager = new MultiFrameDataManager(nFrames);
 
         // --- 3. Prepare prompts, define config ---
         // 3.1 prepare prompts
@@ -143,6 +147,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
                     .detectionParams(detectionParams)
                     .outputOptions(outputOptions)
                     .stackMode(stackMode)
+                    .frameOffset(stackMode==DetectionMode.SINGLE_IMAGE ? current_slice-1 : 0)
                     .conceptLabels(conceptLabels)
                     .conceptTexts(conceptTexts)
                     .conceptTextUsed(conceptTextUsed)
@@ -191,7 +196,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             runner.initialize();
 
             MultiImagePcsResultsConsumer consumer = new MultiImagePcsResultsConsumer(
-                    resultsQueue, detectionsByFrame, config.getClassIdMap(), config.getConceptLabels(), imp);
+                    resultsQueue, mfdManager, config.getClassIdMap(), config.getConceptLabels(), imp);
             Future<Void> consumerResult = executor.submit(consumer);
 
             IJ.log("Executing python script...");
@@ -231,7 +236,7 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
             }
             long endTime = System.nanoTime();
             double totalTimeInSeconds = (endTime - startTime) / 1_000_000_000.0;
-            IJ.log(" --- SAM3 segmentation complete. " + detectionsByFrame.size()
+            IJ.log(" --- SAM3 segmentation complete. " + mfdManager.getFrameNumber()
                     + " Frame processed. Total time= " + totalTimeInSeconds + " sec ---");
         }
     }
@@ -242,29 +247,25 @@ public class Sam3ImagePcs_Plugin implements PlugIn {
 
         if (options.addToRoiManagerBB || options.addToRoiManagerShapes) {
             RoiManager roiManager = getRoiManager();
-            if (current_slice != 0) detectionsByFrame.put(current_slice - 1, detectionsByFrame.remove(0)); // if one slice only, move the detections to the current frame
-            Detection3dUtils.addTrackedRoisToManager(roiManager, detectionsByFrame,
+            Detection3dUtils.addTrackedRoisToManager(roiManager, mfdManager,
                     options.addToRoiManagerBB, options.addToRoiManagerShapes, Detection3dUtils.GroupingMethod.BY_CLASS);
             roiManager.setVisible(true);
             roiManager.runCommand("Show All");
         }
 
         if (options.createInstanceMask) {
-            ImagePlus instanceMaskStack = DetectionUtils.createInstanceMaskStack(imp, detectionsByFrame);
+            ImagePlus instanceMaskStack = DetectionUtils.createInstanceMaskStack(imp, mfdManager);
             if (instanceMaskStack != null) instanceMaskStack.show();
         }
 
         if (options.createSemanticMask) {
-            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, detectionsByFrame);
+            ImagePlus semanticMaskStack = DetectionUtils.createSemanticMaskStack(imp, mfdManager);
             if (semanticMaskStack != null) semanticMaskStack.show();
         }
 
         if (options.createInstanceMaskPerClass) {
-            ImagePlus instanceMaskPerClass = (mode == DetectionMode.SINGLE_IMAGE)
-                    ? DetectionUtils.createInstanceMaskPerClass(
-                            imp, detectionsByFrame.values().iterator().next(), config.getClassIdMap())
-                    : DetectionUtils.createInstanceMaskPerClassStack(
-                            imp, detectionsByFrame, config.getClassIdMap());
+            ImagePlus instanceMaskPerClass = DetectionUtils.createInstanceMaskPerClassStack(
+                            imp, mfdManager, config.getClassIdMap());
             if (instanceMaskPerClass != null) instanceMaskPerClass.show();
         }
     }

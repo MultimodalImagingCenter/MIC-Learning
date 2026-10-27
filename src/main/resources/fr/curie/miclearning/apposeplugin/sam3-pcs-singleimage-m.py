@@ -76,6 +76,7 @@ detect_model.to(device=device, dtype=dtype)
 # ============================================================
 log_to_java("pre processing images...")
 images_input=imagesInput
+frame_offset = frameOffset
 narr = images_input.ndarray()
 
 # fix dimension order (from (B,H,W,C) rgb to (B,H,W,C) bgr)
@@ -195,11 +196,11 @@ for frame_idx, img in enumerate(images_bgr):
         shm_queue.append((shared_masks, shared_boxes, shared_scores, shared_ids))
 
         task.update(
-            message=f"   frame {frame_idx + 1} - number of object(s) detected: {slice_total_detection}",
+            message=f"   frame {frame_idx + frame_offset + 1} - number of object(s) detected: {slice_total_detection}",
             current=frame_idx + 1,
             maximum=n_frames,
             info={
-                "frame_idx": frame_idx,
+                "frame_idx": frame_idx + frame_offset,
                 "n_results": slice_total_detection,
                 "prompts_ids": shared_ids,
                 "scores": shared_scores,
@@ -209,11 +210,11 @@ for frame_idx, img in enumerate(images_bgr):
         )
     else:
         task.update(
-            message=f"   frame {frame_idx + 1} - no object detected",
+            message=f"   frame {frame_idx + frame_offset + 1} - no object detected",
             current=frame_idx + 1,
             maximum=n_frames,
             info={
-                "frame_idx": frame_idx,
+                "frame_idx": frame_idx + frame_offset,
                 "n_results": 0
             }
         )
